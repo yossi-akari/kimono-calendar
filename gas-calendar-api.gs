@@ -21,6 +21,28 @@ function doGet(e) {
     return output;
   }
 
+  // 手動予約の保存・削除アクション
+  const action = e.parameter.action;
+  if (action === 'save') {
+    try {
+      const booking = JSON.parse(e.parameter.booking);
+      saveManualToSheet(booking);
+      output.setContent(JSON.stringify({ success: true }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
+  if (action === 'delete') {
+    try {
+      deleteManualFromSheet(e.parameter.id);
+      output.setContent(JSON.stringify({ success: true }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
+
   try {
     // 確定予約はキャッシュ利用（重い処理）
     let bookings = getCachedBookings();

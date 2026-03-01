@@ -797,11 +797,7 @@ async function deleteBooking() {
     // 手動予約：GASスプレッドシートから削除
     if (!confirm('この手動予約を削除しますか？\n（この操作は元に戻せません）')) return;
     try {
-      await fetch(GAS_URL, {
-        method: 'POST',
-        body: JSON.stringify({ key: ACCESS_KEY, action: 'delete', id: activeBookingId }),
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
-      });
+      await fetch(GAS_URL + '?' + new URLSearchParams({ key: ACCESS_KEY, action: 'delete', id: activeBookingId }));
     } catch(e) { console.warn('GAS削除エラー:', e); }
   } else {
     // GAS予約：skippedに追加して非表示
