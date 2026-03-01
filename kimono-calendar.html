@@ -488,7 +488,7 @@ function chipClass(planName, source) {
 
 // ── データ読み込み ──────────────────────────────────
 function getManualBookings() {
-  return JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
+  return []; // 手動予約はGAS経由でスプレッドシートから取得
 }
 
 function loadBookings() {
@@ -511,10 +511,13 @@ async function loadFromGAS() {
     const data = JSON.parse(await res.text());
     if (data.success && data.bookings) {
       const skipped = JSON.parse(localStorage.getItem('kimono_skipped') || '[]');
-      const gasBookings = data.bookings.filter(b => !skipped.includes(b.id));
+      const manualFromGAS = data.bookings.filter(b => b.source === 'MANUAL');
+      const gasBookings = data.bookings.filter(b => b.source !== 'MANUAL' && !skipped.includes(b.id));
       localStorage.setItem('kimono_bookings', JSON.stringify(gasBookings));
-      // 手動予約とマージ
-      bookings = mergeBookings(gasBookings, getManualBookings());
+      bookings = [...gasBookings, ...manualFromGAS].sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return a.time.localeCompare(b.time);
+      });
       return true;
     }
   } catch (e) {
@@ -785,17 +788,21 @@ function closeModal() {
   renderSidePanel();
 }
 
-function deleteBooking() {
+async function deleteBooking() {
   if (!activeBookingId) return;
   const target = bookings.find(b => b.id === activeBookingId);
   if (!target) return;
 
   if (target.source === 'MANUAL') {
-    // 手動予約：kimono_manual_bookingsから完全削除
+    // 手動予約：GASスプレッドシートから削除
     if (!confirm('この手動予約を削除しますか？\n（この操作は元に戻せません）')) return;
-    let manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
-    manuals = manuals.filter(b => b.id !== activeBookingId);
-    localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
+    try {
+      await fetch(GAS_URL, {
+        method: 'POST',
+        body: JSON.stringify({ key: ACCESS_KEY, action: 'delete', id: activeBookingId }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      });
+    } catch(e) { console.warn('GAS削除エラー:', e); }
   } else {
     // GAS予約：skippedに追加して非表示
     if (!confirm('この端末でこの予約を非表示にしますか？\n（次回同期後も非表示が維持されます。キャンセルはメール送信で自動反映されます）')) return;

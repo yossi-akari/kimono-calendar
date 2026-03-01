@@ -384,6 +384,19 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 </div>
 
 <script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
+const ACCESS_KEY = 'AkariKimono2026_mK9x';
+
+async function postToGAS(action, payload) {
+  const body = JSON.stringify({ key: ACCESS_KEY, action, ...payload });
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+  });
+  return JSON.parse(await res.text());
+}
+
 // ── 人数合計 ──
 function calcTotal() {
   const f = parseInt(document.getElementById('pFemale').value)||0;
@@ -411,7 +424,7 @@ function addOption(name='', price='') {
 }
 
 // ── フォーム送信 ──
-function handleSubmit(e) {
+async function handleSubmit(e) {
   e.preventDefault();
 
   const f = parseInt(document.getElementById('pFemale').value)||0;
@@ -461,10 +474,18 @@ function handleSubmit(e) {
     createdAt: now.toISOString(),
   };
 
-  // 保存
-  const manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
-  manuals.push(booking);
-  localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
+  // GASへ保存（失敗時はlocalStorageにフォールバック）
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = '保存中...';
+  try {
+    await postToGAS('save', { booking });
+  } catch(err) {
+    console.warn('GAS保存失敗、localStorageに保存:', err);
+    const manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
+    manuals.push(booking);
+    localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
+  }
+  btn.disabled = false; btn.textContent = '予約を保存する';
 
   // 成功表示
   document.getElementById('bookingForm').style.display = 'none';
@@ -520,8 +541,14 @@ function renderList() {
   }).join('');
 }
 
-function deleteManual(id) {
+async function deleteManual(id) {
   if (!confirm('この手動予約を削除しますか？')) return;
+  try {
+    await postToGAS('delete', { id });
+  } catch(err) {
+    console.warn('GAS削除失敗:', err);
+  }
+  // localStorageフォールバックからも削除
   let manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
   manuals = manuals.filter(b => b.id !== id);
   localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
