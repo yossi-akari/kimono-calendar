@@ -388,7 +388,20 @@ function parseAJEmail(body) {
 // ── 手動予約（スプレッドシート保存） ──────────────────────────────
 // =============================================================
 function getManualSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const props = PropertiesService.getScriptProperties();
+  let ss;
+  const ssId = props.getProperty('manual_ss_id');
+  if (ssId) {
+    try { ss = SpreadsheetApp.openById(ssId); } catch(e) { ss = null; }
+  }
+  if (!ss) {
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+  }
+  if (!ss) {
+    ss = SpreadsheetApp.create('着物カレンダー_手動予約');
+    props.setProperty('manual_ss_id', ss.getId());
+    Logger.log('スプレッドシート作成: ' + ss.getUrl());
+  }
   let sheet = ss.getSheetByName('手動予約');
   if (!sheet) {
     sheet = ss.insertSheet('手動予約');
