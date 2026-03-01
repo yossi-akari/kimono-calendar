@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>予約管理カレンダー</title>
+<style>
+#pin-screen {
+  position: fixed; inset: 0; z-index: 9999;
+  background: #1c1a18;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 24px;
+}
+#pin-screen h1 {
+  color: #faf8f4; font-family: serif;
+  font-weight: 200; font-size: 1.4rem; letter-spacing: 0.15em; margin: 0;
+}
+#pin-display { display: flex; gap: 12px; }
+#pin-display span {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 1px solid #8b3a3a; background: transparent; transition: background 0.2s;
+}
+#pin-display span.filled { background: #8b3a3a; }
+#pin-keypad { display: grid; grid-template-columns: repeat(3, 64px); gap: 12px; }
+#pin-keypad button {
+  width: 64px; height: 64px; border-radius: 50%;
+  border: 1px solid #3a3530; background: #2a2520; color: #faf8f4;
+  font-size: 1.3rem; cursor: pointer; transition: background 0.15s;
+}
+#pin-keypad button:active { background: #8b3a3a; }
+#pin-error { color: #8b3a3a; font-size: 0.85rem; min-height: 1.2em; }
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200;300;400&family=Noto+Sans+JP:wght@300;400&family=DM+Mono:wght@300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:    #1c1a18;
+  --paper:  #faf8f4;
+  --cream:  #f2ede4;
+  --line:   #e0d9ce;
+  --muted:  #9a9080;
+  --accent: #8b3a3a;
+  --gold:   #b8882a;
+  --green:  #4a6741;
+  --white:  #ffffff;
+  --bg:     #efecea;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; min-height: 100vh; }
+
+/* ── ヘッダー ── */
+.header {
+  background: var(--ink); color: var(--paper);
+  padding: 20px 28px; display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-left h1 { font-family: 'Noto Serif JP', serif; font-weight: 200; font-size: 1.1rem; letter-spacing: 0.15em; }
+.header-left p { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: rgba(255,255,255,0.5); margin-top: 2px; }
+.header-right { display: flex; gap: 10px; align-items: center; }
+.header-btn {
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+  color: var(--paper); padding: 7px 14px; border-radius: 2px;
+  font-family: 'Noto Sans JP', sans-serif; font-size: 0.78rem; cursor: pointer;
+  transition: background 0.2s; text-decoration: none; display: inline-block;
+}
+.header-btn:hover { background: rgba(255,255,255,0.18); }
+.header-btn.accent { background: var(--accent); border-color: var(--accent); }
+
+/* ── レイアウト ── */
+.layout { display: grid; grid-template-columns: 1fr 420px; min-height: calc(100vh - 65px); }
+@media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+/* ── カレンダー ── */
+.cal-panel { padding: 24px; }
+
+.cal-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.cal-nav .month { font-family: 'Noto Serif JP', serif; font-size: 1.4rem; font-weight: 300; }
+.cal-nav-btns { display: flex; gap: 8px; }
+.nav-btn {
+  background: var(--white); border: 1px solid var(--line); border-radius: 2px;
+  padding: 7px 14px; cursor: pointer; font-size: 1rem; color: var(--ink);
+  transition: all 0.2s;
+}
+.nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+.today-btn {
+  background: none; border: 1px solid var(--line); border-radius: 2px;
+  padding: 7px 14px; font-family: 'DM Mono', monospace; font-size: 0.72rem;
+  cursor: pointer; color: var(--muted); transition: all 0.2s;
+}
+.today-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.cal-dayname {
+  text-align: center; font-family: 'DM Mono', monospace;
+  font-size: 0.65rem; color: var(--muted); padding: 6px 0;
+}
+.cal-dayname:first-child { color: var(--accent); opacity: 0.7; }
+.cal-dayname:last-child  { color: var(--accent); opacity: 0.7; }
+
+.cal-cell {
+  background: var(--white); border: 1px solid var(--line); border-radius: 2px;
+  min-height: 96px; padding: 6px; cursor: pointer; transition: all 0.15s;
+  position: relative;
+}
+.cal-cell:hover { border-color: var(--accent); }
+.cal-cell.empty { background: transparent; border-color: transparent; cursor: default; }
+.cal-cell.today { border-color: var(--accent); }
+.cal-cell.selected { border-color: var(--accent); background: #fdf5f5; }
+.cal-cell.sunday  .cell-date { color: var(--accent); opacity: 0.7; }
+.cal-cell.saturday .cell-date { color: #5a7ab0; }
+
+.cell-date {
+  font-family: 'DM Mono', monospace; font-size: 0.78rem;
+  font-weight: 400; margin-bottom: 4px; text-align: right;
+}
+.cal-cell.today .cell-date {
+  background: var(--accent); color: white;
+  border-radius: 50%; width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  float: right;
+}
+
+.booking-chip {
+  font-size: 0.62rem; padding: 2px 5px; border-radius: 2px;
+  margin-bottom: 2px; overflow: hidden; white-space: nowrap;
+  text-overflow: ellipsis; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.booking-chip:hover { opacity: 0.8; }
+
+.chip-basic     { background: #e8f4e8; color: #2e6e2e; }
+.chip-standard  { background: #e8eef8; color: #1a3a6e; }
+.chip-premium   { background: #fef3e0; color: #7a5000; }
+.chip-photo     { background: #f5e8f5; color: #5a1a7a; }
+.chip-kaga      { background: #f5ede0; color: #6a3a00; }
+.chip-seijin    { background: #e0f0e8; color: #1a5a3a; }
+.chip-sotsu     { background: #e0eaf5; color: #1a3a6a; }
+.chip-limited   { background: #fde8e0; color: var(--accent); }
+.chip-manual    { background: #f0e8f8; color: #5a1a8a; }
+
+.more-chip { font-size: 0.6rem; color: var(--muted); font-family: 'DM Mono', monospace; padding: 1px 4px; }
+
+/* ── サイドパネル ── */
+.side-panel {
+  background: var(--white); border-left: 1px solid var(--line);
+  display: flex; flex-direction: column;
+}
+
+.side-header {
+  padding: 20px; border-bottom: 1px solid var(--line);
+  background: var(--cream);
+}
+.side-header .date-label {
+  font-family: 'Noto Serif JP', serif; font-size: 1rem; margin-bottom: 4px;
+}
+.side-header .booking-count {
+  font-family: 'DM Mono', monospace; font-size: 0.68rem; color: var(--muted);
+}
+
+.side-bookings { flex: 1; overflow-y: auto; }
+
+.booking-card {
+  padding: 16px 20px; border-bottom: 1px solid var(--line);
+  cursor: pointer; transition: background 0.15s;
+  animation: fadeIn 0.2s ease;
+}
+.booking-card:hover { background: var(--cream); }
+.booking-card.active { background: #fdf5f5; border-left: 3px solid var(--accent); }
+
+.bc-time {
+  font-family: 'DM Mono', monospace; font-size: 0.72rem;
+  color: var(--accent); margin-bottom: 4px;
+}
+.bc-name { font-size: 0.9rem; margin-bottom: 3px; }
+.bc-plan {
+  display: inline-block; font-size: 0.65rem; padding: 2px 7px;
+  border-radius: 10px; margin-bottom: 4px;
+}
+.bc-people { font-size: 0.72rem; color: var(--muted); }
+
+.side-empty {
+  padding: 40px 20px; text-align: center;
+  font-size: 0.82rem; color: var(--line);
+  letter-spacing: 0.1em;
+}
+
+/* ── 詳細モーダル ── */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(28,26,24,0.55); z-index: 200; align-items: center; justify-content: center; padding: 24px; }
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--white); border-radius: 2px; padding: 0;
+  max-width: 680px; width: 100%; max-height: 90vh; overflow-y: auto;
+  animation: fadeUp 0.25s ease both;
+}
+.modal-header {
+  background: var(--ink); color: var(--paper);
+  padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;
+}
+.modal-header h2 { font-family: 'Noto Serif JP', serif; font-weight: 300; font-size: 1rem; letter-spacing: 0.1em; }
+.modal-close-btn { background: none; border: none; color: rgba(255,255,255,0.6); font-size: 1.2rem; cursor: pointer; }
+.modal-body { padding: 24px; }
+.detail-row { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.84rem; }
+.detail-row:last-child { border-bottom: none; }
+.detail-label { color: var(--muted); min-width: 80px; flex-shrink: 0; }
+.detail-value { flex: 1; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 10px; }
+.del-btn { background: none; border: 1px solid #c0392b; color: #c0392b; padding: 8px 18px; border-radius: 2px; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; }
+.del-btn:hover { background: #c0392b; color: white; }
+.close-btn2 { background: var(--ink); color: white; border: none; padding: 8px 18px; border-radius: 2px; font-size: 0.8rem; cursor: pointer; transition: opacity 0.2s; }
+.close-btn2:hover { opacity: 0.8; }
+
+/* サイドパネル印刷ボタン */
+.side-print-btn {
+  background: none; border: 1px solid var(--line); color: var(--muted);
+  padding: 5px 10px; border-radius: 2px; font-size: 0.72rem; cursor: pointer;
+  transition: all 0.15s;
+}
+.side-print-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* 統計バー */
+.stats-bar {
+  background: var(--white); border-bottom: 1px solid var(--line);
+  padding: 14px 28px; display: flex; gap: 0; align-items: stretch;
+  flex-wrap: wrap;
+}
+.stat-item { text-align: center; padding: 4px 28px 4px 0; margin-right: 28px; border-right: 1px solid var(--line); }
+.stat-item:last-child { border-right: none; margin-right: 0; }
+.stat-num { font-family: 'DM Mono', monospace; font-size: 1.2rem; color: var(--accent); }
+.stat-label { font-size: 0.65rem; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 3px; }
+.stat-sub { font-family: 'DM Mono', monospace; font-size: 0.62rem; color: var(--muted); margin-top: 3px; opacity: 0.8; }
+.stat-sub .aj { color: #2e6e2e; }
+.stat-sub .jaran { color: #1a3a6e; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── 印刷エリア（通常は非表示） ── */
+#printArea { display: none; }
+
+@media print {
+  /* 画面UIをすべて隠す */
+  #pin-screen, .header, .stats-bar, .layout, .modal-overlay { display: none !important; }
+  #printArea { display: block !important; }
+  body { background: white; color: black; font-family: 'Noto Sans JP', sans-serif; }
+
+  /* 日報は1ページ厳守 */
+  .rp-page { page-break-inside: avoid; }
+
+  .print-page { page-break-after: always; padding: 20mm 15mm; }
+  .print-page:last-child { page-break-after: auto; }
+
+  .print-shop { font-size: 9pt; color: #666; margin-bottom: 2mm; letter-spacing: 0.1em; }
+  .print-title { font-size: 16pt; font-weight: bold; margin-bottom: 1mm; }
+  .print-subtitle { font-size: 10pt; color: #444; margin-bottom: 6mm; border-bottom: 1px solid #ccc; padding-bottom: 3mm; }
+
+  /* ⑧ 予定表印刷（Numbersフォーマット準拠） */
+  .ps-page { padding: 8mm 10mm; }
+  .ps-header { font-size: 14pt; font-weight: bold; margin-bottom: 3mm; display: flex; align-items: baseline; gap: 3mm; }
+  .ps-year { font-size: 14pt; }
+  .ps-md { font-size: 14pt; }
+  .ps-weather-label { font-size: 10pt; margin-left: 6mm; }
+  .ps-weather-box { display: inline-block; border: 1px solid #333; width: 18mm; height: 6mm; }
+  .ps-topbox { border: 1px solid #ccc; height: 16mm; margin-bottom: 3mm; }
+  .ps-staff-label { font-size: 9pt; font-weight: bold; margin-bottom: 1mm; }
+  .ps-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  .ps-table th { background: white; border: 1px solid #333; padding: 2px 4px; font-weight: bold; text-align: center; font-size: 8.5pt; }
+  .ps-table td { border: 1px solid #ccc; padding: 1px 4px; height: 6.5mm; font-size: 9pt; }
+  .ps-table th.ps-time, .ps-table td.ps-time { width: 12mm; text-align: center; font-weight: bold; border-right: 1px solid #333; vertical-align: middle; }
+  .ps-table th.ps-name, .ps-table td.ps-name { width: 36mm; }
+  .ps-table th.ps-people, .ps-table td.ps-people { width: 12mm; text-align: center; }
+  .ps-table th.ps-plan, .ps-table td.ps-plan { width: 22mm; }
+  .ps-table th.ps-opt, .ps-table td.ps-opt { }
+  .ps-table th.ps-price, .ps-table td.ps-price { width: 18mm; text-align: right; }
+  /* スロット境界線を強調 */
+  .ps-table tr:first-child td { border-top: 1px solid #333; }
+
+  /* ⑧ 基本一覧（フォールバック） */
+  .print-table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 6mm; }
+  .print-table th { background: #1c1a18; color: white; padding: 4px 8px; text-align: left; font-weight: normal; font-size: 9pt; }
+  .print-table td { padding: 5px 8px; border-bottom: 1px solid #e0d9ce; vertical-align: top; }
+  .print-table tr:nth-child(even) td { background: #faf8f4; }
+  .print-summary { font-size: 9pt; color: #666; text-align: right; margin-top: 2mm; }
+
+  /* ⑨ 受付表 */
+  .print-receipt { border: 2px solid #1c1a18; padding: 10mm; margin-bottom: 8mm; }
+  .print-receipt-name { font-size: 22pt; font-weight: bold; margin: 4mm 0; letter-spacing: 0.05em; }
+  .print-receipt-row { display: flex; gap: 6mm; padding: 3px 0; border-bottom: 1px dotted #ccc; font-size: 10pt; }
+  .print-receipt-label { min-width: 24mm; color: #666; font-size: 9pt; }
+  .print-receipt-value { flex: 1; }
+  .print-receipt-total { font-size: 14pt; font-weight: bold; text-align: right; margin-top: 4mm; color: #8b3a3a; }
+  .print-stamp { border: 2px solid #ccc; width: 20mm; height: 20mm; display: inline-block; margin-left: 4mm; vertical-align: middle; text-align: center; font-size: 8pt; color: #ccc; line-height: 20mm; }
+
+  /* ⑩ 日報（売上報告書フォーマット・1ページ収納） */
+  .rp-page { padding: 6mm 10mm; font-family: 'Noto Sans JP', sans-serif; }
+  .rp-date { font-size: 9pt; text-align: right; margin-bottom: 1mm; letter-spacing: 0.05em; }
+  .rp-title { font-size: 16pt; font-weight: bold; text-align: center; margin: 2mm 0 3mm; letter-spacing: 0.08em; }
+
+  /* 人数テーブル */
+  .rp-people { width: 100%; border-collapse: collapse; margin-bottom: 3mm; }
+  .rp-people td { border: 2px solid #111; padding: 1.5mm 3mm; width: 25%; }
+  .rp-p-label { font-size: 9.5pt; font-weight: bold; }
+  .rp-p-val { font-size: 10pt; text-align: right; padding-right: 2mm; }
+
+  /* A4用紙を余白なく使う */
+  @page { size: A4 portrait; margin: 0; }
+  .rp-page { width: 210mm; height: 297mm; box-sizing: border-box; display: flex; flex-direction: column; }
+  .rp-date { flex-shrink: 0; }
+  .rp-title { flex-shrink: 0; }
+  .rp-people { flex-shrink: 0; }
+
+  /* 売上テーブル：残りスペースをすべて使う */
+  .rp-sales-wrap { flex: 1; display: flex; flex-direction: column; margin-bottom: 2mm; }
+  .rp-sales { width: 100%; height: 100%; border-collapse: collapse; }
+  .rp-sales td { border: 1.5px solid #111; padding: 0 4mm; vertical-align: middle; }
+  .rp-cat { font-size: 9.5pt; font-weight: bold; width: 32mm; text-align: center; white-space: nowrap; }
+  .rp-detail { font-size: 9pt; width: auto; }
+  .rp-detail.rp-bold { font-weight: bold; }
+  .rp-detail.rp-small { font-size: 8pt; line-height: 1.5; }
+  .rp-amt { font-size: 10pt; text-align: right; width: 36mm; white-space: nowrap; }
+  .rp-amt .rp-yen { font-size: 13pt; font-weight: bold; margin-left: 1mm; }
+  .rp-blank { display: inline-block; min-width: 18mm; border-bottom: 1px solid #333; vertical-align: bottom; }
+
+  /* 業務欄（横線なし・2行分の高さ・仕切り極細） */
+  .rp-tasks { width: 100%; border-collapse: collapse; flex-shrink: 0; margin-bottom: 2mm; }
+  .rp-task-cell { border: 1.5px solid #111; padding: 2mm 3mm; width: 49%; vertical-align: top; height: 28mm; }
+  .rp-task-title { font-size: 8.5pt; font-weight: bold; display: block; margin-bottom: 1mm; }
+  .rp-task-divider { width: 2mm; padding: 0; border: none; }
+
+  /* 記入者（右詰め・横線なし・署名スペース付き） */
+  .rp-footer { flex-shrink: 0; padding-top: 2mm; margin-top: 3mm; }
+  .rp-footer-inner { display: flex; justify-content: flex-end; align-items: baseline; gap: 3mm; }
+  .rp-signer-label { font-size: 9.5pt; font-weight: bold; white-space: nowrap; }
+  .rp-sign-line { display: inline-block; width: 60mm; border-bottom: 1px solid #333; }
+}
+</style>
+</head>
+<body>
+<div id="pin-screen">
+  <h1>予約管理カレンダー</h1>
+  <div id="pin-display">
+    <span></span><span></span><span></span><span></span><span></span><span></span>
+  </div>
+  <div id="pin-keypad">
+    <button onclick="pinInput('1')">1</button><button onclick="pinInput('2')">2</button><button onclick="pinInput('3')">3</button>
+    <button onclick="pinInput('4')">4</button><button onclick="pinInput('5')">5</button><button onclick="pinInput('6')">6</button>
+    <button onclick="pinInput('7')">7</button><button onclick="pinInput('8')">8</button><button onclick="pinInput('9')">9</button>
+    <button onclick="pinClear()" style="font-size:0.85rem;color:#9a9080;">C</button>
+    <button onclick="pinInput('0')">0</button>
+    <button onclick="pinDelete()" style="font-size:0.85rem;color:#9a9080;">⌫</button>
+  </div>
+  <div id="pin-error"></div>
+</div>
+<script>
+(function(){
+  const PIN='171005'; let entered='';
+  if(sessionStorage.getItem('auth')==='ok') document.getElementById('pin-screen').style.display='none';
+  window.pinInput=function(d){ if(entered.length>=6)return; entered+=d; updateDots();
+    if(entered.length===6){ setTimeout(()=>{ if(entered===PIN){ sessionStorage.setItem('auth','ok'); document.getElementById('pin-screen').style.display='none'; } else { document.getElementById('pin-error').textContent='PINが違います'; entered=''; updateDots(); setTimeout(()=>document.getElementById('pin-error').textContent='',1500); } },100); } };
+  window.pinDelete=function(){ entered=entered.slice(0,-1); updateDots(); };
+  window.pinClear=function(){ entered=''; updateDots(); };
+  function updateDots(){ document.querySelectorAll('#pin-display span').forEach((d,i)=>d.classList.toggle('filled',i<entered.length)); }
+})();
+</script>
+
+<div class="header">
+  <div class="header-left">
+    <h1>予約管理カレンダー</h1>
+    <p>BOOKING MANAGEMENT</p>
+  </div>
+  <div class="header-right">
+    <span id="syncStatus" style="font-family:'DM Mono',monospace;font-size:0.65rem;color:rgba(255,255,255,0.45);margin-right:8px;"></span>
+    <a href="kimono-booking.html" class="header-btn accent" target="_blank">＋ 予約を手動入力</a>
+    <button class="header-btn" onclick="refreshBookings()">↻ 更新</button>
+  </div>
+</div>
+
+<!-- 統計バー -->
+<div class="stats-bar">
+  <div class="stat-item">
+    <div class="stat-label">今月の予約</div>
+    <div class="stat-num" id="statTotal">0</div>
+    <div class="stat-sub" id="statBreakdown"><span class="aj">AJ 0</span> / <span class="jaran">じゃらん 0</span></div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">今月の売上合計</div>
+    <div class="stat-num" id="statRevenue">—</div>
+    <div class="stat-sub" id="statRevenueBreakdown">—</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-label">今日の予約</div>
+    <div class="stat-num" id="statToday">0</div>
+    <div class="stat-sub" id="statTodaySub">&nbsp;</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- カレンダー -->
+  <div class="cal-panel">
+    <div class="cal-nav">
+      <span class="month" id="calMonth"></span>
+      <div style="display:flex;gap:8px;">
+        <button class="today-btn" onclick="goToday()">今日</button>
+        <button class="nav-btn" onclick="changeMonth(-1)">‹</button>
+        <button class="nav-btn" onclick="changeMonth(1)">›</button>
+      </div>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+
+  <!-- サイドパネル -->
+  <div class="side-panel">
+    <div class="side-header">
+      <div class="date-label" id="sideDateLabel">日付を選択してください</div>
+      <div class="booking-count" id="sideCount"></div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button class="side-print-btn" onclick="printDayList()" id="btnPrintList" title="この日の予約一覧を印刷">
+          🖨 一覧印刷
+        </button>
+        <button class="side-print-btn" onclick="printDailyReport()" id="btnPrintReport" title="日報を作成">
+          📋 日報
+        </button>
+      </div>
+    </div>
+    <div class="side-bookings" id="sideBookings">
+      <div class="side-empty">日付をクリックして<br>予約を確認</div>
+    </div>
+  </div>
+</div>
+
+<!-- 印刷エリア（@media printでのみ表示） -->
+<div id="printArea"></div>
+
+<!-- 詳細モーダル -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalName">予約詳細</h2>
+      <button class="modal-close-btn" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer">
+      <button class="del-btn" onclick="deleteBooking()">この予約を非表示にする</button>
+      <button class="close-btn2" style="background:var(--muted);" onclick="printReceipt()">🖨 受付表を印刷</button>
+      <button class="close-btn2" onclick="closeModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ★ Google Apps ScriptのデプロイURL（GAS側のACCESS_KEYと一致させてください）
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
+const ACCESS_KEY = 'AkariKimono2026_mK9x';
+
+// 自動更新
+let autoRefreshTimer = null;
+let lastSyncTime = null;      // 最終同期時刻
+let syncElapsedTimer = null;  // 経過時間表示タイマー
+let retryCount = 0;           // リトライ回数
+const MAX_RETRY = 3;
+
+const DAY_NAMES = ['日','月','火','水','木','金','土'];
+const MONTHS_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const today = new Date();
+const todayStr = today.toISOString().slice(0,10);
+let curYear = today.getFullYear(), curMonth = today.getMonth();
+let selectedDate = todayStr;
+let bookings = [];
+let activeBookingId = null;
+
+// プランごとのチップカラー
+function chipClass(planName, source) {
+  if (source === 'MANUAL') return 'chip-manual';
+  const map = {
+    'ベーシック': 'chip-basic', 'スタンダード': 'chip-standard',
+    'プレミアム': 'chip-premium', '撮影付き': 'chip-photo',
+    '加賀友禅': 'chip-kaga', '成人式下見': 'chip-seijin',
+    '卒業式下見': 'chip-sotsu', '期間限定': 'chip-limited',
+  };
+  return map[planName] || 'chip-standard';
+}
+
+// ── データ読み込み ──────────────────────────────────
+function getManualBookings() {
+  return JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
+}
+
+function loadBookings() {
+  const gas = JSON.parse(localStorage.getItem('kimono_bookings') || '[]');
+  const manual = getManualBookings();
+  bookings = mergeBookings(gas, manual);
+}
+
+function mergeBookings(gasBookings, manualBookings) {
+  const skipped = JSON.parse(localStorage.getItem('kimono_skipped') || '[]');
+  const gasFiltered = gasBookings.filter(b => !skipped.includes(b.id));
+  // 手動予約はskippedに入っていても除外（deleteManualで直接削除するため）
+  return [...gasFiltered, ...manualBookings];
+}
+
+async function loadFromGAS() {
+  if (!GAS_URL || GAS_URL === 'YOUR_GAS_DEPLOY_URL_HERE') return false;
+  try {
+    const res = await fetch(GAS_URL + '?key=' + ACCESS_KEY);
+    const data = JSON.parse(await res.text());
+    if (data.success && data.bookings) {
+      const skipped = JSON.parse(localStorage.getItem('kimono_skipped') || '[]');
+      const gasBookings = data.bookings.filter(b => !skipped.includes(b.id));
+      localStorage.setItem('kimono_bookings', JSON.stringify(gasBookings));
+      // 手動予約とマージ
+      bookings = mergeBookings(gasBookings, getManualBookings());
+      return true;
+    }
+  } catch (e) {
+    console.warn('GAS読み込みエラー:', e);
+  }
+  return false;
+}
+
+async function refreshBookings() {
+  const statusEl = document.getElementById('syncStatus');
+  if (statusEl) statusEl.textContent = '同期中...';
+  const fromGAS = await loadFromGAS();
+  if (!fromGAS) {
+    loadBookings();
+    // リトライ（最大3回・10秒後）
+    if (retryCount < MAX_RETRY) {
+      retryCount++;
+      if (statusEl) statusEl.textContent = `接続失敗 — ${retryCount * 10}秒後に再試行...`;
+      setTimeout(() => refreshBookings(), retryCount * 10000);
+      return;
+    } else {
+      retryCount = 0;
+      if (statusEl) statusEl.textContent = 'ローカルデータ表示中';
+    }
+  } else {
+    retryCount = 0;
+    lastSyncTime = new Date();
+    startSyncElapsed();
+  }
+  renderCalendar();
+  renderSidePanel();
+  updateStats();
+}
+
+// 経過時間を「○分前に同期」形式でリアルタイム更新
+function startSyncElapsed() {
+  if (syncElapsedTimer) clearInterval(syncElapsedTimer);
+  updateSyncLabel();
+  syncElapsedTimer = setInterval(updateSyncLabel, 30000); // 30秒ごとに更新
+}
+
+function updateSyncLabel() {
+  const statusEl = document.getElementById('syncStatus');
+  if (!statusEl || !lastSyncTime) return;
+  const diff = Math.floor((Date.now() - lastSyncTime.getTime()) / 60000);
+  if (diff < 1) {
+    statusEl.textContent = 'たった今同期';
+  } else if (diff < 60) {
+    statusEl.textContent = `${diff}分前に同期`;
+  } else {
+    const h = lastSyncTime.getHours();
+    const m = String(lastSyncTime.getMinutes()).padStart(2,'0');
+    statusEl.textContent = `最終同期: ${h}:${m}`;
+  }
+}
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(() => {
+    // バックグラウンド（タブ非表示）中はスキップ
+    if (document.hidden) return;
+    refreshBookings();
+  }, 60000);
+}
+
+// タブに戻ったとき：最後の同期から5分以上経過していれば即時更新
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    const elapsed = lastSyncTime ? (Date.now() - lastSyncTime.getTime()) : Infinity;
+    if (elapsed > 5 * 60 * 1000) refreshBookings();
+    else updateSyncLabel();
+  }
+});
+
+// ── 統計 ──────────────────────────────────────────
+function updateStats() {
+  const monthBookings = bookings.filter(b => {
+    const d = new Date(b.date + 'T00:00:00');
+    return d.getFullYear() === curYear && d.getMonth() === curMonth;
+  });
+  const ajBookings     = monthBookings.filter(b => b.source === 'AJ');
+  const jaranBookings  = monthBookings.filter(b => b.source !== 'AJ');
+  const todayBookings  = bookings.filter(b => b.date === todayStr);
+  const todayAJ        = todayBookings.filter(b => b.source === 'AJ').length;
+  const todayJaran     = todayBookings.filter(b => b.source !== 'AJ').length;
+
+  const revenue       = monthBookings.reduce((a,b) => a + (b.total || 0), 0);
+  const ajRevenue     = ajBookings.reduce((a,b) => a + (b.total || 0), 0);
+  const jaranRevenue  = jaranBookings.reduce((a,b) => a + (b.total || 0), 0);
+
+  document.getElementById('statTotal').textContent = monthBookings.length + '件';
+  document.getElementById('statToday').textContent = todayBookings.length + '件';
+  document.getElementById('statRevenue').textContent = revenue > 0 ? `¥${revenue.toLocaleString()}` : '—';
+
+  // 内訳：件数
+  document.getElementById('statBreakdown').innerHTML =
+    `<span class="aj">AJ ${ajBookings.length}</span> / <span class="jaran">じゃらん ${jaranBookings.length}</span>`;
+
+  // 内訳：売上
+  const rParts = [];
+  if (ajRevenue > 0)    rParts.push(`<span class="aj">AJ ¥${ajRevenue.toLocaleString()}</span>`);
+  if (jaranRevenue > 0) rParts.push(`<span class="jaran">じゃらん ¥${jaranRevenue.toLocaleString()}</span>`);
+  document.getElementById('statRevenueBreakdown').innerHTML = rParts.length > 0 ? rParts.join(' / ') : '—';
+
+  // 今日の内訳
+  const tParts = [];
+  if (todayAJ > 0)    tParts.push(`<span class="aj">AJ ${todayAJ}</span>`);
+  if (todayJaran > 0) tParts.push(`<span class="jaran">じゃらん ${todayJaran}</span>`);
+  document.getElementById('statTodaySub').innerHTML = tParts.length > 0 ? tParts.join(' / ') : '&nbsp;';
+}
+
+// ── カレンダー描画 ────────────────────────────────
+function renderCalendar() {
+  document.getElementById('calMonth').textContent = `${MONTHS_EN[curMonth]} ${curYear}`;
+  const grid = document.getElementById('calGrid');
+  grid.innerHTML = '';
+
+  // 曜日ヘッダー（日〜土）
+  DAY_NAMES.forEach((d,i) => {
+    const el = document.createElement('div');
+    el.className = 'cal-dayname';
+    el.textContent = d;
+    grid.appendChild(el);
+  });
+
+  const firstDay = new Date(curYear, curMonth, 1).getDay();
+  const daysInMonth = new Date(curYear, curMonth+1, 0).getDate();
+
+  for (let i = 0; i < firstDay; i++) {
+    const el = document.createElement('div');
+    el.className = 'cal-cell empty';
+    grid.appendChild(el);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${curYear}-${String(curMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dow = (firstDay + d - 1) % 7;
+    const isToday = dateStr === todayStr;
+    const isSelected = dateStr === selectedDate;
+
+    const cell = document.createElement('div');
+    cell.className = 'cal-cell'
+      + (isToday ? ' today' : '')
+      + (isSelected ? ' selected' : '')
+      + (dow === 0 ? ' sunday' : '')
+      + (dow === 6 ? ' saturday' : '');
+    cell.onclick = () => { selectedDate = dateStr; renderCalendar(); renderSidePanel(); };
+
+    // 日付
+    const dateDiv = document.createElement('div');
+    dateDiv.className = 'cell-date';
+    dateDiv.textContent = d;
+    cell.appendChild(dateDiv);
+
+    // 予約チップ（時間順）
+    const dayBookings = bookings
+      .filter(b => b.date === dateStr)
+      .sort((a,b) => a.time.localeCompare(b.time));
+
+    const maxShow = 3;
+    dayBookings.slice(0, maxShow).forEach(b => {
+      const chip = document.createElement('div');
+      chip.className = `booking-chip ${chipClass(b.plan, b.source)}`;
+      chip.textContent = `${b.time} ${b.name}${b.source === 'MANUAL' ? ' ✎' : ''}`;
+      chip.onclick = (e) => { e.stopPropagation(); openDetail(b.id); };
+      cell.appendChild(chip);
+    });
+
+    if (dayBookings.length > maxShow) {
+      const more = document.createElement('div');
+      more.className = 'more-chip';
+      more.textContent = `+${dayBookings.length - maxShow}件`;
+      cell.appendChild(more);
+    }
+
+    grid.appendChild(cell);
+  }
+
+  updateStats();
+}
+
+// ── サイドパネル描画 ──────────────────────────────
+function renderSidePanel() {
+  const d = new Date(selectedDate + 'T00:00:00');
+  document.getElementById('sideDateLabel').textContent =
+    `${d.getMonth()+1}月${d.getDate()}日（${DAY_NAMES[d.getDay()]}）`;
+
+  const dayBookings = bookings
+    .filter(b => b.date === selectedDate)
+    .sort((a,b) => a.time.localeCompare(b.time));
+
+  document.getElementById('sideCount').textContent =
+    dayBookings.length > 0 ? `${dayBookings.length}件の予約` : '予約なし';
+
+  const container = document.getElementById('sideBookings');
+  container.innerHTML = '';
+
+  if (dayBookings.length === 0) {
+    container.innerHTML = '<div class="side-empty">この日の予約はありません</div>';
+    return;
+  }
+
+  dayBookings.forEach(b => {
+    const card = document.createElement('div');
+    card.className = 'booking-card' + (b.id === activeBookingId ? ' active' : '');
+    const optStr = b.options && b.options.length > 0
+      ? b.options.map(o => typeof o === 'string' ? o : o.name).join('、') : 'なし';
+    card.innerHTML = `
+      <div class="bc-time">${b.time}</div>
+      <div class="bc-name">${b.name} 様</div>
+      <span class="bc-plan ${chipClass(b.plan, b.source)}">${b.plan}${b.source === 'MANUAL' ? ' ✎' : ''}</span>
+      <div class="bc-people">${b.people}</div>
+    `;
+    card.onclick = () => openDetail(b.id);
+    container.appendChild(card);
+  });
+}
+
+// ── 詳細モーダル ──────────────────────────────────
+function openDetail(id) {
+  const b = bookings.find(x => x.id === id);
+  if (!b) return;
+  activeBookingId = id;
+
+  const d = new Date(b.date + 'T00:00:00');
+  const dateStr = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DAY_NAMES[d.getDay()]}）`;
+  const optStr = b.options && b.options.length > 0
+    ? b.options.map(o => {
+        const n = typeof o === 'string' ? o : o.name;
+        const p = typeof o === 'object' && o.price > 0
+          ? `<span style="color:var(--muted);font-family:'DM Mono',monospace;font-size:0.8em;"> ¥${o.price.toLocaleString()}</span>` : '';
+        return n + p;
+      }).join('<br>') : 'なし';
+  const totalStr = b.total ? `¥${b.total.toLocaleString()}` : '来店時お見積もり';
+
+  document.getElementById('modalName').textContent = `${b.name} 様`;
+  document.getElementById('modalBody').innerHTML = `
+    <div class="detail-row"><span class="detail-label">予約番号</span><span class="detail-value" style="font-family:'DM Mono',monospace;font-size:0.85em;">${b.reservationId}</span></div>
+    <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${dateStr} ${b.time}</span></div>
+    <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${b.plan}</span></div>
+    <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${b.people}</span></div>
+    <div class="detail-row"><span class="detail-label">オプション</span><span class="detail-value">${optStr}</span></div>
+    <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);font-family:'DM Mono',monospace;">${totalStr}</span></div>
+    ${b.payment ? `<div class="detail-row"><span class="detail-label">支払方法</span><span class="detail-value">${b.payment}</span></div>` : ''}
+    ${b.pointUsed > 0 ? `<div class="detail-row"><span class="detail-label">ポイント</span><span class="detail-value" style="color:var(--muted);">${b.pointUsed.toLocaleString()} pt 利用</span></div>` : ''}
+    ${b.couponUsed > 0 ? `<div class="detail-row"><span class="detail-label">クーポン</span><span class="detail-value" style="color:var(--muted);">¥${b.couponUsed.toLocaleString()} 利用</span></div>` : ''}
+    ${b.email ? `<div class="detail-row"><span class="detail-label">メール</span><span class="detail-value"><a href="mailto:${b.email}" style="color:inherit;">${b.email}</a></span></div>` : ''}
+    ${b.tel ? `<div class="detail-row"><span class="detail-label">電話</span><span class="detail-value"><a href="tel:${b.tel}" style="color:inherit;">${b.tel}</a></span></div>` : ''}
+    <div class="detail-row"><span class="detail-label">備考</span><span class="detail-value">${(b.remarks || '').replace(/アクティビティジャパン予約管理システムをご利用ください。?/g, '').trim()}</span></div>
+    ${b.source === 'MANUAL'
+      ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#5a1a8a;">✎ 手動入力${b.channel ? '（' + b.channel + '）' : ''}</span></div>`
+      : `<div class="detail-row"><span class="detail-label">管理画面</span><span class="detail-value">${
+          b.source === 'AJ'
+            ? `<a href="https://ptn.activityjapan.com/reserve/detail/${b.reservationId}" target="_blank" style="color:var(--accent);">AJ管理画面 →</a>`
+            : `<a href="https://acb.jalan.net/gw/kanri/slogin.html" target="_blank" style="color:var(--accent);">じゃらん管理画面 →</a>`
+        }</span></div>`
+    }
+    <div class="detail-row"><span class="detail-label">受付日時</span><span class="detail-value" style="font-size:0.75rem;color:var(--muted);">${new Date(b.createdAt).toLocaleString('ja-JP')}</span></div>
+  `;
+
+  document.getElementById('detailModal').classList.add('open');
+  renderSidePanel();
+}
+
+function closeModal() {
+  document.getElementById('detailModal').classList.remove('open');
+  activeBookingId = null;
+  renderSidePanel();
+}
+
+function deleteBooking() {
+  if (!activeBookingId) return;
+  const target = bookings.find(b => b.id === activeBookingId);
+  if (!target) return;
+
+  if (target.source === 'MANUAL') {
+    // 手動予約：kimono_manual_bookingsから完全削除
+    if (!confirm('この手動予約を削除しますか？\n（この操作は元に戻せません）')) return;
+    let manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
+    manuals = manuals.filter(b => b.id !== activeBookingId);
+    localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
+  } else {
+    // GAS予約：skippedに追加して非表示
+    if (!confirm('この端末でこの予約を非表示にしますか？\n（次回同期後も非表示が維持されます。キャンセルはメール送信で自動反映されます）')) return;
+    const skipped = JSON.parse(localStorage.getItem('kimono_skipped') || '[]');
+    if (!skipped.includes(activeBookingId)) skipped.push(activeBookingId);
+    localStorage.setItem('kimono_skipped', JSON.stringify(skipped));
+    const gasBookings = JSON.parse(localStorage.getItem('kimono_bookings') || '[]').filter(b => b.id !== activeBookingId);
+    localStorage.setItem('kimono_bookings', JSON.stringify(gasBookings));
+  }
+
+  bookings = bookings.filter(b => b.id !== activeBookingId);
+  closeModal();
+  renderCalendar();
+  renderSidePanel();
+}
+
+// ── ナビ ──────────────────────────────────────────
+function changeMonth(dir) {
+  curMonth += dir;
+  if (curMonth > 11) { curMonth = 0; curYear++; }
+  if (curMonth < 0)  { curMonth = 11; curYear--; }
+  renderCalendar();
+  renderSidePanel();
+}
+
+function goToday() {
+  curYear = today.getFullYear();
+  curMonth = today.getMonth();
+  selectedDate = todayStr;
+  renderCalendar();
+  renderSidePanel();
+}
+
+// モーダル外クリックで閉じる
+document.getElementById('detailModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// ── 印刷ユーティリティ ────────────────────────────
+const SHOP_NAME = 'きものレンタル あかり';
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DAY_NAMES[d.getDay()]}）`;
+}
+
+function setPrintArea(html) {
+  document.getElementById('printArea').innerHTML = html;
+}
+
+// ⑧ その日の予約予定表を印刷（Numbers形式に準拠）
+function printDayList() {
+  const dayBookings = bookings
+    .filter(b => b.date === selectedDate)
+    .sort((a, b) => a.time.localeCompare(b.time));
+
+  // 9:00〜17:00 を 30 分刻みでスロット生成
+  const slots = [];
+  for (let h = 9; h <= 17; h++) {
+    slots.push(`${String(h).padStart(2,'0')}:00`);
+    if (h < 17) slots.push(`${String(h).padStart(2,'0')}:30`);
+  }
+  const ROWS_PER_SLOT = 3; // 各時間帯の行数
+
+  // 時間帯ごとに予約をグループ化
+  const slotMap = {};
+  dayBookings.forEach(b => {
+    const key = b.time;
+    if (!slotMap[key]) slotMap[key] = [];
+    slotMap[key].push(b);
+  });
+
+  // テーブル行を生成
+  const tableRows = slots.map(slot => {
+    const booked = slotMap[slot] || [];
+    const rows = [];
+    for (let i = 0; i < ROWS_PER_SLOT; i++) {
+      const b = booked[i];
+      const optStr = b && b.options && b.options.length > 0
+        ? b.options.map(o => typeof o === 'string' ? o : o.name).join('、') : '';
+      const totalStr = b && b.total > 0 ? `¥${b.total.toLocaleString()}` : '';
+      const isFirst = i === 0;
+      rows.push(`<tr>
+        ${isFirst ? `<td class="ps-time" rowspan="${ROWS_PER_SLOT}">${slot}</td>` : ''}
+        <td class="ps-name">${b ? b.name + '　様' : '　　　　　　　様'}</td>
+        <td class="ps-people">${b ? b.people : ''}</td>
+        <td class="ps-plan">${b ? b.plan : ''}</td>
+        <td class="ps-opt">${b ? optStr : ''}</td>
+        <td class="ps-price">${b ? totalStr : ''}</td>
+      </tr>`);
+    }
+    return rows.join('');
+  }).join('');
+
+  const d = new Date(selectedDate + 'T00:00:00');
+
+  setPrintArea(`
+    <div class="print-page ps-page">
+      <div class="ps-header">
+        <span class="ps-year">${d.getFullYear()}年</span>
+        <span class="ps-md">${d.getMonth()+1}月</span>
+        <span class="ps-md">${d.getDate()}日（${DAY_NAMES[d.getDay()]}）</span>
+        <span class="ps-weather-label">天気</span>
+        <span class="ps-weather-box"></span>
+      </div>
+      <div class="ps-topbox"></div>
+      <div class="ps-staff-label">出勤スタッフ</div>
+      <table class="ps-table">
+        <thead><tr>
+          <th class="ps-time">時間</th>
+          <th class="ps-name">お名前</th>
+          <th class="ps-people">人数</th>
+          <th class="ps-plan">プラン</th>
+          <th class="ps-opt">オプション</th>
+          <th class="ps-price">請求額</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+      <div class="print-summary">印刷日時: ${new Date().toLocaleString('ja-JP')}　全予約 ${dayBookings.length} 件</div>
+    </div>
+  `);
+  window.print();
+}
+
+// ⑨ 受付表を印刷（選択中の予約1件）
+function printReceipt() {
+  const b = bookings.find(x => x.id === activeBookingId);
+  if (!b) return;
+
+  const optRows = b.options && b.options.length > 0
+    ? b.options.map(o => {
+        const n = typeof o === 'string' ? o : o.name;
+        const p = typeof o === 'object' && o.price > 0 ? `¥${o.price.toLocaleString()}` : '';
+        return `<div class="print-receipt-row"><span class="print-receipt-label"></span><span class="print-receipt-value">${n}${p ? '　' + p : ''}</span></div>`;
+      }).join('') : '<div class="print-receipt-row"><span class="print-receipt-label"></span><span class="print-receipt-value">なし</span></div>';
+
+  const totalStr = b.total > 0 ? `¥${b.total.toLocaleString()}` : '来店時お見積もり';
+  const src = b.source === 'AJ' ? 'ActivityJapan' : b.source === 'MANUAL' ? `手動入力（${b.channel || ''}）` : 'じゃらんnet';
+
+  setPrintArea(`
+    <div class="print-page">
+      <div class="print-shop">${SHOP_NAME}　受付票</div>
+      <div class="print-receipt">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="font-size:9pt;color:#888;margin-bottom:1mm;">お名前</div>
+            <div class="print-receipt-name">${b.name} 様</div>
+          </div>
+          <div style="text-align:right;font-size:9pt;color:#888;">
+            予約番号: ${b.reservationId}<br>
+            受付: ${src}
+          </div>
+        </div>
+        <div class="print-receipt-row"><span class="print-receipt-label">来店日時</span><span class="print-receipt-value">${formatDate(b.date)}　${b.time}</span></div>
+        <div class="print-receipt-row"><span class="print-receipt-label">プラン</span><span class="print-receipt-value">${b.plan}</span></div>
+        <div class="print-receipt-row"><span class="print-receipt-label">人数</span><span class="print-receipt-value">${b.people}</span></div>
+        <div class="print-receipt-row"><span class="print-receipt-label">オプション</span><span class="print-receipt-value"></span></div>
+        ${optRows}
+        ${b.payment ? `<div class="print-receipt-row"><span class="print-receipt-label">支払方法</span><span class="print-receipt-value">${b.payment}</span></div>` : ''}
+        <div class="print-receipt-row"><span class="print-receipt-label">備考</span><span class="print-receipt-value">${(b.remarks || '').replace(/アクティビティジャパン予約管理システムをご利用ください。?/g, '').trim()}</span></div>
+        <div class="print-receipt-total">
+          合計　${totalStr}
+          <span class="print-stamp">確認印</span>
+        </div>
+      </div>
+      <div class="print-summary">印刷日時: ${new Date().toLocaleString('ja-JP')}</div>
+    </div>
+  `);
+  closeModal();
+  window.print();
+}
+
+// ⑩ 日報（売上報告書フォーマット）
+function printDailyReport() {
+  const d = new Date(selectedDate + 'T00:00:00');
+  const dayBookings = bookings
+    .filter(b => b.date === selectedDate)
+    .sort((a, b) => a.time.localeCompare(b.time));
+
+  // 月間データ
+  const monthBookings = bookings.filter(b => {
+    const bd = new Date(b.date + 'T00:00:00');
+    return bd.getFullYear() === d.getFullYear() && bd.getMonth() === d.getMonth();
+  });
+
+  // ── 人数集計（カップル1組=女性1+男性1換算）──
+  function parsePeople(bks) {
+    let f = 0, m = 0, ch = 0;
+    bks.forEach(b => {
+      const p = b.people || '';
+      const fM = p.match(/女性(\d+)/);   if (fM)  f  += parseInt(fM[1]);
+      const mM = p.match(/男性(\d+)/);   if (mM)  m  += parseInt(mM[1]);
+      const cM = p.match(/カップル(\d+)/); if (cM) { f += parseInt(cM[1]); m += parseInt(cM[1]); }
+      const chM = p.match(/小人(\d+)/);  if (chM) ch += parseInt(chM[1]);
+    });
+    return { f, m, ch, total: f + m + ch };
+  }
+  const todayP = parsePeople(dayBookings);
+  const monthP = parsePeople(monthBookings);
+
+  // ── 売上分類 ──
+  const ajB      = dayBookings.filter(b => b.source === 'AJ');
+  const jaranB   = dayBookings.filter(b => b.source !== 'AJ' && b.source !== 'MANUAL');
+  const localB   = dayBookings.filter(b => b.source === 'MANUAL' || (b.payment && b.payment.includes('現地')));
+
+  const ajTotal    = ajB.reduce((s, b) => s + (b.total || 0), 0);
+  const jaranTotal = jaranB.reduce((s, b) => s + (b.total || 0), 0);
+  const localTotal = localB.reduce((s, b) => s + (b.total || 0), 0);
+  const dayTotal   = dayBookings.reduce((s, b) => s + (b.total || 0), 0);
+  const monthTotal = monthBookings.reduce((s, b) => s + (b.total || 0), 0);
+
+  // クーポン・ポイント（AJ・じゃらん別、ある場合のみ）
+  const ajCoupon    = ajB.reduce((s, b) => s + (b.couponUsed || 0), 0);
+  const jaranCoupon = jaranB.reduce((s, b) => s + (b.couponUsed || 0), 0);
+  const ajPoint     = ajB.reduce((s, b) => s + (b.pointUsed || 0), 0);
+  const jaranPoint  = jaranB.reduce((s, b) => s + (b.pointUsed || 0), 0);
+  const totalCoupon = ajCoupon + jaranCoupon;
+  const totalPoint  = ajPoint + jaranPoint;
+
+  // 令和換算
+  const reiwa = d.getFullYear() - 2018;
+
+  // 営業日数：月初〜選択日まで水曜日（定休日）を除いてカウント
+  let businessDayCount = 0;
+  const countDay = new Date(d.getFullYear(), d.getMonth(), 1);
+  while (countDay <= d) {
+    if (countDay.getDay() !== 3) businessDayCount++; // 3=水曜日をスキップ
+    countDay.setDate(countDay.getDate() + 1);
+  }
+
+  // 金額表示ヘルパー
+  const amt = v => v > 0 ? v.toLocaleString() : '';
+  const yen = v => `${amt(v)}<span class="rp-yen">円</span>`;
+
+  // クーポン/ポイント内訳メモ
+  const cpNote = [];
+  if (ajCoupon > 0)    cpNote.push(`AJクーポン¥${ajCoupon.toLocaleString()}`);
+  if (jaranCoupon > 0) cpNote.push(`じゃらんクーポン¥${jaranCoupon.toLocaleString()}`);
+  if (ajPoint > 0)     cpNote.push(`AJポイント${ajPoint.toLocaleString()}pt`);
+  if (jaranPoint > 0)  cpNote.push(`じゃらんポイント${jaranPoint.toLocaleString()}pt`);
+
+  setPrintArea(`
+    <div class="print-page rp-page">
+      <div class="rp-date">令和 ${reiwa} 年　${d.getMonth()+1} 月　${d.getDate()} 日　（今月　${businessDayCount} 営業日目）</div>
+      <div class="rp-title">着物レンタルあかり売上報告書</div>
+
+      <table class="rp-people">
+        <tr>
+          <td class="rp-p-label">女性</td>
+          <td class="rp-p-label">男性</td>
+          <td class="rp-p-label">本日合計</td>
+          <td class="rp-p-label">月間累計</td>
+        </tr>
+        <tr>
+          <td class="rp-p-val">${todayP.f}&nbsp;名</td>
+          <td class="rp-p-val">${todayP.m}&nbsp;名</td>
+          <td class="rp-p-val">${todayP.total}&nbsp;名</td>
+          <td class="rp-p-val">${monthP.total}&nbsp;名</td>
+        </tr>
+      </table>
+
+      <div class="rp-sales-wrap"><table class="rp-sales">
+        <tr>
+          <td class="rp-cat">現金売上</td>
+          <td class="rp-detail"></td>
+          <td class="rp-amt">${yen(localTotal)}</td>
+        </tr>
+        <tr>
+          <td class="rp-cat">カード売上</td>
+          <td class="rp-detail rp-small">VISA<br>JCB<br>UC</td>
+          <td class="rp-amt"><span class="rp-yen">円</span></td>
+        </tr>
+        <tr>
+          <td class="rp-cat" rowspan="7">事前決済</td>
+          <td class="rp-detail rp-bold">ACTIVITY JAPAN</td>
+          <td class="rp-amt">${yen(ajTotal)}</td>
+        </tr>
+        <tr>
+          <td class="rp-detail">${jaranTotal > 0 ? 'じゃらんnet' : ''}</td>
+          <td class="rp-amt">${yen(jaranTotal)}</td>
+        </tr>
+        <tr><td class="rp-detail"></td><td class="rp-amt"><span class="rp-yen">円</span></td></tr>
+        <tr><td class="rp-detail"></td><td class="rp-amt"><span class="rp-yen">円</span></td></tr>
+        <tr><td class="rp-detail"></td><td class="rp-amt"><span class="rp-yen">円</span></td></tr>
+        <tr><td class="rp-detail"></td><td class="rp-amt"><span class="rp-yen">円</span></td></tr>
+        <tr>
+          <td class="rp-detail">クーポン / ポイント</td>
+          <td class="rp-amt"><span class="rp-blank"></span><span class="rp-yen">円</span> / <span class="rp-blank"></span><span class="rp-yen">円</span></td>
+        </tr>
+        <tr>
+          <td class="rp-cat" style="font-weight:bold;">本日売上合計</td>
+          <td class="rp-detail"></td>
+          <td class="rp-amt"><span class="rp-yen">円</span></td>
+        </tr>
+        <tr>
+          <td class="rp-cat" style="font-weight:bold;">月間売上合計</td>
+          <td class="rp-detail"></td>
+          <td class="rp-amt"><span class="rp-yen">円</span></td>
+        </tr>
+        <tr>
+          <td class="rp-cat">出金額</td>
+          <td class="rp-detail"></td>
+          <td class="rp-amt"><span class="rp-yen">円</span></td>
+        </tr>
+        <tr>
+          <td class="rp-cat">事務所持ち帰り</td>
+          <td class="rp-detail"></td>
+          <td class="rp-amt"><span class="rp-yen">円</span></td>
+        </tr>
+      </table></div>
+
+      <table class="rp-tasks">
+        <tr>
+          <td class="rp-task-cell"><span class="rp-task-title">本日の業務</span></td>
+          <td class="rp-task-divider"></td>
+          <td class="rp-task-cell"><span class="rp-task-title">翌日の業務</span></td>
+        </tr>
+      </table>
+
+      <div class="rp-footer">
+        <div class="rp-footer-inner">
+          <span class="rp-signer-label">記入者</span>
+          <span class="rp-sign-line"></span>
+        </div>
+      </div>
+    </div>
+  `);
+  window.print();
+}
+
+// ── 初期化 ────────────────────────────────────────
+loadBookings();
+renderCalendar();
+renderSidePanel();
+refreshBookings();
+startAutoRefresh();
+</script>
+</body>
+</html>
