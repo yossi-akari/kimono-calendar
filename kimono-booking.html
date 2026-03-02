@@ -456,6 +456,7 @@ const OPTIONS_DEF = [
   { id: 'o1',  name: 'スタンダード着物にアップグレード',         plans: ['ベーシック','期間限定'],                     priceOf: () => 990 },
   { id: 'o2',  name: 'プレミアム着物にアップグレード',           plans: ['ベーシック','期間限定','スタンダード'],       priceOf: (p) => ['ベーシック','期間限定'].includes(p) ? 1980 : 990 },
   { id: 'o3',  name: 'ヘアセット',                               plans: null,                                         priceOf: () => 1650 },
+  { id: 'o16', name: '髪飾り',                                  plans: null,                                         priceOf: () => 550 },
   { id: 'o4',  name: 'メンズヘアセット',                         plans: null,                                         priceOf: () => 880 },
   { id: 'o5',  name: 'ぬくぬく肌着',                             plans: null,                                         priceOf: () => 550 },
   { id: 'o6',  name: 'コート・ショール',                         plans: null,                                         priceOf: () => 550 },
