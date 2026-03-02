@@ -10,25 +10,20 @@
   background: #1c1a18;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 24px;
+  gap: 20px;
 }
 #pin-screen h1 {
   color: #faf8f4; font-family: serif;
   font-weight: 200; font-size: 1.4rem; letter-spacing: 0.15em; margin: 0;
 }
-#pin-display { display: flex; gap: 12px; }
-#pin-display span {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 1px solid #8b3a3a; background: transparent; transition: background 0.2s;
+#pinInput {
+  background: #2a2520; border: 1px solid #3a3530; color: #faf8f4;
+  padding: 14px 20px; border-radius: 2px; font-size: 1.1rem;
+  width: 260px; outline: none; text-align: center; letter-spacing: 0.25em;
+  transition: border-color 0.2s; font-family: 'DM Mono', monospace;
 }
-#pin-display span.filled { background: #8b3a3a; }
-#pin-keypad { display: grid; grid-template-columns: repeat(3, 64px); gap: 12px; }
-#pin-keypad button {
-  width: 64px; height: 64px; border-radius: 50%;
-  border: 1px solid #3a3530; background: #2a2520; color: #faf8f4;
-  font-size: 1.3rem; cursor: pointer; transition: background 0.15s;
-}
-#pin-keypad button:active { background: #8b3a3a; }
+#pinInput:focus { border-color: #8b3a3a; }
+#pinInput::placeholder { color: #5a5048; letter-spacing: 0.08em; font-size: 0.85rem; font-family: serif; }
 #pin-error { color: #8b3a3a; font-size: 0.85rem; min-height: 1.2em; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200;300;400&family=Noto+Sans+JP:wght@300;400&family=DM+Mono:wght@300&display=swap" rel="stylesheet">
@@ -355,28 +350,24 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 <body>
 <div id="pin-screen">
   <h1>予約管理カレンダー</h1>
-  <div id="pin-display">
-    <span></span><span></span><span></span><span></span><span></span><span></span>
-  </div>
-  <div id="pin-keypad">
-    <button onclick="pinInput('1')">1</button><button onclick="pinInput('2')">2</button><button onclick="pinInput('3')">3</button>
-    <button onclick="pinInput('4')">4</button><button onclick="pinInput('5')">5</button><button onclick="pinInput('6')">6</button>
-    <button onclick="pinInput('7')">7</button><button onclick="pinInput('8')">8</button><button onclick="pinInput('9')">9</button>
-    <button onclick="pinClear()" style="font-size:0.85rem;color:#9a9080;">C</button>
-    <button onclick="pinInput('0')">0</button>
-    <button onclick="pinDelete()" style="font-size:0.85rem;color:#9a9080;">⌫</button>
-  </div>
+  <input type="password" id="pinInput" placeholder="PINコードを入力" maxlength="8" autocomplete="off" inputmode="text">
   <div id="pin-error"></div>
 </div>
 <script>
 (function(){
-  const PIN='171005'; let entered='';
-  if(sessionStorage.getItem('auth')==='ok') document.getElementById('pin-screen').style.display='none';
-  window.pinInput=function(d){ if(entered.length>=6)return; entered+=d; updateDots();
-    if(entered.length===6){ setTimeout(()=>{ if(entered===PIN){ sessionStorage.setItem('auth','ok'); document.getElementById('pin-screen').style.display='none'; } else { document.getElementById('pin-error').textContent='PINが違います'; entered=''; updateDots(); setTimeout(()=>document.getElementById('pin-error').textContent='',1500); } },100); } };
-  window.pinDelete=function(){ entered=entered.slice(0,-1); updateDots(); };
-  window.pinClear=function(){ entered=''; updateDots(); };
-  function updateDots(){ document.querySelectorAll('#pin-display span').forEach((d,i)=>d.classList.toggle('filled',i<entered.length)); }
+  const PIN='56785678';
+  const screen=document.getElementById('pin-screen');
+  const input=document.getElementById('pinInput');
+  const err=document.getElementById('pin-error');
+  if(sessionStorage.getItem('auth')==='ok') screen.style.display='none';
+  else input.focus();
+  input.addEventListener('input',function(){
+    err.textContent='';
+    if(this.value.length===8){
+      if(this.value===PIN){ sessionStorage.setItem('auth','ok'); screen.style.display='none'; }
+      else{ err.textContent='PINが違います'; this.value=''; setTimeout(()=>err.textContent='',1500); }
+    }
+  });
 })();
 </script>
 
