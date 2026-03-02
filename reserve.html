@@ -142,6 +142,14 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .res-cal-avail { font-size: 0.78rem; line-height: 1; margin-top: 2px; }
 .res-cal-legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 0.68rem; color: var(--muted); justify-content: center; padding: 6px 0 2px; }
 .res-cal-loading { grid-column: 1 / -1; text-align: center; padding: 28px; font-size: 0.8rem; color: var(--muted); }
+
+/* ── 時間ボタン ── */
+.time-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.time-btn { border: 1px solid var(--line); border-radius: 2px; padding: 9px 14px; background: var(--white); font-family: 'DM Mono', monospace; font-size: 0.82rem; cursor: pointer; transition: all 0.15s; color: var(--ink); }
+.time-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.time-btn.selected { background: var(--accent); color: white; border-color: var(--accent); }
+.time-btn:disabled { opacity: 0.35; cursor: not-allowed; background: var(--cream); }
+.avail-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -183,20 +191,13 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
         <div id="selectedDateDisplay" style="display:none;margin-top:10px;font-size:0.85rem;color:var(--accent);font-weight:400;"></div>
         <div id="availError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;"></div>
       </div>
-      <div class="field">
-        <label>ご来店時間</label>
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          <select id="visitTime" style="width:auto;flex-shrink:0;">
-            <option value="">選択してください</option>
-            <option>09:00</option><option>09:30</option>
-            <option>10:00</option><option>10:30</option>
-            <option>11:00</option><option>11:30</option>
-            <option>12:00</option><option>12:30</option>
-            <option>13:00</option><option>13:30</option>
-            <option>14:00</option>
-          </select>
-          <span id="dateAvailStatus" style="display:none;font-size:0.82rem;"></span>
+      <div id="timeSection" style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+          <label style="margin:0;">ご来店時間</label>
+          <span id="dateAvailStatus"></span>
         </div>
+        <div class="time-grid" id="timeGrid"></div>
+        <input type="hidden" id="visitTime">
       </div>
     </div>
     <button class="submit-btn" onclick="goStep(2)" style="max-width:340px;display:block;margin:0 auto;">次へ — プラン・人数を選ぶ</button>
@@ -456,6 +457,8 @@ function renderResCal() {
 function resCalSelectDate(dateStr) {
   resCalSelectedDate = dateStr;
   document.getElementById('visitDate').value = dateStr;
+  document.getElementById('visitTime').value = '';
+  document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('selected'));
   const d = new Date(dateStr + 'T00:00:00');
   document.getElementById('selectedDateDisplay').textContent =
     `選択中: ${d.getMonth()+1}月${d.getDate()}日（${RC_DAYS[d.getDay()]}）`;
@@ -467,26 +470,34 @@ function resCalSelectDate(dateStr) {
 }
 
 function updateAvailStatus() {
-  const el = document.getElementById('dateAvailStatus');
-  if (!resCalSelectedDate) { el.style.display = 'none'; return; }
+  const pill = document.getElementById('dateAvailStatus');
+  const timeSection = document.getElementById('timeSection');
+  if (!resCalSelectedDate) { timeSection.style.display = 'none'; return; }
+
+  timeSection.style.display = 'block';
+  document.querySelectorAll('.time-btn').forEach(b => { b.disabled = false; });
+
   const monthKey = resCalKey(
     parseInt(resCalSelectedDate.slice(0, 4)),
     parseInt(resCalSelectedDate.slice(5, 7))
   );
   const avail = resCalAvailCache[monthKey];
   const da = avail ? avail[resCalSelectedDate] : null;
-  if (!da) { el.style.display = 'none'; return; }
 
-  let icon, text, color;
+  if (!da) { pill.style.display = 'none'; return; }
+
+  let icon, text, color, bg;
   if (da.closed || da.available <= 0) {
-    icon = '❌'; text = '受付終了'; color = '#c0392b';
+    icon = '❌'; text = '受付終了'; color = '#c0392b'; bg = '#fff0f0';
+    document.querySelectorAll('.time-btn').forEach(b => { b.disabled = true; });
   } else if (da.available === 1) {
-    icon = '🔺'; text = 'あと1組'; color = '#d68910';
+    icon = '🔺'; text = 'あと1組'; color = '#d68910'; bg = '#fffbf0';
   } else {
-    icon = '⭕️'; text = `残${da.available}組`; color = '#1e8449';
+    icon = '⭕️'; text = `残${da.available}組`; color = '#1e8449'; bg = '#f0fff4';
   }
-  el.innerHTML = `${icon} <span style="color:${color};font-weight:bold;">${text}</span>`;
-  el.style.display = 'inline';
+  pill.className = 'avail-pill';
+  pill.style.cssText = `background:${bg};color:${color};`;
+  pill.innerHTML = `${icon} ${text}`;
 }
 
 async function resCalChangeMonth(dir) {
@@ -498,6 +509,32 @@ async function resCalChangeMonth(dir) {
   if (y < now.getFullYear() || (y === now.getFullYear() && m < now.getMonth() + 1)) return;
   resCalYear = y; resCalMonth = m;
   await loadResCalMonth(resCalYear, resCalMonth);
+}
+
+// ── 時間ボタン ───────────────────────────────────────
+const TIME_SLOTS = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
+
+function buildTimeGrid() {
+  const grid = document.getElementById('timeGrid');
+  grid.innerHTML = '';
+  TIME_SLOTS.forEach(t => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'time-btn';
+    btn.textContent = t;
+    btn.dataset.time = t;
+    btn.onclick = () => selectTime(t);
+    grid.appendChild(btn);
+  });
+}
+
+function selectTime(t) {
+  document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('selected'));
+  const btn = document.querySelector(`.time-btn[data-time="${t}"]`);
+  if (btn && !btn.disabled) {
+    btn.classList.add('selected');
+    document.getElementById('visitTime').value = t;
+  }
 }
 
 // ── プラン選択 ───────────────────────────────────────
@@ -853,6 +890,7 @@ async function submitForm() {
 // 初期化
 buildOptions();
 updateSummary();
+buildTimeGrid();
 loadResCalMonth(resCalYear, resCalMonth);
 </script>
 </body>
