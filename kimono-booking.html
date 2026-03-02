@@ -54,9 +54,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .back-btn:hover { background: rgba(255,255,255,0.2); }
 
 /* フォームエリア */
-.form-wrap {
-  max-width: 680px; margin: 36px auto; padding: 0 20px 60px;
-}
+.form-wrap { max-width: 680px; margin: 36px auto; padding: 0 20px 60px; }
 
 .form-card {
   background: var(--paper); border: 1px solid var(--line); border-radius: 2px;
@@ -67,22 +65,17 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   font-size: 0.72rem; letter-spacing: 0.12em; color: var(--muted);
   border-bottom: 1px solid var(--line);
 }
-
 .form-row {
   padding: 14px 20px; border-bottom: 1px solid var(--line);
   display: flex; align-items: flex-start; gap: 16px;
 }
 .form-row:last-child { border-bottom: none; }
-
 .form-label {
   min-width: 100px; font-size: 0.82rem; color: var(--muted);
   padding-top: 9px; flex-shrink: 0;
 }
 .form-label .req { color: var(--accent); font-size: 0.65rem; margin-left: 3px; }
-
-.form-input {
-  flex: 1;
-}
+.form-input { flex: 1; }
 .form-input input,
 .form-input select,
 .form-input textarea {
@@ -97,21 +90,48 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .form-input textarea { resize: vertical; min-height: 72px; }
 .form-input select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M6 8L0 0h12z' fill='%239a9080'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
 
+/* 時間外入力 */
+#fTimeCustom { margin-top: 8px; display: none; }
+
 /* 人数グリッド */
 .people-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .people-item label { font-size: 0.72rem; color: var(--muted); display: block; margin-bottom: 4px; }
-.people-item input { width: 100%; border: 1px solid var(--line); border-radius: 2px; padding: 7px 10px; font-size: 0.85rem; text-align: center; outline: none; }
+.people-item input { width: 100%; border: 1px solid var(--line); border-radius: 2px; padding: 7px 10px; font-size: 0.85rem; text-align: center; outline: none; transition: border-color 0.15s; }
 .people-item input:focus { border-color: var(--accent); }
+.people-item input[readonly] { background: #f7f4f0; color: var(--muted); }
 
-/* オプション */
-.options-list { display: flex; flex-direction: column; gap: 8px; }
-.option-row { display: flex; gap: 8px; align-items: center; }
-.option-row input.opt-name { flex: 1; }
-.option-row input.opt-price { width: 110px; }
-.option-row .opt-del { background: none; border: 1px solid #ddd; color: var(--muted); width: 32px; height: 32px; border-radius: 2px; cursor: pointer; font-size: 1rem; flex-shrink: 0; transition: all 0.15s; }
-.option-row .opt-del:hover { border-color: #c0392b; color: #c0392b; }
-.add-opt-btn { background: none; border: 1px dashed var(--line); color: var(--muted); padding: 7px 14px; border-radius: 2px; font-size: 0.78rem; cursor: pointer; width: 100%; margin-top: 4px; transition: all 0.15s; }
-.add-opt-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* オプション（チェックボックス形式） */
+.opt-check-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0; border-bottom: 1px solid var(--line); gap: 12px;
+}
+.opt-check-row:last-child { border-bottom: none; }
+.opt-check-row.hidden { display: none; }
+.opt-check-left { display: flex; align-items: center; gap: 10px; flex: 1; }
+.opt-check-left input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0; cursor: pointer; }
+.opt-check-name { font-size: 0.83rem; cursor: pointer; }
+.opt-check-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.opt-qty {
+  width: 52px; border: 1px solid var(--line); border-radius: 2px;
+  padding: 5px 6px; font-size: 0.82rem; text-align: center; outline: none;
+  transition: border-color 0.15s;
+}
+.opt-qty:focus { border-color: var(--accent); }
+.opt-qty:disabled { background: #f7f4f0; color: var(--muted); }
+.opt-price-label { font-size: 0.78rem; color: var(--muted); min-width: 72px; text-align: right; font-family: 'DM Mono', monospace; }
+.opt-check-row.unchecked .opt-check-name { color: var(--muted); }
+.opt-check-row.unchecked .opt-price-label { color: #ccc; }
+
+/* 合計表示 */
+.total-display {
+  display: flex; align-items: center; gap: 8px;
+}
+.total-display .yen { color: var(--muted); font-size: 0.9rem; }
+#fTotal { flex: 1; }
+.auto-tag {
+  font-size: 0.68rem; color: var(--green); background: #eaf3e8;
+  padding: 2px 6px; border-radius: 2px; white-space: nowrap;
+}
 
 /* 送信ボタン */
 .submit-area { text-align: center; margin-top: 28px; }
@@ -141,16 +161,13 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .new-entry-btn:hover { opacity: 0.8; }
 
 /* 一覧 */
-.list-toggle {
-  text-align: center; margin-bottom: 16px;
-}
+.list-toggle { text-align: center; margin-bottom: 16px; }
 .list-toggle-btn {
   background: none; border: 1px solid var(--line); color: var(--muted);
   padding: 8px 20px; border-radius: 2px; font-size: 0.78rem; cursor: pointer;
   transition: all 0.2s;
 }
 .list-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
-
 #manualList { display: none; }
 .manual-item {
   background: var(--paper); border: 1px solid var(--line); border-radius: 2px;
@@ -200,7 +217,6 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 </div>
 
 <div class="form-wrap">
-  <!-- 成功メッセージ -->
   <div id="successMsg">
     <div class="check">✓</div>
     <h2>予約を保存しました</h2>
@@ -208,7 +224,6 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     <button class="new-entry-btn" onclick="resetForm()">続けて入力する</button>
   </div>
 
-  <!-- 入力フォーム -->
   <form id="bookingForm" onsubmit="handleSubmit(event)">
 
     <!-- 基本情報 -->
@@ -225,17 +240,17 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
       <div class="form-row">
         <div class="form-label">来店時間<span class="req">*</span></div>
         <div class="form-input">
-          <select id="fTime" required>
+          <select id="fTime" onchange="onTimeChange()">
             <option value="">-- 選択 --</option>
             <option>09:00</option><option>09:30</option>
             <option>10:00</option><option>10:30</option>
             <option>11:00</option><option>11:30</option>
             <option>12:00</option><option>12:30</option>
             <option>13:00</option><option>13:30</option>
-            <option>14:00</option><option>14:30</option>
-            <option>15:00</option><option>15:30</option>
-            <option>16:00</option>
+            <option>14:00</option>
+            <option value="CUSTOM">時間外：直接入力</option>
           </select>
+          <input type="text" id="fTimeCustom" placeholder="例：14:30" pattern="\d{2}:\d{2}">
         </div>
       </div>
 
@@ -249,7 +264,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
       <div class="form-row">
         <div class="form-label">プラン<span class="req">*</span></div>
         <div class="form-input">
-          <select id="fPlan" required>
+          <select id="fPlan" required onchange="onPlanChange()">
             <option value="">-- 選択 --</option>
             <option>ベーシック</option>
             <option>スタンダード</option>
@@ -269,7 +284,6 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
           <select id="fChannel">
             <option value="電話">電話予約</option>
             <option value="店頭">店頭（飛び込み）</option>
-            <option value="LINE">LINE</option>
             <option value="その他">その他</option>
           </select>
         </div>
@@ -284,23 +298,23 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
           <div class="people-grid">
             <div class="people-item">
               <label>女性（名）</label>
-              <input type="number" id="pFemale" min="0" value="0" oninput="calcTotal()">
+              <input type="number" id="pFemale" min="0" value="0" oninput="calcAutoTotal()">
             </div>
             <div class="people-item">
               <label>男性（名）</label>
-              <input type="number" id="pMale" min="0" value="0" oninput="calcTotal()">
+              <input type="number" id="pMale" min="0" value="0" oninput="calcAutoTotal()">
             </div>
             <div class="people-item">
               <label>カップル（組）</label>
-              <input type="number" id="pCouple" min="0" value="0" oninput="calcTotal()">
+              <input type="number" id="pCouple" min="0" value="0" oninput="calcAutoTotal()">
             </div>
             <div class="people-item">
               <label>小人（名）</label>
-              <input type="number" id="pChild" min="0" value="0" oninput="calcTotal()">
+              <input type="number" id="pChild" min="0" value="0" oninput="calcAutoTotal()">
             </div>
             <div class="people-item">
-              <label>大人合計</label>
-              <input type="text" id="pTotal" readonly style="background:#f7f4f0;color:var(--muted);">
+              <label>合計人数</label>
+              <input type="text" id="pTotal" readonly>
             </div>
           </div>
         </div>
@@ -311,10 +325,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     <div class="form-card">
       <div class="form-section-title">オプション</div>
       <div class="form-row">
-        <div class="form-input" style="width:100%;">
-          <div class="options-list" id="optionsList"></div>
-          <button type="button" class="add-opt-btn" onclick="addOption()">＋ オプションを追加</button>
-        </div>
+        <div class="form-input" style="width:100%;" id="optionsList"></div>
       </div>
     </div>
 
@@ -324,9 +335,12 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 
       <div class="form-row">
         <div class="form-label">合計金額</div>
-        <div class="form-input" style="display:flex;align-items:center;gap:8px;">
-          <span style="color:var(--muted);font-size:0.9rem;">¥</span>
-          <input type="number" id="fTotal" min="0" placeholder="0" style="flex:1;">
+        <div class="form-input">
+          <div class="total-display">
+            <span class="yen">¥</span>
+            <input type="number" id="fTotal" min="0" placeholder="0">
+            <span class="auto-tag" id="autoTag">自動計算</span>
+          </div>
         </div>
       </div>
 
@@ -334,18 +348,14 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
         <div class="form-label">支払方法</div>
         <div class="form-input">
           <select id="fPayment">
-            <option value="">未定</option>
             <option value="現地決済（現金）">現地決済（現金）</option>
             <option value="現地決済（カード）">現地決済（カード）</option>
-            <option value="事前クレジット決済">事前クレジット決済</option>
-            <option value="PayPay">PayPay</option>
-            <option value="その他">その他</option>
           </select>
         </div>
       </div>
     </div>
 
-    <!-- 連絡先 -->
+    <!-- お客様情報 -->
     <div class="form-card">
       <div class="form-section-title">お客様情報</div>
 
@@ -366,7 +376,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
       <div class="form-row">
         <div class="form-label">備考</div>
         <div class="form-input">
-          <textarea id="fRemarks" placeholder="アレルギー、着付け希望時間、その他メモなど"></textarea>
+          <textarea id="fRemarks" placeholder="その他メモなど"></textarea>
         </div>
       </div>
     </div>
@@ -376,7 +386,6 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     </div>
   </form>
 
-  <!-- 登録済み手動予約一覧 -->
   <div class="list-toggle">
     <button class="list-toggle-btn" onclick="toggleList()">登録済みの手動予約を確認する ▾</button>
   </div>
@@ -387,6 +396,136 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
 const ACCESS_KEY = 'AkariKimono2026_mK9x';
 
+// ── 料金テーブル ──
+const PLAN_PRICES = {
+  'ベーシック':   { 女性: 2970, 男性: 4400, カップル: 7370 },
+  'スタンダード': { 女性: 3960, 男性: 4400, カップル: 8360 },
+  'プレミアム':   { 女性: 4950, 男性: 4400, カップル: 9350 },
+  '撮影付き':     { 女性: 2970, 男性: 4400, カップル: 7370 },
+  '加賀友禅':     { 女性: 41800, 男性: 4400, カップル: 46200 },
+  '成人式下見':   { 女性: 0, 男性: 0, カップル: 0 },
+  '卒業式下見':   { 女性: 0, 男性: 0, カップル: 0 },
+  '期間限定':     { 女性: 2970, 男性: 4400, カップル: 7370 },
+};
+const CHILD_PRICE = 3300;
+
+// ── オプション定義 ──
+// plans: null = 全プラン表示, 配列 = 該当プランのみ表示
+// priceOf(plan): 単価を返す
+const OPTIONS_DEF = [
+  { id: 'o1',  name: 'スタンダード着物にアップグレード',         plans: ['ベーシック','期間限定'],                     priceOf: () => 990 },
+  { id: 'o2',  name: 'プレミアム着物にアップグレード',           plans: ['ベーシック','期間限定','スタンダード'],       priceOf: (p) => ['ベーシック','期間限定'].includes(p) ? 1980 : 990 },
+  { id: 'o3',  name: 'ヘアセット',                               plans: null,                                         priceOf: () => 1650 },
+  { id: 'o4',  name: 'メンズヘアセット',                         plans: null,                                         priceOf: () => 880 },
+  { id: 'o5',  name: 'ぬくぬく肌着',                             plans: null,                                         priceOf: () => 550 },
+  { id: 'o6',  name: 'コート・ショール',                         plans: null,                                         priceOf: () => 550 },
+  { id: 'o7',  name: '翌日返却',                                 plans: null,                                         priceOf: () => 1100 },
+  { id: 'o8',  name: 'ホテル返却',                               plans: null,                                         priceOf: () => 1650 },
+  { id: 'o9',  name: '人力車',                                   plans: null,                                         priceOf: () => 8800 },
+  { id: 'o10', name: 'タクシー',                                 plans: null,                                         priceOf: () => 9900 },
+  { id: 'o11', name: 'スタジオ撮影データ渡し',                   plans: null,                                         priceOf: () => 4950 },
+  { id: 'o12', name: 'スタジオ撮影データ＋プリント',             plans: null,                                         priceOf: () => 7700 },
+  { id: 'o13', name: 'ロケーション撮影ブロンズ50枚渡し',         plans: null,                                         priceOf: () => 22000 },
+  { id: 'o14', name: 'ロケーション撮影シルバー100枚渡し',        plans: null,                                         priceOf: () => 33000 },
+  { id: 'o15', name: 'ロケーション撮影ゴールド150枚渡し',        plans: null,                                         priceOf: () => 55000 },
+];
+
+// ── オプション一覧を生成 ──
+function buildOptionsList() {
+  const el = document.getElementById('optionsList');
+  el.innerHTML = OPTIONS_DEF.map(opt => `
+    <div class="opt-check-row unchecked" id="row_${opt.id}">
+      <div class="opt-check-left">
+        <input type="checkbox" id="${opt.id}" onchange="onOptChange('${opt.id}')">
+        <label class="opt-check-name" for="${opt.id}">${opt.name}</label>
+      </div>
+      <div class="opt-check-right">
+        <input type="number" class="opt-qty" id="qty_${opt.id}" value="1" min="1" max="20" disabled onchange="calcAutoTotal()">
+        <span class="opt-price-label" id="price_${opt.id}">¥0</span>
+      </div>
+    </div>
+  `).join('');
+}
+buildOptionsList();
+
+// ── 時間外入力の表示切替 ──
+function onTimeChange() {
+  const sel = document.getElementById('fTime').value;
+  const custom = document.getElementById('fTimeCustom');
+  custom.style.display = sel === 'CUSTOM' ? 'block' : 'none';
+  if (sel === 'CUSTOM') custom.focus();
+}
+
+// ── プラン変更 → オプション表示更新 + 金額再計算 ──
+function onPlanChange() {
+  const plan = document.getElementById('fPlan').value;
+  OPTIONS_DEF.forEach(opt => {
+    const row = document.getElementById('row_' + opt.id);
+    if (!row) return;
+    // 表示/非表示
+    if (opt.plans !== null && !opt.plans.includes(plan)) {
+      row.classList.add('hidden');
+      document.getElementById(opt.id).checked = false;
+      row.classList.add('unchecked');
+      document.getElementById('qty_' + opt.id).disabled = true;
+    } else {
+      row.classList.remove('hidden');
+    }
+    // 単価更新
+    const unitPrice = opt.priceOf(plan);
+    const qty = parseInt(document.getElementById('qty_' + opt.id).value) || 1;
+    const cb = document.getElementById(opt.id);
+    document.getElementById('price_' + opt.id).textContent =
+      cb.checked ? '¥' + (unitPrice * qty).toLocaleString() : '¥' + unitPrice.toLocaleString();
+  });
+  calcAutoTotal();
+}
+
+// ── チェックボックス変更 ──
+function onOptChange(id) {
+  const cb = document.getElementById(id);
+  const row = document.getElementById('row_' + id);
+  const qtyEl = document.getElementById('qty_' + id);
+  row.classList.toggle('unchecked', !cb.checked);
+  qtyEl.disabled = !cb.checked;
+  calcAutoTotal();
+}
+
+// ── 自動料金計算 ──
+function calcAutoTotal() {
+  const plan = document.getElementById('fPlan').value;
+  const f  = parseInt(document.getElementById('pFemale').value) || 0;
+  const m  = parseInt(document.getElementById('pMale').value)   || 0;
+  const c  = parseInt(document.getElementById('pCouple').value) || 0;
+  const ch = parseInt(document.getElementById('pChild').value)  || 0;
+
+  // 合計人数表示（小人含む）
+  const totalCount = f + m + c * 2 + ch;
+  document.getElementById('pTotal').value = totalCount > 0 ? totalCount + '名' : '';
+
+  // プラン料金
+  let base = 0;
+  if (plan && PLAN_PRICES[plan]) {
+    const p = PLAN_PRICES[plan];
+    base += f * p['女性'] + m * p['男性'] + c * p['カップル'] + ch * CHILD_PRICE;
+  }
+
+  // オプション料金 + 単価ラベル更新
+  let optTotal = 0;
+  OPTIONS_DEF.forEach(opt => {
+    const cb  = document.getElementById(opt.id);
+    const qty = parseInt(document.getElementById('qty_' + opt.id).value) || 1;
+    const unitPrice = opt.priceOf(plan);
+    const total = unitPrice * qty;
+    document.getElementById('price_' + opt.id).textContent =
+      cb.checked ? '¥' + total.toLocaleString() : '¥' + unitPrice.toLocaleString();
+    if (cb.checked) optTotal += total;
+  });
+
+  document.getElementById('fTotal').value = base + optTotal;
+}
+
+// ── GAS送信ヘルパー ──
 async function postToGAS(action, payload) {
   const params = new URLSearchParams({ key: ACCESS_KEY, action });
   for (const [k, v] of Object.entries(payload)) {
@@ -396,84 +535,70 @@ async function postToGAS(action, payload) {
   return JSON.parse(await res.text());
 }
 
-// ── 人数合計 ──
-function calcTotal() {
-  const f = parseInt(document.getElementById('pFemale').value)||0;
-  const m = parseInt(document.getElementById('pMale').value)||0;
-  const c = (parseInt(document.getElementById('pCouple').value)||0) * 2;
-  const ch = parseInt(document.getElementById('pChild').value)||0;
-  document.getElementById('pTotal').value = (f + m + c + ch) + '名';
-}
-calcTotal();
-
-// ── オプション追加 ──
-let optCount = 0;
-function addOption(name='', price='') {
-  optCount++;
-  const id = 'opt_' + optCount;
-  const row = document.createElement('div');
-  row.className = 'option-row';
-  row.id = id;
-  row.innerHTML = `
-    <input class="opt-name" type="text" placeholder="オプション名（例：ヘアセット）" value="${name}">
-    <input class="opt-price" type="number" placeholder="金額（¥）" min="0" value="${price}">
-    <button type="button" class="opt-del" onclick="document.getElementById('${id}').remove()">×</button>
-  `;
-  document.getElementById('optionsList').appendChild(row);
-}
+// ── Enterキー無効化（textarea除く） ──
+document.getElementById('bookingForm').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+    e.preventDefault();
+  }
+});
 
 // ── フォーム送信 ──
 async function handleSubmit(e) {
   e.preventDefault();
 
-  const f = parseInt(document.getElementById('pFemale').value)||0;
-  const m = parseInt(document.getElementById('pMale').value)||0;
-  const c = parseInt(document.getElementById('pCouple').value)||0;
-  const ch = parseInt(document.getElementById('pChild').value)||0;
-  const totalPeople = f + m + c * 2 + ch;
+  const plan = document.getElementById('fPlan').value;
+  const f  = parseInt(document.getElementById('pFemale').value) || 0;
+  const m  = parseInt(document.getElementById('pMale').value)   || 0;
+  const c  = parseInt(document.getElementById('pCouple').value) || 0;
+  const ch = parseInt(document.getElementById('pChild').value)  || 0;
+  if (f + m + c * 2 + ch === 0) { alert('人数を入力してください'); return; }
 
-  if (totalPeople === 0) { alert('人数を入力してください'); return; }
+  // 時間取得
+  const timeSelect = document.getElementById('fTime').value;
+  if (!timeSelect) { alert('来店時間を選択してください'); return; }
+  const time = timeSelect === 'CUSTOM'
+    ? document.getElementById('fTimeCustom').value.trim()
+    : timeSelect;
+  if (!time) { alert('時間を入力してください'); return; }
 
-  // 人数テキスト生成
+  // 人数テキスト
   const parts = [];
-  if (f > 0)  parts.push(`女性${f}名`);
-  if (m > 0)  parts.push(`男性${m}名`);
-  if (c > 0)  parts.push(`カップル${c}組`);
+  if (f  > 0) parts.push(`女性${f}名`);
+  if (m  > 0) parts.push(`男性${m}名`);
+  if (c  > 0) parts.push(`カップル${c}組`);
   if (ch > 0) parts.push(`小人${ch}名`);
   const peopleStr = parts.join('・');
 
-  // オプション収集
-  const optRows = document.querySelectorAll('#optionsList .option-row');
+  // 選択済みオプション収集
   const options = [];
-  optRows.forEach(row => {
-    const n = row.querySelector('.opt-name').value.trim();
-    const p = parseInt(row.querySelector('.opt-price').value)||0;
-    if (n) options.push({ name: n, price: p });
+  OPTIONS_DEF.forEach(opt => {
+    const cb = document.getElementById(opt.id);
+    if (!cb.checked) return;
+    const qty = parseInt(document.getElementById('qty_' + opt.id).value) || 1;
+    const unitPrice = opt.priceOf(plan);
+    options.push({ name: opt.name + '×' + qty, price: unitPrice * qty });
   });
 
   const now = new Date();
-  const id = 'MANUAL-' + now.getTime();
-
   const booking = {
-    id,
-    reservationId: id,
-    source: 'MANUAL',
-    date:   document.getElementById('fDate').value,
-    time:   document.getElementById('fTime').value,
-    name:   document.getElementById('fName').value.trim(),
-    plan:   document.getElementById('fPlan').value,
-    channel: document.getElementById('fChannel').value,
-    people: peopleStr,
+    id:            'MANUAL-' + now.getTime(),
+    reservationId: 'MANUAL-' + now.getTime(),
+    source:        'MANUAL',
+    date:          document.getElementById('fDate').value,
+    time,
+    name:          document.getElementById('fName').value.trim(),
+    plan,
+    channel:       document.getElementById('fChannel').value,
+    people:        peopleStr,
     options,
-    total:   parseInt(document.getElementById('fTotal').value)||0,
-    payment: document.getElementById('fPayment').value,
-    tel:     document.getElementById('fTel').value.trim(),
-    email:   document.getElementById('fEmail').value.trim(),
-    remarks: document.getElementById('fRemarks').value.trim(),
-    createdAt: now.toISOString(),
+    total:         parseInt(document.getElementById('fTotal').value) || 0,
+    payment:       document.getElementById('fPayment').value,
+    tel:           document.getElementById('fTel').value.trim(),
+    email:         document.getElementById('fEmail').value.trim(),
+    remarks:       document.getElementById('fRemarks').value.trim(),
+    createdAt:     now.toISOString(),
   };
 
-  // GASへ保存（失敗時はlocalStorageにフォールバック）
   const btn = document.getElementById('submitBtn');
   btn.disabled = true; btn.textContent = '保存中...';
   try {
@@ -486,10 +611,8 @@ async function handleSubmit(e) {
   }
   btn.disabled = false; btn.textContent = '予約を保存する';
 
-  // 成功表示
   document.getElementById('bookingForm').style.display = 'none';
-  const sd = document.getElementById('successMsg');
-  sd.style.display = 'block';
+  document.getElementById('successMsg').style.display = 'block';
   const d = new Date(booking.date + 'T00:00:00');
   const days = ['日','月','火','水','木','金','土'];
   document.getElementById('successDetail').textContent =
@@ -498,12 +621,12 @@ async function handleSubmit(e) {
 
 function resetForm() {
   document.getElementById('bookingForm').reset();
-  document.getElementById('optionsList').innerHTML = '';
-  calcTotal();
+  document.getElementById('fTimeCustom').style.display = 'none';
+  document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
+  buildOptionsList();
+  calcAutoTotal();
   document.getElementById('bookingForm').style.display = 'block';
   document.getElementById('successMsg').style.display = 'none';
-  // 今日の日付をデフォルトにセット
-  document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
 }
 
 // ── 一覧表示 ──
@@ -522,8 +645,7 @@ function renderList() {
     el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:0.82rem;padding:20px;">登録済みの手動予約はありません</p>';
     return;
   }
-  // 日付降順
-  const sorted = [...manuals].sort((a,b) => b.date.localeCompare(a.date));
+  const sorted = [...manuals].sort((a, b) => b.date.localeCompare(a.date));
   el.innerHTML = sorted.map(b => {
     const d = new Date(b.date + 'T00:00:00');
     const days = ['日','月','火','水','木','金','土'];
@@ -547,15 +669,15 @@ async function deleteManual(id) {
   } catch(err) {
     console.warn('GAS削除失敗:', err);
   }
-  // localStorageフォールバックからも削除
   let manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
   manuals = manuals.filter(b => b.id !== id);
   localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
   renderList();
 }
 
-// 初期日付セット
-document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
+// 初期化
+document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
+calcAutoTotal();
 </script>
 </body>
 </html>
