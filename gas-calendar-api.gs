@@ -420,7 +420,9 @@ function getManualSheetBookings() {
       .filter(row => row[0] && String(row[1]) >= today)
       .map(row => ({
         id: String(row[0]), source: 'MANUAL',
-        date: String(row[1]), time: String(row[2]), name: String(row[3]), plan: String(row[4]),
+        date: row[1] instanceof Date ? Utilities.formatDate(row[1], 'Asia/Tokyo', 'yyyy-MM-dd') : String(row[1]),
+        time: row[2] instanceof Date ? Utilities.formatDate(row[2], 'Asia/Tokyo', 'HH:mm') : String(row[2]),
+        name: String(row[3]), plan: String(row[4]),
         channel: String(row[5]), people: String(row[6]),
         options: JSON.parse(row[7] || '[]'),
         total: parseInt(row[8]) || 0,
