@@ -738,6 +738,12 @@ function parsePlanTypeJS(s) {
   return 'ベーシック';
 }
 
+function mapPayment(str) {
+  if (!str) return '現地決済';
+  if (str.includes('カード決済')) return '事前決済';
+  return '現地決済';
+}
+
 function detectEmailSource(text) {
   if (/利用日時[：:]\s*\d{4}\/\d{2}\/\d{2}/.test(text)) return 'jaran';
   if (/日時[：:]\s*\d{4}年\d{2}月\d{2}日/.test(text))   return 'aj';
@@ -774,9 +780,11 @@ function parseJaranEmailJS(body) {
   if (planRaw.includes('メンズヘア') && male  > 0) parsedOptions.push({ name: 'メンズヘアセット', qty: male });
 
   const reservationId = (body.match(/予約番号[：:]\s*([A-Za-z0-9]+)/) || [])[1] || '';
+  const paymentRaw = (body.match(/支払方法[：:]\s*([^\n\r]+)/) || [])[1]?.trim() || '';
   return { source: 'じゃらん', channel: 'じゃらん', date, time, name, planRaw,
            plan: parsePlanTypeJS(planRaw), female, male, couple, child,
-           parsedOptions, total, tel, email, remarks, reservationId };
+           parsedOptions, total, tel, email, remarks, reservationId,
+           payment: mapPayment(paymentRaw) };
 }
 
 function parseAJEmailJS(body) {
@@ -822,11 +830,13 @@ function parseAJEmailJS(body) {
 
   const adultNote = pm['大人'] > 0 ? `（大人${pm['大人']}名を女性として計上）` : '';
   const reservationId = (body.match(/予約番号[：:]\s*(\d+)/) || [])[1] || '';
+  const paymentRaw = (body.match(/支払方法[：:]\s*([^\n\r]+)/) || [])[1]?.trim() || '';
   return { source: 'AJ', channel: 'AJ', date, time, name, planRaw,
            plan: parsePlanTypeJS(planRaw),
            female: pm['女性'] + pm['大人'], male: pm['男性'],
            couple: pm['カップル'], child: pm['小人'],
-           parsedOptions, total, tel: '', email: '', remarks, adultNote, reservationId };
+           parsedOptions, total, tel: '', email: '', remarks, adultNote, reservationId,
+           payment: mapPayment(paymentRaw) };
 }
 
 function matchOptionDef(parsedName) {
@@ -869,6 +879,7 @@ function fillFormFromParsed(parsed) {
   document.getElementById('fTel').value     = parsed.tel    || '';
   document.getElementById('fEmail').value   = parsed.email  || '';
   document.getElementById('fRemarks').value = parsed.remarks || '';
+  if (parsed.payment) document.getElementById('fPayment').value = parsed.payment;
 
   // オプションをリセット
   OPTIONS_DEF.forEach(opt => {
