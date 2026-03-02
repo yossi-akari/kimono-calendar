@@ -427,6 +427,9 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     <div class="submit-area">
       <div class="edit-mode-bar" id="editModeBar">編集モード：内容を変更して「予約を更新する」を押してください</div>
       <button type="submit" class="submit-btn" id="submitBtn">予約を保存する</button>
+      <div id="deleteArea" style="display:none;margin-top:16px;">
+        <button type="button" onclick="deleteEditingBooking()" style="background:none;border:none;color:#c0392b;font-size:0.8rem;text-decoration:underline;cursor:pointer;font-family:'Noto Sans JP',sans-serif;">この予約を削除する</button>
+      </div>
     </div>
   </form>
 
@@ -669,10 +672,34 @@ async function handleSubmit(e) {
     `${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}） ${booking.time}  ${booking.name} 様  ${booking.plan}`;
 }
 
+async function deleteEditingBooking() {
+  if (!editingBooking) return;
+  if (!confirm('この予約を削除しますか？\n（この操作は元に戻せません）')) return;
+  try {
+    await postToGAS('delete', { id: editingBooking.id });
+  } catch(err) {
+    console.warn('GAS削除失敗:', err);
+  }
+  let manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
+  manuals = manuals.filter(b => b.id !== editingBooking.id);
+  localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
+  editingBooking = null;
+  document.getElementById('submitBtn').textContent = '予約を保存する';
+  document.getElementById('editModeBar').style.display = 'none';
+  document.getElementById('deleteArea').style.display = 'none';
+  document.getElementById('bookingForm').reset();
+  document.getElementById('fTimeCustom').style.display = 'none';
+  document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
+  buildOptionsList();
+  calcAutoTotal();
+  alert('予約を削除しました');
+}
+
 function resetForm() {
   editingBooking = null;
   document.getElementById('submitBtn').textContent = '予約を保存する';
   document.getElementById('editModeBar').style.display = 'none';
+  document.getElementById('deleteArea').style.display = 'none';
   document.getElementById('bookingForm').reset();
   document.getElementById('fTimeCustom').style.display = 'none';
   document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
@@ -805,6 +832,7 @@ function startEdit(id) {
   document.getElementById('successMsg').style.display = 'none';
   document.getElementById('submitBtn').textContent = '予約を更新する';
   document.getElementById('editModeBar').style.display = 'block';
+  document.getElementById('deleteArea').style.display = 'block';
   document.querySelector('.form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -1044,6 +1072,7 @@ if (_pendingEdit) {
   fillFormForEdit(_b);
   document.getElementById('submitBtn').textContent = '予約を更新する';
   document.getElementById('editModeBar').style.display = 'block';
+  document.getElementById('deleteArea').style.display = 'block';
   document.querySelector('.form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 </script>
