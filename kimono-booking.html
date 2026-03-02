@@ -772,9 +772,10 @@ function parseJaranEmailJS(body) {
   if (planRaw.includes('ヘアセット') && female > 0) parsedOptions.push({ name: 'ヘアセット', qty: female });
   if (planRaw.includes('メンズヘア') && male  > 0) parsedOptions.push({ name: 'メンズヘアセット', qty: male });
 
+  const reservationId = (body.match(/予約番号[：:]\s*([A-Za-z0-9]+)/) || [])[1] || '';
   return { source: 'じゃらん', channel: 'じゃらん', date, time, name, planRaw,
            plan: parsePlanTypeJS(planRaw), female, male, couple, child,
-           parsedOptions, total, tel, email, remarks };
+           parsedOptions, total, tel, email, remarks, reservationId };
 }
 
 function parseAJEmailJS(body) {
@@ -819,11 +820,12 @@ function parseAJEmailJS(body) {
   if (remarks.includes('アクティビティジャパン予約管理システムをご利用ください')) remarks = '';
 
   const adultNote = pm['大人'] > 0 ? `（大人${pm['大人']}名を女性として計上）` : '';
+  const reservationId = (body.match(/予約番号[：:]\s*(\d+)/) || [])[1] || '';
   return { source: 'AJ', channel: 'AJ', date, time, name, planRaw,
            plan: parsePlanTypeJS(planRaw),
            female: pm['女性'] + pm['大人'], male: pm['男性'],
            couple: pm['カップル'], child: pm['小人'],
-           parsedOptions, total, tel: '', email: '', remarks, adultNote };
+           parsedOptions, total, tel: '', email: '', remarks, adultNote, reservationId };
 }
 
 function matchOptionDef(parsedName) {
@@ -913,8 +915,12 @@ function parseAndFillEmail() {
 
   fillFormFromParsed(parsed);
   const label = source === 'jaran' ? 'じゃらん' : 'AJ';
-  resultEl.textContent = `${label}のメールを解析しました` + (parsed.adultNote ? ' ' + parsed.adultNote : '');
-  resultEl.className = 'success';
+  const href = source === 'aj'
+    ? `https://ptn.activityjapan.com/reserve/detail/${parsed.reservationId}`
+    : 'https://activityboard.jp/activityboard/booking/list/?from=header';
+  const idText = parsed.reservationId ? `　予約番号：<span style="font-family:monospace;font-weight:400">${parsed.reservationId}</span>　<a href="${href}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:underline">管理画面 →</a>` : '';
+  const noteText = parsed.adultNote ? `<br><span style="color:var(--muted);font-size:0.73rem">${parsed.adultNote}</span>` : '';
+  resultEl.innerHTML = `<span class="success">✓ ${label}のメールを解析しました</span>${idText}${noteText}`;
   document.querySelector('.form-card').nextElementSibling.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
