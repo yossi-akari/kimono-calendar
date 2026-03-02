@@ -778,8 +778,27 @@ function openDetail(id) {
     <div class="detail-row"><span class="detail-label">受付日時</span><span class="detail-value" style="font-size:0.75rem;color:var(--muted);">${new Date(b.createdAt).toLocaleString('ja-JP')}</span></div>
   `;
 
+  // MANUAL予約はボタンを「編集」に切り替え
+  const delBtn = document.querySelector('.del-btn');
+  if (b.source === 'MANUAL') {
+    delBtn.textContent = 'この予約を編集する';
+    delBtn.onclick = editManualFromCalendar;
+    delBtn.style.cssText = 'border-color:var(--muted);color:var(--muted);';
+  } else {
+    delBtn.textContent = 'この予約を非表示にする';
+    delBtn.onclick = deleteBooking;
+    delBtn.style.cssText = '';
+  }
+
   document.getElementById('detailModal').classList.add('open');
   renderSidePanel();
+}
+
+function editManualFromCalendar() {
+  const b = bookings.find(x => x.id === activeBookingId);
+  if (!b) return;
+  sessionStorage.setItem('pendingEdit', JSON.stringify(b));
+  window.location.href = 'kimono-booking.html';
 }
 
 function closeModal() {

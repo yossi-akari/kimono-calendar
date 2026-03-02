@@ -1033,6 +1033,19 @@ function parseAndFillEmail() {
 // 初期化
 document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
 calcAutoTotal();
+
+// カレンダーからの編集リダイレクト
+const _pendingEdit = sessionStorage.getItem('pendingEdit');
+if (_pendingEdit) {
+  sessionStorage.removeItem('pendingEdit');
+  const _b = JSON.parse(_pendingEdit);
+  editingBooking = _b;
+  renderedBookings = [_b];
+  fillFormForEdit(_b);
+  document.getElementById('submitBtn').textContent = '予約を更新する';
+  document.getElementById('editModeBar').style.display = 'block';
+  document.querySelector('.form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 </script>
 </body>
 </html>
