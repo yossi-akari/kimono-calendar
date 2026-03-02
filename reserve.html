@@ -154,9 +154,9 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 </div>
 
 <div class="steps">
-  <div class="step active" id="step1"><div class="step-num">1</div><span>プラン</span></div>
+  <div class="step active" id="step1"><div class="step-num">1</div><span>日時</span></div>
   <div class="step-sep"></div>
-  <div class="step" id="step2"><div class="step-num">2</div><span>日時・人数</span></div>
+  <div class="step" id="step2"><div class="step-num">2</div><span>プラン・人数</span></div>
   <div class="step-sep"></div>
   <div class="step" id="step3"><div class="step-num">3</div><span>オプション</span></div>
   <div class="step-sep"></div>
@@ -167,6 +167,43 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 
   <!-- Step 1 -->
   <div id="sc1">
+    <div class="form-block">
+      <div class="section-label">ご来店日時</div>
+      <div class="field" style="margin-bottom:18px;">
+        <label>ご来店日</label>
+        <input type="hidden" id="visitDate">
+        <div class="res-cal-nav">
+          <button class="res-cal-nav-btn" onclick="resCalChangeMonth(-1)">‹</button>
+          <span class="res-cal-month" id="resCalMonthLabel"></span>
+          <button class="res-cal-nav-btn" onclick="resCalChangeMonth(1)">›</button>
+        </div>
+        <div class="res-cal-grid" id="resCalGrid">
+          <div class="res-cal-loading">読み込み中…</div>
+        </div>
+        <div id="selectedDateDisplay" style="display:none;margin-top:10px;font-size:0.85rem;color:var(--accent);font-weight:400;"></div>
+        <div id="availError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;"></div>
+      </div>
+      <div class="field">
+        <label>ご来店時間</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <select id="visitTime" style="width:auto;flex-shrink:0;">
+            <option value="">選択してください</option>
+            <option>09:00</option><option>09:30</option>
+            <option>10:00</option><option>10:30</option>
+            <option>11:00</option><option>11:30</option>
+            <option>12:00</option><option>12:30</option>
+            <option>13:00</option><option>13:30</option>
+            <option>14:00</option>
+          </select>
+          <span id="dateAvailStatus" style="display:none;font-size:0.82rem;"></span>
+        </div>
+      </div>
+    </div>
+    <button class="submit-btn" onclick="goStep(2)" style="max-width:340px;display:block;margin:0 auto;">次へ — プラン・人数を選ぶ</button>
+  </div>
+
+  <!-- Step 2 -->
+  <div id="sc2" style="display:none;">
     <div class="section-label">プランを選択</div>
     <div class="common-box">
       <strong>全プラン共通（含まれるもの）</strong>
@@ -220,41 +257,6 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
         <div class="plan-name">期間限定プラン</div>
         <div class="plan-price">¥2,970 <span>/ 女性1名</span></div>
         <div class="plan-note">期間限定キャンペーンでお得に着物レンタル</div>
-      </div>
-    </div>
-    <button class="submit-btn" onclick="goStep(2)" style="max-width:340px;display:block;margin:0 auto;">次へ — 日時・人数を選ぶ</button>
-  </div>
-
-  <!-- Step 2 -->
-  <div id="sc2" style="display:none;">
-    <div class="form-block">
-      <div class="section-label">ご来店日時</div>
-      <div class="field" style="margin-bottom:18px;">
-        <label>ご来店日</label>
-        <input type="hidden" id="visitDate">
-        <div class="res-cal-nav">
-          <button class="res-cal-nav-btn" onclick="resCalChangeMonth(-1)">‹</button>
-          <span class="res-cal-month" id="resCalMonthLabel"></span>
-          <button class="res-cal-nav-btn" onclick="resCalChangeMonth(1)">›</button>
-        </div>
-        <div class="res-cal-grid" id="resCalGrid">
-          <div class="res-cal-loading">読み込み中…</div>
-        </div>
-        <div id="selectedDateDisplay" style="display:none;margin-top:10px;font-size:0.85rem;color:var(--accent);font-weight:400;"></div>
-        <div id="availError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;"></div>
-      </div>
-      <div id="dateAvailStatus" style="display:none;margin-bottom:12px;font-size:0.85rem;padding:10px 14px;border-radius:2px;border-left:3px solid;"></div>
-      <div class="field" style="max-width:280px;">
-        <label>ご来店時間</label>
-        <select id="visitTime">
-          <option value="">選択してください</option>
-          <option>09:00</option><option>09:30</option>
-          <option>10:00</option><option>10:30</option>
-          <option>11:00</option><option>11:30</option>
-          <option>12:00</option><option>12:30</option>
-          <option>13:00</option><option>13:30</option>
-          <option>14:00</option>
-        </select>
       </div>
     </div>
     <div class="form-block">
@@ -475,16 +477,16 @@ function updateAvailStatus() {
   const da = avail ? avail[resCalSelectedDate] : null;
   if (!da) { el.style.display = 'none'; return; }
 
-  let icon, text, color, bg;
+  let icon, text, color;
   if (da.closed || da.available <= 0) {
-    icon = '❌'; text = '受付終了'; color = '#c0392b'; bg = '#fff5f5';
+    icon = '❌'; text = '受付終了'; color = '#c0392b';
   } else if (da.available === 1) {
-    icon = '🔺'; text = 'あと1組'; color = '#d68910'; bg = '#fffbf0';
+    icon = '🔺'; text = 'あと1組'; color = '#d68910';
   } else {
-    icon = '⭕️'; text = `残${da.available}組`; color = '#1e8449'; bg = '#f0fff4';
+    icon = '⭕️'; text = `残${da.available}組`; color = '#1e8449';
   }
-  el.innerHTML = `${icon}&nbsp;&nbsp;<strong style="color:${color};">${text}</strong>`;
-  el.style.cssText = `display:block;margin-bottom:12px;font-size:0.85rem;padding:10px 14px;border-radius:2px;background:${bg};border-left:3px solid ${color};`;
+  el.innerHTML = `${icon} <span style="color:${color};font-weight:bold;">${text}</span>`;
+  el.style.display = 'inline';
 }
 
 async function resCalChangeMonth(dir) {
@@ -738,9 +740,7 @@ function updateSummary() {
 
 // ── ステップ遷移 ─────────────────────────────────────
 async function goStep(n) {
-  if (n === 2 && !plan.name) { alert('プランを選択してください'); return; }
-  if (n === 2) loadResCalMonth(resCalYear, resCalMonth);
-  if (n === 3) {
+  if (n === 2) {
     const date = document.getElementById('visitDate').value;
     const time = document.getElementById('visitTime').value;
     if (!date || !time) { alert('ご来店日時を入力してください'); return; }
@@ -759,6 +759,8 @@ async function goStep(n) {
     const ds = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
     document.getElementById('s4Date').textContent = `${ds} ${time}`;
   }
+  if (n === 3 && !plan.name) { alert('プランを選択してください'); return; }
+  if (n === 3) checkTuesdayRestriction();
   if (n === 4 && plan.name === '撮影付き') {
     const hasPhoto = OPT_DEFS.filter(o => o.photoRequired).some(o => options[o.name]);
     if (!hasPhoto) { document.getElementById('photoReqError').classList.add('show'); return; }
@@ -851,6 +853,7 @@ async function submitForm() {
 // 初期化
 buildOptions();
 updateSummary();
+loadResCalMonth(resCalYear, resCalMonth);
 </script>
 </body>
 </html>
