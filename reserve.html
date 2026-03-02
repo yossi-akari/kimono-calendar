@@ -132,7 +132,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .res-cal-dayname { text-align: center; font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--muted); padding: 4px 0; }
 .res-cal-dayname.sun { color: var(--accent); opacity: 0.8; }
 .res-cal-dayname.sat { color: #5a7ab0; }
-.res-cal-cell { border: 1px solid var(--line); border-radius: 2px; padding: 5px 2px 4px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--white); min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+.res-cal-cell { border: 1px solid var(--line); border-radius: 2px; padding: 5px 2px; text-align: center; cursor: pointer; transition: all 0.15s; background: var(--white); min-height: 38px; display: flex; align-items: center; justify-content: center; }
 .res-cal-cell:hover:not(.res-cal-disabled):not(.res-cal-empty) { border-color: var(--accent); }
 .res-cal-cell.selected { border-color: var(--accent); background: #fdf5f5; box-shadow: 0 0 0 1px var(--accent); }
 .res-cal-cell.res-cal-empty { background: transparent; border-color: transparent; cursor: default; }
@@ -240,12 +240,10 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
         <div class="res-cal-grid" id="resCalGrid">
           <div class="res-cal-loading">読み込み中…</div>
         </div>
-        <div class="res-cal-legend">
-          <span>⭕️ 予約可能</span><span>🔺 残りわずか</span><span>❌ 受付終了・定休日</span>
-        </div>
         <div id="selectedDateDisplay" style="display:none;margin-top:10px;font-size:0.85rem;color:var(--accent);font-weight:400;"></div>
         <div id="availError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;"></div>
       </div>
+      <div id="dateAvailStatus" style="display:none;margin-bottom:12px;font-size:0.85rem;padding:10px 14px;border-radius:2px;border-left:3px solid;"></div>
       <div class="field" style="max-width:280px;">
         <label>ご来店時間</label>
         <select id="visitTime">
@@ -448,13 +446,6 @@ function renderResCal() {
     dateEl.textContent = d;
     cell.appendChild(dateEl);
 
-    const emoEl = document.createElement('div');
-    emoEl.className = 'res-cal-avail';
-    if (!isPast && !isWed) {
-      emoEl.textContent = (isClosed || available <= 0) ? '❌' : available === 1 ? '🔺' : '⭕️';
-    }
-    cell.appendChild(emoEl);
-
     if (!isDisabled) cell.onclick = () => resCalSelectDate(dateStr);
     grid.appendChild(cell);
   }
@@ -469,7 +460,31 @@ function resCalSelectDate(dateStr) {
   document.getElementById('selectedDateDisplay').style.display = 'block';
   document.getElementById('availError').style.display = 'none';
   renderResCal();
+  updateAvailStatus();
   onDateChange();
+}
+
+function updateAvailStatus() {
+  const el = document.getElementById('dateAvailStatus');
+  if (!resCalSelectedDate) { el.style.display = 'none'; return; }
+  const monthKey = resCalKey(
+    parseInt(resCalSelectedDate.slice(0, 4)),
+    parseInt(resCalSelectedDate.slice(5, 7))
+  );
+  const avail = resCalAvailCache[monthKey];
+  const da = avail ? avail[resCalSelectedDate] : null;
+  if (!da) { el.style.display = 'none'; return; }
+
+  let icon, text, color, bg;
+  if (da.closed || da.available <= 0) {
+    icon = '❌'; text = '受付終了'; color = '#c0392b'; bg = '#fff5f5';
+  } else if (da.available === 1) {
+    icon = '🔺'; text = 'あと1組'; color = '#d68910'; bg = '#fffbf0';
+  } else {
+    icon = '⭕️'; text = `残${da.available}組`; color = '#1e8449'; bg = '#f0fff4';
+  }
+  el.innerHTML = `${icon}&nbsp;&nbsp;<strong style="color:${color};">${text}</strong>`;
+  el.style.cssText = `display:block;margin-bottom:12px;font-size:0.85rem;padding:10px 14px;border-radius:2px;background:${bg};border-left:3px solid ${color};`;
 }
 
 async function resCalChangeMonth(dir) {
