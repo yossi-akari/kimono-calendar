@@ -464,7 +464,7 @@ const OPTIONS_DEF = [
   { id: 'o8',  name: 'ホテル返却',                               plans: null,                                         priceOf: () => 1650 },
   { id: 'o9',  name: '人力車',                                   plans: null,                                         priceOf: () => 8800 },
   { id: 'o10', name: 'タクシー',                                 plans: null,                                         priceOf: () => 9900 },
-  { id: 'o11', name: 'スタジオ撮影データ渡し',                   plans: null,                                         priceOf: () => 4950 },
+  { id: 'o11', name: 'スタジオ撮影データ渡し',                   plans: null,                                         priceOf: () => 4950,  aliases: ['フォトスタジオ【データ渡し】'] },
   { id: 'o12', name: 'スタジオ撮影データ＋プリント',             plans: null,                                         priceOf: () => 7700 },
   { id: 'o13', name: 'ロケーション撮影ブロンズ50枚渡し',         plans: null,                                         priceOf: () => 22000 },
   { id: 'o14', name: 'ロケーション撮影シルバー100枚渡し',        plans: null,                                         priceOf: () => 33000 },
@@ -832,7 +832,10 @@ function matchOptionDef(parsedName) {
   const clean = parsedName.replace(/×\d+.*$/, '').trim();
   // 長い名前から先にマッチ（メンズヘアセット > ヘアセット 等）
   const sorted = [...OPTIONS_DEF].sort((a, b) => b.name.length - a.name.length);
-  return sorted.find(opt => clean.includes(opt.name));
+  return sorted.find(opt =>
+    clean.includes(opt.name) ||
+    (opt.aliases && opt.aliases.some(a => clean.includes(a)))
+  );
 }
 
 function setTimeField(time) {
