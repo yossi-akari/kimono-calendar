@@ -212,7 +212,8 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       <div class="form-row">
         <div class="field">
           <label>ご来店日</label>
-          <input type="date" id="visitDate" onchange="checkTuesdayRestriction()">
+          <input type="date" id="visitDate" onchange="onDateChange()">
+          <div id="dateError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;">水曜日は定休日のため選択できません</div>
         </div>
         <div class="field">
           <label>ご来店時間</label>
@@ -355,6 +356,22 @@ function selectPlan(el, name, price, isEstimate) {
   buildOptions();
   checkTuesdayRestriction();
   updateSummary();
+}
+
+// ── 日付変更ハンドラ ──────────────────────────────────
+function onDateChange() {
+  const val = document.getElementById('visitDate').value;
+  const errEl = document.getElementById('dateError');
+  if (val) {
+    const day = new Date(val + 'T00:00:00').getDay();
+    if (day === 3) { // 水曜日
+      errEl.style.display = 'block';
+      document.getElementById('visitDate').value = '';
+      return;
+    }
+  }
+  errEl.style.display = 'none';
+  checkTuesdayRestriction();
 }
 
 // ── 火曜日制限（翌日返却・ホテル返却） ────────────────
