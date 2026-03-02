@@ -178,6 +178,9 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .manual-item-info .mi-sub { color: var(--muted); font-size: 0.73rem; }
 .manual-item-del { background: none; border: none; color: #ccc; font-size: 1.1rem; cursor: pointer; padding: 2px 6px; transition: color 0.15s; }
 .manual-item-del:hover { color: #c0392b; }
+.manual-item-edit { background: none; border: 1px solid var(--line); color: var(--muted); font-size: 0.73rem; cursor: pointer; padding: 3px 10px; border-radius: 2px; transition: all 0.15s; font-family: 'Noto Sans JP', sans-serif; }
+.manual-item-edit:hover { border-color: var(--accent); color: var(--accent); }
+.edit-mode-bar { background: #fff8e1; border: 1px solid #f0d080; border-radius: 2px; padding: 8px 16px; margin-bottom: 12px; font-size: 0.78rem; color: #8a6d00; display: none; }
 
 /* メール解析セクション */
 .paste-section-title {
@@ -422,6 +425,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     </div>
 
     <div class="submit-area">
+      <div class="edit-mode-bar" id="editModeBar">編集モード：内容を変更して「予約を更新する」を押してください</div>
       <button type="submit" class="submit-btn" id="submitBtn">予約を保存する</button>
     </div>
   </form>
@@ -622,9 +626,10 @@ async function handleSubmit(e) {
   });
 
   const now = new Date();
+  const isEdit = !!editingBooking;
   const booking = {
-    id:            'MANUAL-' + now.getTime(),
-    reservationId: 'MANUAL-' + now.getTime(),
+    id:            isEdit ? editingBooking.id : 'MANUAL-' + now.getTime(),
+    reservationId: isEdit ? editingBooking.reservationId : 'MANUAL-' + now.getTime(),
     source:        'MANUAL',
     date:          document.getElementById('fDate').value,
     time,
@@ -638,19 +643,22 @@ async function handleSubmit(e) {
     tel:           document.getElementById('fTel').value.trim(),
     email:         document.getElementById('fEmail').value.trim(),
     remarks:       document.getElementById('fRemarks').value.trim(),
-    createdAt:     now.toISOString(),
+    createdAt:     isEdit ? editingBooking.createdAt : now.toISOString(),
   };
 
   const btn = document.getElementById('submitBtn');
-  btn.disabled = true; btn.textContent = '保存中...';
+  btn.disabled = true; btn.textContent = isEdit ? '更新中...' : '保存中...';
   try {
+    if (isEdit) await postToGAS('delete', { id: editingBooking.id });
     await postToGAS('save', { booking });
   } catch(err) {
-    console.warn('GAS保存失敗、localStorageに保存:', err);
-    const manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
+    console.warn('GAS失敗、localStorageに保存:', err);
+    let manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
+    if (isEdit) manuals = manuals.filter(b => b.id !== editingBooking.id);
     manuals.push(booking);
     localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
   }
+  editingBooking = null;
   btn.disabled = false; btn.textContent = '予約を保存する';
 
   document.getElementById('bookingForm').style.display = 'none';
@@ -662,6 +670,9 @@ async function handleSubmit(e) {
 }
 
 function resetForm() {
+  editingBooking = null;
+  document.getElementById('submitBtn').textContent = '予約を保存する';
+  document.getElementById('editModeBar').style.display = 'none';
   document.getElementById('bookingForm').reset();
   document.getElementById('fTimeCustom').style.display = 'none';
   document.getElementById('fDate').value = new Date().toISOString().slice(0, 10);
@@ -673,6 +684,9 @@ function resetForm() {
 
 // ── 一覧表示 ──
 let listVisible = false;
+let renderedBookings = [];
+let editingBooking = null;
+
 function toggleList() {
   listVisible = !listVisible;
   const el = document.getElementById('manualList');
@@ -680,14 +694,23 @@ function toggleList() {
   if (listVisible) renderList();
 }
 
-function renderList() {
+async function renderList() {
   const el = document.getElementById('manualList');
-  const manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
-  if (manuals.length === 0) {
+  el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:0.82rem;padding:20px;">読み込み中...</p>';
+  try {
+    const res  = await fetch(GAS_URL + '?' + new URLSearchParams({ key: ACCESS_KEY }));
+    const data = JSON.parse(await res.text());
+    if (data.success) {
+      renderedBookings = data.bookings.filter(b => b.source === 'MANUAL');
+    }
+  } catch(e) {
+    renderedBookings = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
+  }
+  if (renderedBookings.length === 0) {
     el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:0.82rem;padding:20px;">登録済みの手動予約はありません</p>';
     return;
   }
-  const sorted = [...manuals].sort((a, b) => b.date.localeCompare(a.date));
+  const sorted = [...renderedBookings].sort((a, b) => a.date.localeCompare(b.date));
   el.innerHTML = sorted.map(b => {
     const d = new Date(b.date + 'T00:00:00');
     const days = ['日','月','火','水','木','金','土'];
@@ -699,7 +722,10 @@ function renderList() {
           ${b.channel ? ' ／ ' + b.channel : ''}
         </div>
       </div>
-      <button class="manual-item-del" onclick="deleteManual('${b.id}')">✕</button>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="manual-item-edit" onclick="startEdit('${b.id}')">編集</button>
+        <button class="manual-item-del" onclick="deleteManual('${b.id}')">✕</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -715,6 +741,71 @@ async function deleteManual(id) {
   manuals = manuals.filter(b => b.id !== id);
   localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
   renderList();
+}
+
+function fillFormForEdit(b) {
+  document.getElementById('fDate').value = b.date;
+  setTimeField(b.time || '');
+  document.getElementById('fName').value = b.name;
+
+  const planSel = document.getElementById('fPlan');
+  if ([...planSel.options].find(o => o.value === b.plan)) planSel.value = b.plan;
+  onPlanChange();
+
+  const chSel = document.getElementById('fChannel');
+  if ([...chSel.options].find(o => o.value === b.channel)) chSel.value = b.channel;
+
+  const femaleM = b.people.match(/女性(\d+)/);
+  const maleM   = b.people.match(/男性(\d+)/);
+  const coupleM = b.people.match(/カップル(\d+)/);
+  const childM  = b.people.match(/小人(\d+)/);
+  document.getElementById('pFemale').value = femaleM ? femaleM[1] : 0;
+  document.getElementById('pMale').value   = maleM   ? maleM[1]   : 0;
+  document.getElementById('pCouple').value = coupleM ? coupleM[1] : 0;
+  document.getElementById('pChild').value  = childM  ? childM[1]  : 0;
+
+  OPTIONS_DEF.forEach(opt => {
+    const cb = document.getElementById(opt.id);
+    if (!cb) return;
+    cb.checked = false;
+    document.getElementById('row_' + opt.id).classList.add('unchecked');
+    document.getElementById('qty_' + opt.id).disabled = true;
+  });
+  (b.options || []).forEach(savedOpt => {
+    const def = matchOptionDef(savedOpt.name);
+    if (!def) return;
+    const cb  = document.getElementById(def.id);
+    const row = document.getElementById('row_' + def.id);
+    if (!cb || row.classList.contains('hidden')) return;
+    cb.checked = true;
+    row.classList.remove('unchecked');
+    const qtyEl = document.getElementById('qty_' + def.id);
+    qtyEl.disabled = false;
+    const qtyM = savedOpt.name.match(/×(\d+)/);
+    if (qtyM) qtyEl.value = parseInt(qtyM[1]);
+  });
+
+  calcAutoTotal();
+  if (b.total > 0) document.getElementById('fTotal').value = b.total;
+
+  const paySel = document.getElementById('fPayment');
+  if ([...paySel.options].find(o => o.value === b.payment)) paySel.value = b.payment;
+
+  document.getElementById('fTel').value     = b.tel     || '';
+  document.getElementById('fEmail').value   = b.email   || '';
+  document.getElementById('fRemarks').value = b.remarks || '';
+}
+
+function startEdit(id) {
+  const b = renderedBookings.find(x => x.id === id);
+  if (!b) return;
+  editingBooking = b;
+  fillFormForEdit(b);
+  document.getElementById('bookingForm').style.display = 'block';
+  document.getElementById('successMsg').style.display = 'none';
+  document.getElementById('submitBtn').textContent = '予約を更新する';
+  document.getElementById('editModeBar').style.display = 'block';
+  document.querySelector('.form-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── メール解析 ──────────────────────────────────────────────────
