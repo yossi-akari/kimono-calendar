@@ -603,6 +603,7 @@ function goStep(n) {
     const date = document.getElementById('visitDate').value;
     const time = document.getElementById('visitTime').value;
     if (!date || !time) { alert('ご来店日時を入力してください'); return; }
+    if (new Date(date + 'T00:00:00').getDay() === 3) { alert('水曜日は定休日のため選択できません'); return; }
     const d  = new Date(date + 'T00:00:00');
     const ds = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
     document.getElementById('s4Date').textContent = `${ds} ${time}`;
