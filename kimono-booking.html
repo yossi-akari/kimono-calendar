@@ -178,6 +178,25 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .manual-item-info .mi-sub { color: var(--muted); font-size: 0.73rem; }
 .manual-item-del { background: none; border: none; color: #ccc; font-size: 1.1rem; cursor: pointer; padding: 2px 6px; transition: color 0.15s; }
 .manual-item-del:hover { color: #c0392b; }
+
+/* メール解析セクション */
+.paste-section-title {
+  background: var(--cream); padding: 12px 20px;
+  font-size: 0.72rem; letter-spacing: 0.12em; color: var(--muted);
+  border-bottom: 1px solid var(--line); cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center;
+  user-select: none; transition: color 0.15s;
+}
+.paste-section-title:hover { color: var(--ink); }
+.parse-btn {
+  background: var(--ink); color: white; border: none;
+  padding: 8px 20px; border-radius: 2px; font-size: 0.82rem;
+  font-family: 'Noto Sans JP', sans-serif; cursor: pointer;
+  transition: opacity 0.2s; letter-spacing: 0.05em; flex-shrink: 0;
+}
+.parse-btn:hover { opacity: 0.8; }
+#parseResult.success { color: var(--green); }
+#parseResult.error { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -225,6 +244,25 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   </div>
 
   <form id="bookingForm" onsubmit="handleSubmit(event)">
+
+    <!-- メール貼り付け解析 -->
+    <div class="form-card">
+      <div class="paste-section-title" onclick="togglePasteSection()">
+        <span>メール貼り付けから自動入力（AJ・じゃらん対応）</span>
+        <span id="pasteArrow">▾</span>
+      </div>
+      <div id="pasteSection" style="display:none;">
+        <div class="form-row">
+          <div class="form-input" style="width:100%">
+            <textarea id="emailPasteArea" placeholder="AJ・じゃらんの予約確定メール本文をここに貼り付けてください..." style="min-height:140px;font-size:0.75rem;font-family:monospace;line-height:1.6"></textarea>
+            <div style="display:flex;align-items:center;gap:12px;margin-top:10px;flex-wrap:wrap;">
+              <button type="button" onclick="parseAndFillEmail()" class="parse-btn">解析して自動入力</button>
+              <span id="parseResult" style="font-size:0.78rem;color:var(--muted)"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 基本情報 -->
     <div class="form-card">
@@ -284,6 +322,8 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
           <select id="fChannel">
             <option value="電話">電話予約</option>
             <option value="店頭">店頭（飛び込み）</option>
+            <option value="じゃらん">じゃらん</option>
+            <option value="AJ">アクティビティジャパン</option>
             <option value="その他">その他</option>
           </select>
         </div>
@@ -673,6 +713,208 @@ async function deleteManual(id) {
   manuals = manuals.filter(b => b.id !== id);
   localStorage.setItem('kimono_manual_bookings', JSON.stringify(manuals));
   renderList();
+}
+
+// ── メール解析 ──────────────────────────────────────────────────
+
+let pasteSectionOpen = false;
+function togglePasteSection() {
+  pasteSectionOpen = !pasteSectionOpen;
+  document.getElementById('pasteSection').style.display = pasteSectionOpen ? 'block' : 'none';
+  document.getElementById('pasteArrow').textContent = pasteSectionOpen ? '▴' : '▾';
+}
+
+function parsePlanTypeJS(s) {
+  if (s.includes('プレミアム'))  return 'プレミアム';
+  if (s.includes('スタンダード')) return 'スタンダード';
+  if (s.includes('ベーシック'))  return 'ベーシック';
+  if (s.includes('撮影'))        return '撮影付き';
+  if (s.includes('加賀友禅'))    return '加賀友禅';
+  if (s.includes('成人式'))      return '成人式下見';
+  if (s.includes('卒業式'))      return '卒業式下見';
+  if (s.includes('期間限定'))    return '期間限定';
+  return 'ベーシック';
+}
+
+function detectEmailSource(text) {
+  if (/利用日時[：:]\s*\d{4}\/\d{2}\/\d{2}/.test(text)) return 'jaran';
+  if (/日時[：:]\s*\d{4}年\d{2}月\d{2}日/.test(text))   return 'aj';
+  return null;
+}
+
+function parseJaranEmailJS(body) {
+  if (!/予約番号[：:]\s*[A-Za-z0-9]+/.test(body)) return null;
+  const dtMatch = body.match(/利用日時[：:]\s*(\d{4})\/(\d{2})\/(\d{2})[^\s]*\s+(\d{2}:\d{2})/);
+  if (!dtMatch) return null;
+  const date = `${dtMatch[1]}-${dtMatch[2]}-${dtMatch[3]}`;
+  const time = dtMatch[4];
+
+  const planRaw = (body.match(/プラン名[：:]\s*([^\n\r]+)/) || [])[1]?.trim() || '';
+  const pFull   = body.match(/人数[：:]\s*(\d+)名[^\n\r（(]*[（(]([^)）]+)[)）]/);
+  const inner   = pFull ? pFull[2] : '';
+  const female  = parseInt((inner.match(/女性[：:]\s*(\d+)/) || [,0])[1]) || 0;
+  const male    = parseInt((inner.match(/男性[：:]\s*(\d+)/) || [,0])[1]) || 0;
+  const couple  = parseInt((inner.match(/カップル[：:]\s*(\d+)/) || [,0])[1]) || 0;
+  const child   = parseInt((inner.match(/小人[：:]\s*(\d+)/) || [,0])[1]) || 0;
+
+  const nameRaw = (body.match(/体験者氏名[：:]\s*([^(\n\r（]+)/) || [])[1] || '';
+  const name    = nameRaw.replace(/\s*様$/, '').trim().replace(/[\u3000]+/g, ' ');
+  const email   = (body.match(/メールアドレス[：:\s]+([^\s\n\r]+)/) || [])[1]?.trim() || '';
+  const tel     = (body.match(/電話番号[：:]\s*([0-9\-]+)/) || [])[1]?.trim() || '';
+  const amtM    = body.match(/合計料金[^：:]*[：:]\s*([\d,]+)円/);
+  const total   = amtM ? parseInt(amtM[1].replace(/,/g,'')) : 0;
+  const remM    = body.match(/予約者からの回答[：:]\s*[\r\n]+\s*([^\r\n━─\-]+)/);
+  const remarks = remM ? remM[1].trim() : '';
+
+  // オプション: プラン名から検出
+  const parsedOptions = [];
+  if (planRaw.includes('ヘアセット') && female > 0) parsedOptions.push({ name: 'ヘアセット', qty: female });
+  if (planRaw.includes('メンズヘア') && male  > 0) parsedOptions.push({ name: 'メンズヘアセット', qty: male });
+
+  return { source: 'じゃらん', channel: 'じゃらん', date, time, name, planRaw,
+           plan: parsePlanTypeJS(planRaw), female, male, couple, child,
+           parsedOptions, total, tel, email, remarks };
+}
+
+function parseAJEmailJS(body) {
+  if (!/予約番号[：:]\s*\d+/.test(body)) return null;
+  const dateM = body.match(/日時[：:]\s*(\d{4})年(\d{2})月(\d{2})日/);
+  if (!dateM) return null;
+  const date = `${dateM[1]}-${dateM[2]}-${dateM[3]}`;
+  const timeM = body.match(/[（(](\d{2}:\d{2})\s*[）)]/);
+  const time  = timeM ? timeM[1] : '';
+  const name  = ((body.match(/氏名[：:]\s*([^\n（(]+)/) || [])[1] || '').trim();
+  const planM = body.match(/プラン名[（(][^)）]*[)）][：:]\s*([^\n]+)/);
+  const planRaw = planM ? planM[1].trim() : '';
+
+  const PEOPLE_KW = ['大人','女性','男性','カップル','小人'];
+  const pm = { 大人:0, 女性:0, 男性:0, カップル:0, 小人:0 };
+  const parsedOptions = [];
+
+  const secStart = body.indexOf('予約人数');
+  const secEnd   = body.indexOf('合計料金');
+  if (secStart >= 0 && secEnd > secStart) {
+    let sec = body.substring(secStart, secEnd).replace(/^予約人数[^\r\n：:]*[：:]/, '');
+    const re = /([^\s\u3000\n\r][^×\n\r]*?)×(\d+)\s*(人|組|台|名)[^\S\n\r]*(?:[¥￥]([\d,]+)|([\d,]+)円)?/g;
+    let m;
+    while ((m = re.exec(sec)) !== null) {
+      const rawName = m[1].replace(/^[\s\u3000]+|[\s\u3000]+$/g,'');
+      const qty   = parseInt(m[2]);
+      const price = m[4] ? parseInt(m[4].replace(/,/g,'')) : m[5] ? parseInt(m[5].replace(/,/g,'')) : 0;
+      if (!rawName) continue;
+      const kw = PEOPLE_KW.find(k => rawName.startsWith(k) &&
+        (rawName.length === k.length || !/^[ぁ-んァ-ヶー一-龯々]/.test(rawName[k.length])));
+      if (kw) { pm[kw] = qty; }
+      else    { parsedOptions.push({ name: rawName + '×' + qty, qty, price }); }
+    }
+  }
+
+  const amtM  = body.match(/合計料金[^：:0-9]*[：:]\s*([\d,]+)/);
+  const total = amtM ? parseInt(amtM[1].replace(/,/g,'')) : 0;
+
+  const remM = body.match(/備考[：:]\s*([^\n\r]*(?:\n\r?|\r\n?)([^\n\r]+))?/);
+  let remarks = remM ? (remM[1] || '').trim() : '';
+  if (!remarks && remM?.[2]) remarks = remM[2].trim();
+  if (remarks.includes('アクティビティジャパン予約管理システムをご利用ください')) remarks = '';
+
+  const adultNote = pm['大人'] > 0 ? `（大人${pm['大人']}名を女性として計上）` : '';
+  return { source: 'AJ', channel: 'AJ', date, time, name, planRaw,
+           plan: parsePlanTypeJS(planRaw),
+           female: pm['女性'] + pm['大人'], male: pm['男性'],
+           couple: pm['カップル'], child: pm['小人'],
+           parsedOptions, total, tel: '', email: '', remarks, adultNote };
+}
+
+function matchOptionDef(parsedName) {
+  const clean = parsedName.replace(/×\d+.*$/, '').trim();
+  // 長い名前から先にマッチ（メンズヘアセット > ヘアセット 等）
+  const sorted = [...OPTIONS_DEF].sort((a, b) => b.name.length - a.name.length);
+  return sorted.find(opt => clean.includes(opt.name));
+}
+
+function setTimeField(time) {
+  const valid = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
+  const sel    = document.getElementById('fTime');
+  const custom = document.getElementById('fTimeCustom');
+  if (valid.includes(time)) {
+    sel.value = time; custom.style.display = 'none';
+  } else {
+    sel.value = 'CUSTOM'; custom.style.display = 'block'; custom.value = time;
+  }
+}
+
+function fillFormFromParsed(parsed) {
+  document.getElementById('fDate').value  = parsed.date;
+  setTimeField(parsed.time || '');
+  document.getElementById('fName').value  = parsed.name;
+
+  const planSel = document.getElementById('fPlan');
+  if ([...planSel.options].find(o => o.value === parsed.plan)) planSel.value = parsed.plan;
+  onPlanChange();
+
+  const chSel = document.getElementById('fChannel');
+  if ([...chSel.options].find(o => o.value === parsed.channel)) chSel.value = parsed.channel;
+
+  document.getElementById('pFemale').value  = parsed.female || 0;
+  document.getElementById('pMale').value    = parsed.male   || 0;
+  document.getElementById('pCouple').value  = parsed.couple || 0;
+  document.getElementById('pChild').value   = parsed.child  || 0;
+  document.getElementById('fTel').value     = parsed.tel    || '';
+  document.getElementById('fEmail').value   = parsed.email  || '';
+  document.getElementById('fRemarks').value = parsed.remarks || '';
+
+  // オプションをリセット
+  OPTIONS_DEF.forEach(opt => {
+    const cb = document.getElementById(opt.id);
+    if (!cb) return;
+    cb.checked = false;
+    document.getElementById('row_' + opt.id).classList.add('unchecked');
+    document.getElementById('qty_' + opt.id).disabled = true;
+  });
+
+  // メールのオプションをマッチング
+  (parsed.parsedOptions || []).forEach(pOpt => {
+    const def = matchOptionDef(pOpt.name);
+    if (!def) return;
+    const cb  = document.getElementById(def.id);
+    const row = document.getElementById('row_' + def.id);
+    if (!cb || row.classList.contains('hidden')) return;
+    cb.checked = true;
+    row.classList.remove('unchecked');
+    const qtyEl = document.getElementById('qty_' + def.id);
+    qtyEl.disabled = false;
+    if (pOpt.qty) qtyEl.value = pOpt.qty;
+  });
+
+  calcAutoTotal();
+  // 自動計算とメールの合計が異なる場合はメール値を優先
+  if (parsed.total > 0 && parseInt(document.getElementById('fTotal').value) !== parsed.total) {
+    document.getElementById('fTotal').value = parsed.total;
+  }
+}
+
+function parseAndFillEmail() {
+  const text    = document.getElementById('emailPasteArea').value.trim();
+  const resultEl = document.getElementById('parseResult');
+  resultEl.className = '';
+
+  if (!text) { resultEl.textContent = 'メールを貼り付けてください'; resultEl.className = 'error'; return; }
+
+  const source = detectEmailSource(text);
+  let parsed = null;
+  if (source === 'jaran') parsed = parseJaranEmailJS(text);
+  else if (source === 'aj') parsed = parseAJEmailJS(text);
+
+  if (!parsed) {
+    resultEl.textContent = 'AJ・じゃらんの予約確定メールを貼り付けてください';
+    resultEl.className = 'error'; return;
+  }
+
+  fillFormFromParsed(parsed);
+  const label = source === 'jaran' ? 'じゃらん' : 'AJ';
+  resultEl.textContent = `${label}のメールを解析しました` + (parsed.adultNote ? ' ' + parsed.adultNote : '');
+  resultEl.className = 'success';
+  document.querySelector('.form-card').nextElementSibling.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // 初期化
