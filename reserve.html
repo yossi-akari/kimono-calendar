@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>着物レンタル ご予約</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200;300;400&family=Noto+Sans+JP:wght@300;400&family=DM+Mono:wght@300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:    #1c1a18;
+  --paper:  #faf8f4;
+  --cream:  #f2ede4;
+  --line:   #e0d9ce;
+  --muted:  #9a9080;
+  --accent: #8b3a3a;
+  --gold:   #b8882a;
+  --green:  #4a6741;
+  --white:  #ffffff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--paper); color: var(--ink); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; min-height: 100vh; }
+
+.hero { background: var(--ink); color: var(--paper); text-align: center; padding: 72px 24px 56px; position: relative; overflow: hidden; }
+.hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 20% 50%, rgba(139,58,58,0.15) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(184,136,42,0.1) 0%, transparent 60%); pointer-events: none; }
+.hero-eyebrow { font-family: 'DM Mono', monospace; font-size: 0.7rem; letter-spacing: 0.3em; color: var(--gold); margin-bottom: 16px; opacity: 0; animation: fadeUp 0.8s 0.1s ease forwards; }
+.hero h1 { font-family: 'Noto Serif JP', serif; font-weight: 200; font-size: clamp(2rem, 6vw, 3.2rem); letter-spacing: 0.2em; line-height: 1.3; margin-bottom: 16px; opacity: 0; animation: fadeUp 0.8s 0.2s ease forwards; }
+.hero p { font-size: 0.85rem; color: rgba(250,248,244,0.6); letter-spacing: 0.08em; opacity: 0; animation: fadeUp 0.8s 0.3s ease forwards; }
+.hero-line { width: 1px; height: 40px; background: linear-gradient(to bottom, transparent, var(--gold), transparent); margin: 28px auto 0; opacity: 0; animation: fadeUp 0.8s 0.4s ease forwards; }
+
+.steps { display: flex; justify-content: center; padding: 18px 24px; background: var(--white); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 50; flex-wrap: wrap; gap: 4px; }
+.step { display: flex; align-items: center; gap: 6px; font-size: 0.7rem; color: var(--muted); letter-spacing: 0.05em; }
+.step.active { color: var(--accent); }
+.step.done   { color: var(--green); }
+.step-num { width: 22px; height: 22px; border-radius: 50%; border: 1px solid currentColor; display: flex; align-items: center; justify-content: center; font-family: 'DM Mono', monospace; font-size: 0.6rem; flex-shrink: 0; }
+.step.active .step-num { background: var(--accent); color: white; border-color: var(--accent); }
+.step.done .step-num   { background: var(--green); color: white; border-color: var(--green); }
+.step-sep { width: 20px; height: 1px; background: var(--line); margin: 0 4px; flex-shrink: 0; }
+
+.main { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+.section-label { font-family: 'DM Mono', monospace; font-size: 0.68rem; letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase; margin-bottom: 20px; }
+
+.plans { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 32px; }
+.plan-card { border: 1.5px solid var(--line); border-radius: 2px; padding: 20px 18px; cursor: pointer; transition: all 0.25s; position: relative; background: var(--white); }
+.plan-card:hover { border-color: var(--accent); }
+.plan-card.selected { border-color: var(--accent); background: #fdf5f5; }
+.plan-card.selected::after { content: '✓'; position: absolute; top: 10px; right: 12px; color: var(--accent); font-size: 0.85rem; }
+.plan-badge { font-family: 'DM Mono', monospace; font-size: 0.58rem; letter-spacing: 0.15em; color: var(--muted); margin-bottom: 8px; text-transform: uppercase; }
+.badge-gold { color: var(--gold); }
+.badge-kaga { color: #7a5a3a; }
+.badge-green { color: var(--green); }
+.badge-red { color: var(--accent); }
+.plan-name { font-family: 'Noto Serif JP', serif; font-weight: 300; font-size: 1rem; letter-spacing: 0.1em; margin-bottom: 8px; }
+.plan-price { font-family: 'DM Mono', monospace; font-size: 1.15rem; color: var(--accent); margin-bottom: 8px; }
+.plan-price span { font-size: 0.65rem; color: var(--muted); font-family: 'Noto Sans JP', sans-serif; }
+.plan-price.estimate { font-size: 0.78rem; color: var(--green); font-family: 'Noto Sans JP', sans-serif; }
+.plan-note { font-size: 0.72rem; color: var(--muted); line-height: 1.7; }
+
+.common-box { background: var(--cream); border-radius: 2px; padding: 16px 20px; margin-bottom: 28px; font-size: 0.8rem; line-height: 2; color: var(--muted); }
+.common-box strong { color: var(--ink); display: block; font-size: 0.7rem; letter-spacing: 0.1em; margin-bottom: 2px; font-weight: 400; }
+
+.form-block { margin-bottom: 30px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .form-row, .form-row-3 { grid-template-columns: 1fr; } }
+.field { margin-bottom: 14px; }
+label { display: block; font-size: 0.72rem; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+input[type="text"], input[type="email"], input[type="tel"], input[type="date"], select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 1px; padding: 11px 14px; font-family: 'Noto Sans JP', sans-serif; font-size: 0.88rem; font-weight: 300; color: var(--ink); background: var(--white); outline: none; transition: border-color 0.2s; -webkit-appearance: none; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 90px; }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M6 8L0 0h12z' fill='%239a9080'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+.options-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.option-item.wide { grid-column: 1 / -1; }
+.photo-required-section { display: none; margin-bottom: 24px; }
+.photo-required-section.visible { display: block; }
+.photo-required-label { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.15em; color: var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.photo-required-label::before { content: '✦'; font-size: 0.6rem; }
+.photo-required-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-bottom: 8px; }
+.photo-req-error { font-size: 0.72rem; color: var(--accent); margin-top: 8px; display: none; }
+.photo-req-error.show { display: block; }
+.option-item.disabled { opacity: 0.45; pointer-events: none; background: #f0ede8 !important; border-color: var(--line) !important; }
+.option-item { border: 1px solid var(--line); border-radius: 1px; transition: all 0.2s; background: var(--white); font-size: 0.82rem; overflow: hidden; }
+.option-item.checked { border-color: var(--accent); background: #fdf5f5; }
+.option-top { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; }
+.option-top:hover { background: rgba(139,58,58,0.03); }
+.option-qty-row { display: none; align-items: center; gap: 8px; padding: 8px 14px 12px; border-top: 1px solid var(--line); }
+.option-item.checked .option-qty-row { display: flex; }
+.qty-btn { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: none; cursor: pointer; font-size: 1rem; display: flex; align-items: center; justify-content: center; color: var(--ink); transition: all 0.15s; flex-shrink: 0; }
+.qty-btn:hover { border-color: var(--accent); color: var(--accent); }
+.qty-val { font-family: 'DM Mono', monospace; font-size: 0.9rem; min-width: 20px; text-align: center; }
+.qty-label { font-size: 0.72rem; color: var(--muted); margin-left: 4px; }
+.qty-subtotal { margin-left: auto; font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--accent); }
+.option-check { width: 16px; height: 16px; border: 1px solid var(--line); border-radius: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.2s; font-size: 0.7rem; color: transparent; }
+.option-item.checked .option-check { background: var(--accent); border-color: var(--accent); color: white; }
+.option-item:hover .option-check { border-color: var(--accent); }
+.option-price { margin-left: auto; font-family: 'DM Mono', monospace; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+
+.summary-box { border: 1px solid var(--line); border-radius: 1px; padding: 20px; background: var(--cream); margin-bottom: 24px; }
+.summary-row { display: flex; justify-content: space-between; font-size: 0.82rem; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.summary-row:last-of-type { border-bottom: none; }
+.summary-row.total { font-family: 'Noto Serif JP', serif; font-size: 1.05rem; padding-top: 12px; color: var(--accent); }
+.summary-label { color: var(--muted); }
+
+.submit-btn { width: 100%; background: var(--ink); color: var(--paper); border: none; padding: 17px; font-family: 'Noto Serif JP', serif; font-size: 0.95rem; letter-spacing: 0.2em; cursor: pointer; border-radius: 1px; transition: opacity 0.2s; }
+.submit-btn:hover { opacity: 0.85; }
+.submit-btn:disabled { opacity: 0.5; cursor: default; }
+.btn-ghost { background: transparent !important; color: var(--ink) !important; border: 1px solid var(--line) !important; font-family: 'Noto Sans JP', sans-serif !important; letter-spacing: 0.05em !important; }
+.btn-row { display: flex; gap: 12px; }
+
+.notice { background: #fffbe6; border: 1px solid #e8d88a; border-radius: 1px; padding: 12px 16px; font-size: 0.78rem; color: #7a6a00; line-height: 1.8; margin-bottom: 20px; }
+.divider { height: 1px; background: var(--line); margin: 28px 0; }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(28,26,24,0.6); z-index: 200; align-items: center; justify-content: center; padding: 24px; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--white); border-radius: 2px; padding: 40px; max-width: 480px; width: 100%; animation: fadeUp 0.3s ease both; text-align: center; }
+.modal-icon { font-size: 2.5rem; margin-bottom: 16px; }
+.modal h2 { font-family: 'Noto Serif JP', serif; font-weight: 300; font-size: 1.3rem; letter-spacing: 0.1em; margin-bottom: 10px; }
+.modal p { font-size: 0.85rem; color: var(--muted); line-height: 1.9; margin-bottom: 24px; }
+.modal-detail { background: var(--cream); border-radius: 1px; padding: 20px; text-align: left; margin-bottom: 24px; font-size: 0.82rem; line-height: 2.2; }
+.modal-detail span { color: var(--muted); margin-right: 8px; }
+.modal-close { background: var(--ink); color: white; border: none; padding: 14px 32px; font-family: 'Noto Sans JP', sans-serif; font-size: 0.85rem; letter-spacing: 0.1em; cursor: pointer; border-radius: 1px; }
+.modal-close:hover { opacity: 0.8; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-eyebrow">KIMONO RENTAL</div>
+  <h1>着物レンタル<br>ご予約</h1>
+  <p>特別な一日を、丁寧に。</p>
+  <div class="hero-line"></div>
+</div>
+
+<div class="steps">
+  <div class="step active" id="step1"><div class="step-num">1</div><span>プラン</span></div>
+  <div class="step-sep"></div>
+  <div class="step" id="step2"><div class="step-num">2</div><span>日時・人数</span></div>
+  <div class="step-sep"></div>
+  <div class="step" id="step3"><div class="step-num">3</div><span>オプション</span></div>
+  <div class="step-sep"></div>
+  <div class="step" id="step4"><div class="step-num">4</div><span>お客様情報</span></div>
+</div>
+
+<div class="main">
+
+  <!-- Step 1 -->
+  <div id="sc1">
+    <div class="section-label">プランを選択</div>
+    <div class="common-box">
+      <strong>全プラン共通（含まれるもの）</strong>
+      着物・帯・長襦袢・草履・バッグ・足袋・着付け　／　雨天時：雨傘無料レンタル
+    </div>
+    <div class="plans">
+      <div class="plan-card" onclick="selectPlan(this,'ベーシック',2970,false)">
+        <div class="plan-badge">BASIC</div>
+        <div class="plan-name">ベーシック</div>
+        <div class="plan-price">¥2,970 <span>/ 女性1名</span></div>
+        <div class="plan-note">お得に着物街歩き。あらかじめ帯もコーディネートしてあるプラン</div>
+      </div>
+      <div class="plan-card" onclick="selectPlan(this,'スタンダード',3960,false)">
+        <div class="plan-badge">STANDARD</div>
+        <div class="plan-name">スタンダード</div>
+        <div class="plan-price">¥3,960 <span>/ 女性1名</span></div>
+        <div class="plan-note">豊富なラインナップから<br>お好みの一着を</div>
+      </div>
+      <div class="plan-card" onclick="selectPlan(this,'プレミアム',4950,false)">
+        <div class="plan-badge badge-gold">PREMIUM</div>
+        <div class="plan-name">プレミアム</div>
+        <div class="plan-price">¥4,950 <span>/ 女性1名</span></div>
+        <div class="plan-note">上質な着物・帯で<br>特別感ある装いを</div>
+      </div>
+      <div class="plan-card" onclick="selectPlan(this,'撮影付き',2970,false)">
+        <div class="plan-badge badge-gold">PHOTO</div>
+        <div class="plan-name">撮影付き</div>
+        <div class="plan-price">¥2,970 <span>/ 女性1名</span></div>
+        <div class="plan-note">スタジオやロケーション撮影希望の方向けのプラン</div>
+      </div>
+      <div class="plan-card" onclick="selectPlan(this,'加賀友禅',41800,false)">
+        <div class="plan-badge badge-kaga">KAGA YUZEN</div>
+        <div class="plan-name">加賀友禅</div>
+        <div class="plan-price">¥41,800 <span>/ 女性1名</span></div>
+        <div class="plan-note">伝統工芸・加賀友禅の<br>本物の美しさを体感</div>
+      </div>
+      <div class="plan-card" onclick="selectPlan(this,'成人式下見',0,true)">
+        <div class="plan-badge badge-green">SEIJIN-SHIKI</div>
+        <div class="plan-name">成人式下見</div>
+        <div class="plan-price estimate">来店時お見積もり</div>
+        <div class="plan-note">振袖をじっくり<br>ご試着いただけます</div>
+      </div>
+      <div class="plan-card" onclick="selectPlan(this,'卒業式下見',0,true)">
+        <div class="plan-badge badge-green">SOTSUGYOU-SHIKI</div>
+        <div class="plan-name">卒業式下見</div>
+        <div class="plan-price estimate">来店時お見積もり</div>
+        <div class="plan-note">袴・着物コーディネートを<br>ご提案いたします</div>
+      </div>
+      <div class="plan-card" onclick="selectPlan(this,'期間限定',2970,false)">
+        <div class="plan-badge badge-red">LIMITED</div>
+        <div class="plan-name">期間限定プラン</div>
+        <div class="plan-price">¥2,970 <span>/ 女性1名</span></div>
+        <div class="plan-note">期間限定キャンペーンでお得に着物レンタル</div>
+      </div>
+    </div>
+    <button class="submit-btn" onclick="goStep(2)" style="max-width:340px;display:block;margin:0 auto;">次へ — 日時・人数を選ぶ</button>
+  </div>
+
+  <!-- Step 2 -->
+  <div id="sc2" style="display:none;">
+    <div class="form-block">
+      <div class="section-label">ご来店日時</div>
+      <div class="form-row">
+        <div class="field">
+          <label>ご来店日</label>
+          <input type="date" id="visitDate" onchange="checkTuesdayRestriction()">
+        </div>
+        <div class="field">
+          <label>ご来店時間</label>
+          <select id="visitTime">
+            <option value="">選択してください</option>
+            <option>09:00</option><option>09:30</option>
+            <option>10:00</option><option>10:30</option>
+            <option>11:00</option><option>11:30</option>
+            <option>12:00</option><option>12:30</option>
+            <option>13:00</option><option>13:30</option>
+            <option>14:00</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="form-block">
+      <div class="section-label">人数</div>
+      <div class="form-row-3">
+        <div class="field">
+          <label>女性人数</label>
+          <select id="numFemale" onchange="updatePeople()">
+            <option value="0">0名</option><option value="1" selected>1名</option>
+            <option value="2">2名</option><option value="3">3名</option>
+            <option value="4">4名</option><option value="5">5名</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>男性人数（¥4,400/名）</label>
+          <select id="numMale" onchange="updatePeople()">
+            <option value="0" selected>0名</option><option value="1">1名</option>
+            <option value="2">2名</option><option value="3">3名</option>
+            <option value="4">4名</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>小人 3〜10歳（¥3,300/名）</label>
+          <select id="numChild" onchange="updatePeople()">
+            <option value="0" selected>0名</option><option value="1">1名</option>
+            <option value="2">2名</option><option value="3">3名</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="summary-box">
+      <div class="summary-row"><span class="summary-label">プラン</span><span id="s2Plan">—</span></div>
+      <div class="summary-row"><span class="summary-label">女性</span><span id="s2Female">—</span></div>
+      <div class="summary-row" id="s2MaleRow" style="display:none"><span class="summary-label">男性</span><span id="s2Male">—</span></div>
+      <div class="summary-row" id="s2ChildRow" style="display:none"><span class="summary-label">小人</span><span id="s2Child">—</span></div>
+      <div class="summary-row total"><span>小計</span><span id="s2Total">—</span></div>
+    </div>
+    <div class="btn-row">
+      <button class="submit-btn btn-ghost" onclick="goStep(1)" style="flex:1;">← 戻る</button>
+      <button class="submit-btn" onclick="goStep(3)" style="flex:2;">次へ — オプション選択</button>
+    </div>
+  </div>
+
+  <!-- Step 3 -->
+  <div id="sc3" style="display:none;">
+    <div class="photo-required-section" id="photoRequiredSection">
+      <div class="photo-required-label">撮影プランを選択（必須）</div>
+      <div class="photo-required-grid" id="photoRequiredGrid"></div>
+      <div class="photo-req-error" id="photoReqError">撮影プランをいずれか1つ選択してください</div>
+    </div>
+    <div class="form-block">
+      <div class="section-label">オプション（任意）</div>
+      <div class="options-grid" id="optionsGrid"></div>
+    </div>
+    <div class="summary-box">
+      <div class="summary-row"><span class="summary-label">プラン・人数小計</span><span id="s3Base">—</span></div>
+      <div class="summary-row" id="s3OptRow" style="display:none"><span class="summary-label">オプション</span><span id="s3Opt">—</span></div>
+      <div class="summary-row total"><span>合計（税込）</span><span id="s3Total">—</span></div>
+    </div>
+    <div class="btn-row">
+      <button class="submit-btn btn-ghost" onclick="goStep(2)" style="flex:1;">← 戻る</button>
+      <button class="submit-btn" onclick="goStep(4)" style="flex:2;">次へ — お客様情報入力</button>
+    </div>
+  </div>
+
+  <!-- Step 4 -->
+  <div id="sc4" style="display:none;">
+    <div class="form-block">
+      <div class="section-label">お客様情報</div>
+      <div class="form-row">
+        <div class="field"><label>お名前（姓）</label><input type="text" id="lastName" placeholder="山田"></div>
+        <div class="field"><label>お名前（名）</label><input type="text" id="firstName" placeholder="花子"></div>
+      </div>
+      <div class="field"><label>メールアドレス</label><input type="email" id="email" placeholder="example@email.com"></div>
+      <div class="field"><label>電話番号</label><input type="tel" id="tel" placeholder="090-0000-0000"></div>
+    </div>
+    <div class="form-block">
+      <div class="section-label">ご要望・備考</div>
+      <textarea id="remarks" placeholder="ご質問・ご要望などがあればご記入ください"></textarea>
+    </div>
+    <div class="summary-box">
+      <div class="summary-row"><span class="summary-label">プラン</span><span id="s4Plan">—</span></div>
+      <div class="summary-row"><span class="summary-label">来店日時</span><span id="s4Date">—</span></div>
+      <div class="summary-row"><span class="summary-label">人数</span><span id="s4People">—</span></div>
+      <div class="summary-row" id="s4OptRow" style="display:none"><span class="summary-label">オプション</span><span id="s4Opt">—</span></div>
+      <div class="summary-row total"><span>合計（税込）</span><span id="s4Total">—</span></div>
+    </div>
+    <div id="estimateNotice" style="display:none;" class="notice">
+      ※ 選択されたプランは来店時お見積もりとなります。合計金額は当日ご確認いただきます。
+    </div>
+    <div class="btn-row">
+      <button class="submit-btn btn-ghost" onclick="goStep(3)" style="flex:1;">← 戻る</button>
+      <button class="submit-btn" id="submitBtn" onclick="submitForm()" style="flex:2;">予約を確定する</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- 完了モーダル -->
+<div class="modal-overlay" id="completeModal">
+  <div class="modal">
+    <div class="modal-icon">🎋</div>
+    <h2>ご予約ありがとうございます</h2>
+    <p>内容をご確認ください。<br>当日のご来店をお待ちしております。</p>
+    <div class="modal-detail" id="modalDetail"></div>
+    <button class="modal-close" onclick="document.getElementById('completeModal').classList.remove('open')">閉じる</button>
+  </div>
+</div>
+
+<script>
+const GAS_URL    = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
+const ACCESS_KEY = 'AkariKimono2026_mK9x';
+
+let plan   = { name: null, price: 0, isEstimate: false };
+let people = { female: 1, male: 0, child: 0 };
+let options  = {};
+let optQty   = {};
+
+// 来店日の最小値を今日に設定
+document.getElementById('visitDate').min = new Date().toISOString().split('T')[0];
+
+// ── プラン選択 ───────────────────────────────────────
+function selectPlan(el, name, price, isEstimate) {
+  document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  plan = { name, price, isEstimate };
+  buildOptions();
+  checkTuesdayRestriction();
+  updateSummary();
+}
+
+// ── 火曜日制限（翌日返却・ホテル返却） ────────────────
+function checkTuesdayRestriction() {
+  const dateVal = document.getElementById('visitDate').value;
+  ['翌日返却', 'ホテル返却'].forEach(name => {
+    const opt = document.querySelector(`[data-opt-name="${name}"]`);
+    if (!opt) return;
+    if (!dateVal) { opt.classList.remove('disabled'); return; }
+    const isTuesday = new Date(dateVal + 'T00:00:00').getDay() === 2;
+    if (isTuesday) {
+      opt.classList.add('disabled');
+      if (opt.classList.contains('checked')) {
+        opt.classList.remove('checked');
+        delete options[name];
+        optQty[name] = 0;
+        updateSummary();
+      }
+    } else {
+      opt.classList.remove('disabled');
+    }
+  });
+}
+
+// ── 人数更新 ──────────────────────────────────────────
+function updatePeople() {
+  people.female = parseInt(document.getElementById('numFemale').value);
+  people.male   = parseInt(document.getElementById('numMale').value);
+  people.child  = parseInt(document.getElementById('numChild').value);
+  updateMaleOnlyVisibility();
+  updateSummary();
+}
+
+// ── オプション定義 ────────────────────────────────────
+// photoRequired: 撮影付きプランで必須選択（1択）
+// photoOnly:     撮影付きプランのみ表示
+// maleOnly:      男性がいる場合のみ表示
+// wide:          グリッド全幅
+const OPT_DEFS = [
+  // 撮影付きプラン 必須（1択）
+  { name: 'スタジオ撮影（データ渡し）',             price: 4950,  qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
+  { name: 'スタジオ撮影（データ＋2Lプリント2枚）',  price: 7700,  qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
+  { name: 'ロケーション撮影 ブロンズ（50カット）',  price: 22000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
+  { name: 'ロケーション撮影 シルバー（100カット）', price: 33000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
+  { name: 'ロケーション撮影 ゴールド（150カット）', price: 55000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
+  // 通常オプション
+  { name: 'ヘアセット',       note: '美容師によるヘアセット',             price: 1650, unit: '/名', qtyUnit: '名' },
+  { name: '髪飾り',           note: '',                                   price: 550,  unit: '/個', qtyUnit: '個' },
+  { name: 'メンズヘアセット', note: '美容師によるヘアセット',             price: 880,  unit: '/名', qtyUnit: '名', maleOnly: true },
+  { name: '名古屋帯',         note: '帯を名古屋帯に変更できます',         price: 550,  unit: '',    qtyUnit: '個' },
+  { name: 'ぬくぬく肌着',     note: '冬の防寒用肌着（上下セット）',       price: 550,  unit: '/名', qtyUnit: '名' },
+  { name: 'コート・ショール', note: '羽織れる防寒アイテム',               price: 550,  unit: '/名', qtyUnit: '名' },
+  { name: '翌日返却',         note: 'お客様が持ち出し→翌日返却（火曜日来店は選択不可）', price: 1100, unit: '', qtyUnit: '個' },
+  { name: 'ホテル返却',       note: 'スタッフがホテルまでお届け。フロントに返却。（火曜日来店は選択不可）', price: 1650, unit: '', qtyUnit: '個' },
+  { name: '人力車',           note: '30分コース。コースは事前相談可能。',  price: 8800, unit: '/台（2名）', qtyUnit: '台', wide: true },
+  { name: '観光タクシー',     note: '2時間乗り放題。コースはドライバーにお申し出ください。', price: 9900, unit: '/台（4名）', qtyUnit: '台', wide: true },
+];
+
+// ── オプションカード生成 ──────────────────────────────
+function buildOptCard(opt) {
+  optQty[opt.name] = 0;
+  const div = document.createElement('div');
+  div.className = 'option-item' + (opt.photoRequired ? ' photo-req' : '');
+  div.id = 'opt_' + opt.name;
+  div.dataset.optName = opt.name;
+  if (opt.maleOnly) div.dataset.maleOnly = '1';
+  if (opt.wide)     div.classList.add('wide');
+
+  const onclick = opt.photoRequired
+    ? `selectPhotoOpt('${opt.name}',${opt.price})`
+    : `toggleOpt('${opt.name}',${opt.price})`;
+
+  div.innerHTML = `
+    <div class="option-top" onclick="${onclick}">
+      <div class="option-check" id="chk_${opt.name}">✓</div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
+          <span>${opt.name}</span>
+          ${opt.note && opt.wide ? `<span style="font-size:0.68rem;color:var(--muted);">${opt.note}</span>` : ''}
+        </div>
+        ${opt.note && !opt.wide ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:2px;">${opt.note}</div>` : ''}
+      </div>
+      <span class="option-price">¥${opt.price.toLocaleString()}${opt.unit || ''}</span>
+    </div>
+    <div class="option-qty-row" ${opt.photoRequired ? 'style="display:none!important"' : ''}>
+      <button class="qty-btn" type="button" onclick="changeQty('${opt.name}',${opt.price},-1)">−</button>
+      <span class="qty-val" id="qty_${opt.name}">1</span>
+      <span class="qty-label">${opt.qtyUnit}</span>
+      <button class="qty-btn" type="button" onclick="changeQty('${opt.name}',${opt.price},1)">＋</button>
+      <span class="qty-subtotal" id="sub_${opt.name}">¥${opt.price.toLocaleString()}</span>
+    </div>
+  `;
+  return div;
+}
+
+function buildOptions() {
+  const grid    = document.getElementById('optionsGrid');
+  const reqGrid = document.getElementById('photoRequiredGrid');
+  grid.innerHTML = '';
+  reqGrid.innerHTML = '';
+  options = {};
+  optQty  = {};
+  OPT_DEFS.forEach(opt => {
+    const div = buildOptCard(opt);
+    if (opt.photoRequired) reqGrid.appendChild(div);
+    else                   grid.appendChild(div);
+  });
+  updatePhotoOnlyVisibility();
+  updateMaleOnlyVisibility();
+}
+
+// ── 撮影必須：1択 ────────────────────────────────────
+function selectPhotoOpt(name, price) {
+  OPT_DEFS.filter(o => o.photoRequired).forEach(o => {
+    const el = document.getElementById('opt_' + o.name);
+    if (el) el.classList.remove('checked');
+    delete options[o.name];
+    optQty[o.name] = 0;
+  });
+  document.getElementById('opt_' + name).classList.add('checked');
+  options[name] = price;
+  optQty[name]  = 1;
+  document.getElementById('photoReqError').classList.remove('show');
+  updateSummary();
+}
+
+function updatePhotoOnlyVisibility() {
+  const isPhoto = plan.name === '撮影付き';
+  document.getElementById('photoRequiredSection').classList.toggle('visible', isPhoto);
+  if (!isPhoto) {
+    OPT_DEFS.filter(o => o.photoRequired).forEach(o => {
+      const el = document.getElementById('opt_' + o.name);
+      if (el) el.classList.remove('checked');
+      delete options[o.name];
+      optQty[o.name] = 0;
+    });
+    updateSummary();
+  }
+}
+
+function updateMaleOnlyVisibility() {
+  const hasMale = people.male > 0;
+  document.querySelectorAll('[data-male-only]').forEach(el => {
+    el.style.display = hasMale ? '' : 'none';
+    if (!hasMale && el.classList.contains('checked')) {
+      const name = el.dataset.optName;
+      el.classList.remove('checked');
+      delete options[name];
+      optQty[name] = 0;
+      updateSummary();
+    }
+  });
+}
+
+// ── オプション切替・個数 ──────────────────────────────
+function toggleOpt(name, price) {
+  const el = document.getElementById('opt_' + name);
+  if (el.classList.contains('checked')) {
+    el.classList.remove('checked');
+    optQty[name] = 0;
+    delete options[name];
+  } else {
+    el.classList.add('checked');
+    optQty[name] = 1;
+    document.getElementById('qty_' + name).textContent = 1;
+    document.getElementById('sub_' + name).textContent = '¥' + price.toLocaleString();
+    options[name] = price;
+  }
+  updateSummary();
+}
+
+function changeQty(name, price, dir) {
+  const def    = OPT_DEFS.find(o => o.name === name);
+  const maxQty = def && def.maxQty ? def.maxQty : 99;
+  const next   = Math.max(1, Math.min(maxQty, (optQty[name] || 1) + dir));
+  optQty[name]  = next;
+  options[name] = price * next;
+  document.getElementById('qty_' + name).textContent = next;
+  document.getElementById('sub_' + name).textContent = '¥' + (price * next).toLocaleString();
+  updateSummary();
+}
+
+// ── 金額計算・サマリー更新 ───────────────────────────
+function calcBase() {
+  if (plan.isEstimate) return null;
+  return plan.price * people.female + 4400 * people.male + 3300 * people.child;
+}
+
+function fmt(n) { return `¥${n.toLocaleString()}`; }
+
+function updateSummary() {
+  const base     = calcBase();
+  const optTotal = Object.values(options).reduce((a, b) => a + b, 0);
+  const total    = base !== null ? base + optTotal : null;
+  const optNames = Object.entries(optQty)
+    .filter(([k, v]) => v > 0 && options[k])
+    .map(([k, v]) => v > 1 ? `${k}×${v}` : k).join('、');
+
+  const s = id => document.getElementById(id);
+  s('s2Plan').textContent    = plan.name || '—';
+  s('s2Female').textContent  = plan.name && !plan.isEstimate
+    ? `${people.female}名 × ${fmt(plan.price)} = ${fmt(plan.price * people.female)}`
+    : `${people.female}名`;
+  s('s2MaleRow').style.display  = people.male  > 0 ? 'flex' : 'none';
+  s('s2ChildRow').style.display = people.child > 0 ? 'flex' : 'none';
+  s('s2Male').textContent  = `${people.male}名 × ¥4,400 = ${fmt(4400 * people.male)}`;
+  s('s2Child').textContent = `${people.child}名 × ¥3,300 = ${fmt(3300 * people.child)}`;
+  s('s2Total').textContent = base !== null ? fmt(base) : '来店時お見積もり';
+
+  s('s3Base').textContent          = base !== null ? fmt(base) : '来店時お見積もり';
+  s('s3OptRow').style.display      = optTotal > 0 ? 'flex' : 'none';
+  s('s3Opt').textContent           = `${optNames}　+${fmt(optTotal)}`;
+  s('s3Total').textContent         = total !== null ? fmt(total) : '来店時お見積もり';
+
+  s('s4Plan').textContent          = plan.name || '—';
+  s('s4OptRow').style.display      = optTotal > 0 ? 'flex' : 'none';
+  s('s4Opt').textContent           = optNames;
+  s('s4Total').textContent         = total !== null ? fmt(total) : '来店時お見積もり';
+  let p = `女性${people.female}名`;
+  if (people.male  > 0) p += `・男性${people.male}名`;
+  if (people.child > 0) p += `・小人${people.child}名`;
+  s('s4People').textContent = p;
+}
+
+// ── ステップ遷移 ─────────────────────────────────────
+function goStep(n) {
+  if (n === 2 && !plan.name) { alert('プランを選択してください'); return; }
+  if (n === 3) {
+    const date = document.getElementById('visitDate').value;
+    const time = document.getElementById('visitTime').value;
+    if (!date || !time) { alert('ご来店日時を入力してください'); return; }
+    const d  = new Date(date + 'T00:00:00');
+    const ds = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+    document.getElementById('s4Date').textContent = `${ds} ${time}`;
+  }
+  if (n === 4 && plan.name === '撮影付き') {
+    const hasPhoto = OPT_DEFS.filter(o => o.photoRequired).some(o => options[o.name]);
+    if (!hasPhoto) { document.getElementById('photoReqError').classList.add('show'); return; }
+  }
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById(`sc${i}`).style.display = i === n ? 'block' : 'none';
+    const step = document.getElementById(`step${i}`);
+    step.classList.remove('active', 'done');
+    if (i === n) step.classList.add('active');
+    if (i < n)  step.classList.add('done');
+  }
+  document.getElementById('estimateNotice').style.display =
+    (n === 4 && plan.isEstimate) ? 'block' : 'none';
+  updateSummary();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── 送信 ─────────────────────────────────────────────
+async function submitForm() {
+  const ln  = document.getElementById('lastName').value.trim();
+  const fn  = document.getElementById('firstName').value.trim();
+  const em  = document.getElementById('email').value.trim();
+  const tel = document.getElementById('tel').value.trim();
+  if (!ln || !fn)  { alert('お名前を入力してください'); return; }
+  if (!em)         { alert('メールアドレスを入力してください'); return; }
+  if (!tel)        { alert('電話番号を入力してください'); return; }
+
+  const date = document.getElementById('visitDate').value;
+  const time = document.getElementById('visitTime').value;
+  const d    = new Date(date + 'T00:00:00');
+  const ds   = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+
+  const base     = calcBase();
+  const optTotal = Object.values(options).reduce((a, b) => a + b, 0);
+  const total    = base !== null ? base + optTotal : 0;
+
+  let peopleStr = `女性${people.female}名`;
+  if (people.male  > 0) peopleStr += `・男性${people.male}名`;
+  if (people.child > 0) peopleStr += `・小人${people.child}名`;
+
+  const selectedOpts = Object.entries(optQty)
+    .filter(([k, v]) => v > 0 && options[k])
+    .map(([k, v]) => ({ name: v > 1 ? `${k}×${v}` : k, price: options[k] }));
+
+  const now = new Date();
+  const booking = {
+    id:            'HP-' + now.getTime(),
+    reservationId: 'HP-' + now.getTime(),
+    source:        'MANUAL',
+    channel:       'ウェブサイト',
+    date,
+    time,
+    name:          `${ln} ${fn}`,
+    plan:          plan.name,
+    people:        peopleStr,
+    options:       selectedOpts,
+    total,
+    payment:       '未定',
+    email:         em,
+    tel,
+    remarks:       document.getElementById('remarks').value.trim(),
+    createdAt:     now.toISOString(),
+  };
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+  try {
+    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'save', booking: JSON.stringify(booking) });
+    await fetch(GAS_URL + '?' + params.toString());
+  } catch(err) {
+    console.warn('GAS送信エラー:', err);
+  }
+  btn.disabled = false;
+  btn.textContent = '予約を確定する';
+
+  const optNames = selectedOpts.map(o => o.name).join('、');
+  document.getElementById('modalDetail').innerHTML = `
+    <div><span>お名前</span><strong>${ln} ${fn} 様</strong></div>
+    <div><span>プラン</span><strong>${plan.name}</strong></div>
+    <div><span>来店日時</span><strong>${ds} ${time}</strong></div>
+    <div><span>人数</span><strong>${peopleStr}</strong></div>
+    ${optNames ? `<div><span>オプション</span><strong>${optNames}</strong></div>` : ''}
+    <div><span>合計</span><strong>${total > 0 ? fmt(total) : '来店時お見積もり'}</strong></div>
+    <div><span>ご連絡先</span><strong>${em}</strong></div>
+  `;
+  document.getElementById('completeModal').classList.add('open');
+}
+
+// 初期化
+buildOptions();
+updateSummary();
+</script>
+</body>
+</html>
