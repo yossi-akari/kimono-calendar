@@ -544,6 +544,8 @@ function selectPlan(el, name, price, isEstimate) {
   plan = { name, price, isEstimate };
   buildOptions();
   checkTuesdayRestriction();
+  updateKagaVisibility();
+  updateHairAccessoryVisibility();
   updateSummary();
 }
 
@@ -598,9 +600,11 @@ const OPT_DEFS = [
   { name: 'ロケーション撮影 シルバー（100カット）', price: 33000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
   { name: 'ロケーション撮影 ゴールド（150カット）', price: 55000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
   // 通常オプション
-  { name: 'ヘアセット',       note: '髪飾りも料金に含まれます',           price: 1650, unit: '/名', qtyUnit: '名' },
-  { name: '髪飾り',           note: '',                                   price: 550,  unit: '/個', qtyUnit: '個' },
-  { name: 'メンズヘアセット', note: '美容師によるヘアセット',             price: 880,  unit: '/名', qtyUnit: '名', maleOnly: true },
+  { name: 'ヘアセット',           note: '髪飾りも料金に含まれます',   price: 1650, unit: '/名', qtyUnit: '名' },
+  { name: 'フォーマルヘアセット', note: '髪飾りも料金に含まれます',   price: 4400, unit: '/名', qtyUnit: '名', kagaOnly: true },
+  { name: '髪飾り',               note: '',                            price: 550,  unit: '/個', qtyUnit: '個' },
+  { name: 'メンズヘアセット',     note: '美容師によるヘアセット',     price: 880,  unit: '/名', qtyUnit: '名', maleOnly: true },
+  { name: 'フルメイク',           note: '',                            price: 4400, unit: '/名', qtyUnit: '名' },
   { name: '名古屋帯',         note: '帯を名古屋帯に変更できます',         price: 550,  unit: '',    qtyUnit: '個' },
   { name: 'ぬくぬく肌着',     note: '冬の防寒用肌着（上下セット）',       price: 550,  unit: '/名', qtyUnit: '名' },
   { name: 'コート・ショール', note: '羽織れる防寒アイテム',               price: 550,  unit: '/名', qtyUnit: '名' },
@@ -617,8 +621,9 @@ function buildOptCard(opt) {
   div.className = 'option-item' + (opt.photoRequired ? ' photo-req' : '');
   div.id = 'opt_' + opt.name;
   div.dataset.optName = opt.name;
-  if (opt.maleOnly) div.dataset.maleOnly = '1';
-  if (opt.wide)     div.classList.add('wide');
+  if (opt.maleOnly)  div.dataset.maleOnly = '1';
+  if (opt.wide)      div.classList.add('wide');
+  if (opt.kagaOnly)  div.style.display = 'none';
 
   const onclick = opt.photoRequired
     ? `selectPhotoOpt('${opt.name}',${opt.price})`
@@ -661,6 +666,7 @@ function buildOptions() {
   });
   updatePhotoOnlyVisibility();
   updateMaleOnlyVisibility();
+  updateKagaVisibility();
   updateHairAccessoryVisibility();
 }
 
@@ -710,14 +716,32 @@ function updateMaleOnlyVisibility() {
 function updateHairAccessoryVisibility() {
   const el = document.getElementById('opt_髪飾り');
   if (!el) return;
-  const hairsetQty = optQty['ヘアセット'] || 0;
-  const isFull = people.female > 0 && hairsetQty >= people.female;
+  const isKaga = plan.name === '加賀友禅';
+  const activeQty = isKaga ? (optQty['フォーマルヘアセット'] || 0) : (optQty['ヘアセット'] || 0);
+  const isFull = people.female > 0 && activeQty >= people.female;
   el.classList.toggle('disabled', isFull);
   if (isFull && el.classList.contains('checked')) {
     el.classList.remove('checked');
     delete options['髪飾り'];
     optQty['髪飾り'] = 0;
     updateSummary();
+  }
+}
+
+function updateKagaVisibility() {
+  const isKaga = plan.name === '加賀友禅';
+  const normal = document.getElementById('opt_ヘアセット');
+  const formal = document.getElementById('opt_フォーマルヘアセット');
+  if (normal) normal.style.display = isKaga ? 'none' : '';
+  if (formal) formal.style.display = isKaga ? ''     : 'none';
+  // プラン切替時にチェックをリセット
+  if (isKaga && normal && normal.classList.contains('checked')) {
+    normal.classList.remove('checked');
+    delete options['ヘアセット']; optQty['ヘアセット'] = 0;
+  }
+  if (!isKaga && formal && formal.classList.contains('checked')) {
+    formal.classList.remove('checked');
+    delete options['フォーマルヘアセット']; optQty['フォーマルヘアセット'] = 0;
   }
 }
 
