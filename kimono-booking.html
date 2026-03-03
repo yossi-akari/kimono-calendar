@@ -123,6 +123,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .opt-price-label { font-size: 0.78rem; color: var(--muted); min-width: 72px; text-align: right; font-family: 'DM Mono', monospace; }
 .opt-check-row.unchecked .opt-check-name { color: var(--muted); }
 .opt-check-row.unchecked .opt-price-label { color: #ccc; }
+.opt-check-row.opt-disabled { opacity: 0.4; pointer-events: none; }
 
 /* 合計表示 */
 .total-display {
@@ -538,6 +539,25 @@ function onOptChange(id) {
   calcAutoTotal();
 }
 
+// ── 髪飾り選択可否の更新 ──
+function updateHairAccessoryVisibility() {
+  const row = document.getElementById('row_o16');
+  if (!row) return;
+  const hairCb  = document.getElementById('o3');
+  const hairQty = (hairCb && hairCb.checked) ? (parseInt(document.getElementById('qty_o3').value) || 0) : 0;
+  const femaleCount = parseInt(document.getElementById('pFemale').value) || 0;
+  const isFull = femaleCount > 0 && hairQty >= femaleCount;
+  row.classList.toggle('opt-disabled', isFull);
+  if (isFull) {
+    const kCb = document.getElementById('o16');
+    if (kCb && kCb.checked) {
+      kCb.checked = false;
+      row.classList.add('unchecked');
+      document.getElementById('qty_o16').disabled = true;
+    }
+  }
+}
+
 // ── 自動料金計算 ──
 function calcAutoTotal() {
   const plan = document.getElementById('fPlan').value;
@@ -570,6 +590,7 @@ function calcAutoTotal() {
   });
 
   document.getElementById('fTotal').value = base + optTotal;
+  updateHairAccessoryVisibility();
 }
 
 // ── GAS送信ヘルパー ──

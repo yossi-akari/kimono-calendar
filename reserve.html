@@ -581,6 +581,7 @@ function updatePeople() {
   people.male   = parseInt(document.getElementById('numMale').value);
   people.child  = parseInt(document.getElementById('numChild').value);
   updateMaleOnlyVisibility();
+  updateHairAccessoryVisibility();
   updateSummary();
 }
 
@@ -597,7 +598,7 @@ const OPT_DEFS = [
   { name: 'ロケーション撮影 シルバー（100カット）', price: 33000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
   { name: 'ロケーション撮影 ゴールド（150カット）', price: 55000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
   // 通常オプション
-  { name: 'ヘアセット',       note: '美容師によるヘアセット',             price: 1650, unit: '/名', qtyUnit: '名' },
+  { name: 'ヘアセット',       note: '髪飾りも料金に含まれます',           price: 1650, unit: '/名', qtyUnit: '名' },
   { name: '髪飾り',           note: '',                                   price: 550,  unit: '/個', qtyUnit: '個' },
   { name: 'メンズヘアセット', note: '美容師によるヘアセット',             price: 880,  unit: '/名', qtyUnit: '名', maleOnly: true },
   { name: '名古屋帯',         note: '帯を名古屋帯に変更できます',         price: 550,  unit: '',    qtyUnit: '個' },
@@ -660,6 +661,7 @@ function buildOptions() {
   });
   updatePhotoOnlyVisibility();
   updateMaleOnlyVisibility();
+  updateHairAccessoryVisibility();
 }
 
 // ── 撮影必須：1択 ────────────────────────────────────
@@ -705,6 +707,20 @@ function updateMaleOnlyVisibility() {
   });
 }
 
+function updateHairAccessoryVisibility() {
+  const el = document.getElementById('opt_髪飾り');
+  if (!el) return;
+  const hairsetQty = optQty['ヘアセット'] || 0;
+  const isFull = people.female > 0 && hairsetQty >= people.female;
+  el.classList.toggle('disabled', isFull);
+  if (isFull && el.classList.contains('checked')) {
+    el.classList.remove('checked');
+    delete options['髪飾り'];
+    optQty['髪飾り'] = 0;
+    updateSummary();
+  }
+}
+
 // ── オプション切替・個数 ──────────────────────────────
 function toggleOpt(name, price) {
   const el = document.getElementById('opt_' + name);
@@ -720,6 +736,7 @@ function toggleOpt(name, price) {
     options[name] = price;
   }
   updateSummary();
+  updateHairAccessoryVisibility();
 }
 
 function changeQty(name, price, dir) {
@@ -731,6 +748,7 @@ function changeQty(name, price, dir) {
   document.getElementById('qty_' + name).textContent = next;
   document.getElementById('sub_' + name).textContent = '¥' + (price * next).toLocaleString();
   updateSummary();
+  updateHairAccessoryVisibility();
 }
 
 // ── 金額計算・サマリー更新 ───────────────────────────
