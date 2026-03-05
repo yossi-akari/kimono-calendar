@@ -889,8 +889,22 @@ async function loadFromGAS() {
     const data = JSON.parse(await res.text());
     if (data.success && data.bookings) {
       const skipped = JSON.parse(localStorage.getItem('kimono_skipped') || '[]');
+
+      // GAS は毎回 createdAt = new Date() を使うため、
+      // 既存IDの createdAt は localStorage の値を優先して保持する。
+      // こうしないと更新のたびに全予約が「新着」扱いになってしまう。
+      const savedCreatedAt = {};
+      JSON.parse(localStorage.getItem('kimono_bookings') || '[]')
+        .forEach(b => { if (b.id && b.createdAt) savedCreatedAt[b.id] = b.createdAt; });
+
       const manualFromGAS = data.bookings.filter(b => b.source === 'MANUAL');
-      const gasBookings = data.bookings.filter(b => b.source !== 'MANUAL' && !skipped.includes(b.id));
+      const gasBookings = data.bookings
+        .filter(b => b.source !== 'MANUAL' && !skipped.includes(b.id))
+        .map(b => ({
+          ...b,
+          // 初回取得時は現在時刻、2回目以降は保存済みの値を使う
+          createdAt: savedCreatedAt[b.id] || new Date().toISOString()
+        }));
       localStorage.setItem('kimono_bookings', JSON.stringify(gasBookings));
       bookings = [...gasBookings, ...manualFromGAS].sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
