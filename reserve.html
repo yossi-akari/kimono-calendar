@@ -344,6 +344,42 @@ let plan   = { name: null, price: 0, isEstimate: false };
 let people = { female: 1, male: 0, child: 0 };
 let options  = {};
 let optQty   = {};
+let slotAvailability = {}; // { '09:00': { booked: N, remaining: N }, ... }
+
+// 空き状況を取得して時間セレクトに反映
+async function fetchSlotAvailability(date) {
+  try {
+    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'checkSlot', date });
+    const res  = await fetch(GAS_URL + '?' + params.toString());
+    const data = await res.json().catch(() => null);
+    if (data && data.success) slotAvailability = data.slots || {};
+  } catch(e) {
+    slotAvailability = {};
+  }
+  updateTimeOptions();
+}
+
+function updateTimeOptions() {
+  const select = document.getElementById('visitTime');
+  const requested = people.female + people.male + people.child;
+  const currentVal = select.value;
+  [...select.options].forEach(opt => {
+    if (!opt.value) return;
+    const slot = slotAvailability[opt.value];
+    if (!slot) { opt.disabled = false; opt.textContent = opt.value; return; }
+    const canBook = slot.remaining >= Math.max(requested, 1);
+    opt.disabled = !canBook;
+    opt.textContent = slot.remaining === 0
+      ? `${opt.value}　満員`
+      : slot.remaining < 2
+        ? `${opt.value}　残り${slot.remaining}名`
+        : opt.value;
+  });
+  // 選択中の時間が満員になった場合はリセット
+  if (currentVal && slotAvailability[currentVal] && !slotAvailability[currentVal].remaining) {
+    select.value = '';
+  }
+}
 
 // 来店日の最小値を今日に設定
 document.getElementById('visitDate').min = new Date().toISOString().split('T')[0];
@@ -367,8 +403,14 @@ function onDateChange() {
     if (day === 3) { // 水曜日
       errEl.style.display = 'block';
       document.getElementById('visitDate').value = '';
+      slotAvailability = {};
+      updateTimeOptions();
       return;
     }
+    fetchSlotAvailability(val); // 空き状況を取得
+  } else {
+    slotAvailability = {};
+    updateTimeOptions();
   }
   errEl.style.display = 'none';
   checkTuesdayRestriction();
@@ -402,6 +444,7 @@ function updatePeople() {
   people.male   = parseInt(document.getElementById('numMale').value);
   people.child  = parseInt(document.getElementById('numChild').value);
   updateMaleOnlyVisibility();
+  updateTimeOptions();
   updateSummary();
 }
 
@@ -656,7 +699,7 @@ async function submitForm() {
   const booking = {
     id:            'HP-' + now.getTime(),
     reservationId: 'HP-' + now.getTime(),
-    source:        'MANUAL',
+    source:        'WEB',
     channel:       'ウェブサイト',
     date,
     time,
@@ -677,9 +720,31 @@ async function submitForm() {
   btn.textContent = '送信中...';
   try {
     const params = new URLSearchParams({ key: ACCESS_KEY, action: 'save', booking: JSON.stringify(booking) });
-    await fetch(GAS_URL + '?' + params.toString());
+    const res = await fetch(GAS_URL + '?' + params.toString());
+    const json = await res.json().catch(() => null);
+    if (!json || json.success === false) {
+      if (json && json.error === 'SLOT_FULL') {
+        const rem = json.remaining || 0;
+        alert(
+          rem === 0
+            ? `選択された時間帯（${time}）は満員です。\n別の時間帯をお選びください。`
+            : `選択された時間帯（${time}）の空きが不足しています（残り${rem}名）。\n人数を減らすか、別の時間帯をお選びください。`
+        );
+        // 空き状況を更新してStep2に戻る
+        await fetchSlotAvailability(date);
+        goStep(2);
+      } else {
+        alert('予約の送信に失敗しました。\nお手数ですが、お電話（076-201-8119）にてご連絡ください。');
+      }
+      btn.disabled = false;
+      btn.textContent = '予約を確定する';
+      return;
+    }
   } catch(err) {
-    console.warn('GAS送信エラー:', err);
+    alert('予約の送信に失敗しました。\nお手数ですが、お電話（076-201-8119）にてご連絡ください。');
+    btn.disabled = false;
+    btn.textContent = '予約を確定する';
+    return;
   }
   btn.disabled = false;
   btn.textContent = '予約を確定する';

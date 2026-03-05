@@ -144,8 +144,155 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .chip-sotsu     { background: #e0eaf5; color: #1a3a6a; }
 .chip-limited   { background: #fde8e0; color: var(--accent); }
 .chip-manual    { background: #f0e8f8; color: #5a1a8a; }
+.chip-web       { background: #e0f0ff; color: #0a4a8a; }
 
 .more-chip { font-size: 0.6rem; color: var(--muted); font-family: 'DM Mono', monospace; padding: 1px 4px; }
+
+/* ── 新着バッジ ── */
+.notif-badge {
+  background: var(--accent); color: white;
+  font-family: 'DM Mono', monospace; font-size: 0.6rem;
+  border-radius: 10px; padding: 1px 6px; margin-left: 5px;
+  display: none; vertical-align: middle; font-weight: 400;
+}
+.notif-badge.visible { display: inline-block; }
+.header-btn.has-new { background: var(--accent) !important; border-color: var(--accent) !important; }
+
+/* ── 予約一覧モーダル ── */
+.list-modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(28,26,24,0.6); z-index: 200;
+  align-items: flex-start; justify-content: center;
+  padding: 24px; overflow-y: auto;
+}
+.list-modal-overlay.open { display: flex; }
+.list-modal {
+  background: var(--white); border-radius: 2px;
+  width: 100%; max-width: 1020px; margin: auto;
+  animation: fadeUp 0.25s ease both;
+  display: flex; flex-direction: column;
+}
+.list-modal-header {
+  background: var(--ink); color: var(--paper);
+  padding: 18px 24px; display: flex; align-items: center; justify-content: space-between;
+  border-radius: 2px 2px 0 0; flex-shrink: 0;
+}
+.list-modal-header h2 {
+  font-family: 'Noto Serif JP', serif; font-weight: 300;
+  font-size: 1rem; letter-spacing: 0.1em;
+}
+.list-modal-header p {
+  font-family: 'DM Mono', monospace; font-size: 0.62rem;
+  color: rgba(255,255,255,0.45); margin-top: 2px;
+}
+.list-toolbar {
+  padding: 14px 20px; background: var(--cream);
+  border-bottom: 1px solid var(--line);
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.list-toolbar label { font-size: 0.72rem; color: var(--muted); }
+.list-toolbar select,
+.list-toolbar input[type="date"] {
+  font-size: 0.78rem; padding: 5px 10px;
+  border: 1px solid var(--line); border-radius: 2px;
+  background: white; color: var(--ink);
+  font-family: 'Noto Sans JP', sans-serif;
+}
+.list-toolbar select:focus,
+.list-toolbar input[type="date"]:focus { outline: none; border-color: var(--accent); }
+.list-filter-new {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 0.78rem; cursor: pointer; margin-left: auto;
+}
+.list-filter-new input { cursor: pointer; accent-color: var(--accent); }
+.list-table-wrap { overflow-x: auto; max-height: 56vh; overflow-y: auto; flex: 1; }
+.list-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+.list-table thead tr th {
+  background: #2a2520; color: rgba(250,248,244,0.8);
+  padding: 9px 12px; text-align: left; font-weight: 300;
+  font-size: 0.7rem; letter-spacing: 0.08em;
+  position: sticky; top: 0; z-index: 1;
+}
+.list-table tbody tr td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.list-table tbody tr:hover td { background: var(--cream); }
+.list-table tbody tr.is-new td { background: #fffbf0; }
+.list-table tbody tr.is-new td:first-child { border-left: 3px solid var(--gold); padding-left: 9px; }
+.list-table tbody tr.is-new:hover td { background: #fff6e0; }
+.new-dot {
+  display: inline-block; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--gold);
+  margin-right: 5px; vertical-align: middle; flex-shrink: 0;
+}
+.list-confirm-btn {
+  background: none; border: 1px solid var(--green); color: var(--green);
+  padding: 3px 10px; border-radius: 2px; font-size: 0.7rem;
+  cursor: pointer; white-space: nowrap; transition: all 0.15s;
+}
+.list-confirm-btn:hover { background: var(--green); color: white; }
+.list-detail-btn {
+  background: none; border: 1px solid var(--line); color: var(--ink);
+  padding: 3px 9px; border-radius: 2px; font-size: 0.7rem;
+  cursor: pointer; margin-left: 4px; transition: all 0.15s;
+}
+.list-detail-btn:hover { border-color: var(--accent); color: var(--accent); }
+.list-footer {
+  padding: 14px 20px; border-top: 1px solid var(--line);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-shrink: 0; background: var(--white);
+}
+.confirm-all-btn {
+  background: var(--gold); color: white; border: none;
+  padding: 8px 18px; border-radius: 2px; font-size: 0.8rem;
+  cursor: pointer; transition: opacity 0.2s;
+}
+.confirm-all-btn:hover { opacity: 0.85; }
+
+/* ── 申請モーダル ── */
+.req-modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(28,26,24,0.6); z-index: 200;
+  align-items: flex-start; justify-content: center;
+  padding: 24px; overflow-y: auto;
+}
+.req-modal-overlay.open { display: flex; }
+.req-modal {
+  background: var(--white); border-radius: 2px;
+  width: 100%; max-width: 900px; margin: auto;
+  animation: fadeUp 0.25s ease both;
+  display: flex; flex-direction: column;
+}
+.req-type-badge {
+  display: inline-block; font-size: 0.65rem;
+  padding: 2px 8px; border-radius: 10px;
+  font-family: 'DM Mono', monospace; white-space: nowrap;
+}
+.req-type-change { background: #e0eaf8; color: #1a3a8a; }
+.req-type-cancel { background: #fde8e0; color: var(--accent); }
+.req-approve-btn {
+  background: var(--green); color: white; border: none;
+  padding: 4px 11px; border-radius: 2px; font-size: 0.7rem;
+  cursor: pointer; white-space: nowrap; transition: opacity 0.15s;
+}
+.req-approve-btn:hover { opacity: 0.85; }
+.req-reject-btn {
+  background: none; border: 1px solid var(--accent); color: var(--accent);
+  padding: 4px 11px; border-radius: 2px; font-size: 0.7rem;
+  cursor: pointer; white-space: nowrap; margin-left: 4px; transition: all 0.15s;
+}
+.req-reject-btn:hover { background: var(--accent); color: white; }
+.req-note-wrap { display: none; margin-top: 6px; }
+.req-note-wrap.open { display: flex; gap: 5px; align-items: center; }
+.req-note-input {
+  flex: 1; font-size: 0.75rem; padding: 4px 8px;
+  border: 1px solid var(--line); border-radius: 2px;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+.req-note-input:focus { outline: none; border-color: var(--accent); }
+.req-note-send {
+  background: var(--accent); color: white; border: none;
+  padding: 4px 10px; border-radius: 2px; font-size: 0.7rem; cursor: pointer;
+}
 
 /* ── サイドパネル ── */
 .side-panel {
@@ -376,6 +523,13 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   </div>
   <div class="header-right">
     <span id="syncStatus" style="font-family:'DM Mono',monospace;font-size:0.65rem;color:rgba(255,255,255,0.45);margin-right:8px;"></span>
+    <button class="header-btn" id="reqBtn" onclick="openRequestModal()" style="display:none;">
+      ✉ 申請<span class="notif-badge visible" id="reqBadge">0</span>
+    </button>
+    <button class="header-btn" id="newBtn" onclick="openListModal(true)" style="display:none;">
+      🔔 新着<span class="notif-badge visible" id="newBadge">0</span>
+    </button>
+    <button class="header-btn" onclick="openListModal(false)">📋 一覧</button>
     <a href="kimono-booking.html" class="header-btn accent" target="_blank">＋ 予約を手動入力</a>
     <button class="header-btn" onclick="refreshBookings()">↻ 更新</button>
   </div>
@@ -437,6 +591,103 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 <!-- 印刷エリア（@media printでのみ表示） -->
 <div id="printArea"></div>
 
+<!-- 予約一覧モーダル -->
+<div class="list-modal-overlay" id="listModal">
+  <div class="list-modal">
+    <div class="list-modal-header">
+      <div>
+        <h2>予約一覧</h2>
+        <p id="listSubtitle"></p>
+      </div>
+      <button onclick="closeListModal()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:1.3rem;cursor:pointer;line-height:1;">×</button>
+    </div>
+    <div class="list-toolbar">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label>並び順</label>
+        <select id="listSort" onchange="renderListModal()">
+          <option value="new">新着順</option>
+          <option value="date-asc">来店日 昇順</option>
+          <option value="date-desc">来店日 降順</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <label>期間</label>
+        <input type="date" id="listFrom" onchange="renderListModal()">
+        <span style="font-size:0.72rem;color:var(--muted);">〜</span>
+        <input type="date" id="listTo" onchange="renderListModal()">
+        <button onclick="clearListDateFilter()" style="background:none;border:none;font-size:0.72rem;color:var(--muted);cursor:pointer;padding:0 4px;" title="期間をリセット">✕</button>
+      </div>
+      <label class="list-filter-new">
+        <input type="checkbox" id="listFilterNew" onchange="renderListModal()">
+        新着のみ表示
+      </label>
+    </div>
+    <div class="list-table-wrap">
+      <table class="list-table">
+        <thead>
+          <tr>
+            <th>来店日時</th>
+            <th>お名前</th>
+            <th>プラン</th>
+            <th>人数</th>
+            <th>合計</th>
+            <th>受付</th>
+            <th style="min-width:120px;"></th>
+          </tr>
+        </thead>
+        <tbody id="listTableBody"></tbody>
+      </table>
+    </div>
+    <div class="list-footer">
+      <span id="listCount" style="font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--muted);"></span>
+      <div style="display:flex;gap:8px;">
+        <button id="confirmAllBtn" onclick="confirmAllNew()" class="confirm-all-btn" style="display:none;">まとめて確認する</button>
+        <button onclick="closeListModal()" style="background:var(--ink);color:white;border:none;padding:8px 18px;border-radius:2px;font-size:0.8rem;cursor:pointer;">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 申請モーダル -->
+<div class="req-modal-overlay" id="reqModal">
+  <div class="req-modal">
+    <div class="list-modal-header">
+      <div>
+        <h2>変更・キャンセル申請</h2>
+        <p id="reqSubtitle"></p>
+      </div>
+      <button onclick="closeRequestModal()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:1.3rem;cursor:pointer;line-height:1;">×</button>
+    </div>
+    <div class="list-toolbar" style="gap:10px;">
+      <label>表示</label>
+      <select id="reqFilter" onchange="renderRequestModal()">
+        <option value="pending">未処理のみ</option>
+        <option value="all">すべて</option>
+      </select>
+    </div>
+    <div class="list-table-wrap">
+      <table class="list-table">
+        <thead>
+          <tr>
+            <th>申請日時</th>
+            <th>種別</th>
+            <th>予約番号 / お名前</th>
+            <th>現在の予約</th>
+            <th>希望内容</th>
+            <th>メッセージ</th>
+            <th style="min-width:170px;"></th>
+          </tr>
+        </thead>
+        <tbody id="reqTableBody"></tbody>
+      </table>
+    </div>
+    <div class="list-footer">
+      <span id="reqCount" style="font-family:'DM Mono',monospace;font-size:0.72rem;color:var(--muted);"></span>
+      <button onclick="closeRequestModal()" style="background:var(--ink);color:white;border:none;padding:8px 18px;border-radius:2px;font-size:0.8rem;cursor:pointer;">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <!-- 詳細モーダル -->
 <div class="modal-overlay" id="detailModal">
   <div class="modal">
@@ -477,6 +728,7 @@ let activeBookingId = null;
 // プランごとのチップカラー
 function chipClass(planName, source) {
   if (source === 'MANUAL') return 'chip-manual';
+  if (source === 'WEB')    return 'chip-web';
   const map = {
     'ベーシック': 'chip-basic', 'スタンダード': 'chip-standard',
     'プレミアム': 'chip-premium', '撮影付き': 'chip-photo',
@@ -550,6 +802,8 @@ async function refreshBookings() {
   renderCalendar();
   renderSidePanel();
   updateStats();
+  updateNewBadge();
+  loadRequests();
 }
 
 // 経過時間を「○分前に同期」形式でリアルタイム更新
@@ -591,6 +845,152 @@ document.addEventListener('visibilitychange', () => {
     else updateSyncLabel();
   }
 });
+
+// ── 新着予約管理 ────────────────────────────────────
+function getCheckedIds() {
+  return new Set(JSON.parse(localStorage.getItem('kimono_checked_ids') || '[]'));
+}
+function getAllCheckedAt() {
+  return localStorage.getItem('kimono_all_checked_at') || null;
+}
+function isNewBooking(b) {
+  if (getCheckedIds().has(b.id)) return false;
+  const allCheckedAt = getAllCheckedAt();
+  if (allCheckedAt && b.createdAt <= allCheckedAt) return false;
+  return true;
+}
+function getNewBookings() {
+  return bookings.filter(isNewBooking);
+}
+function confirmBooking(id) {
+  const ids = getCheckedIds();
+  ids.add(id);
+  localStorage.setItem('kimono_checked_ids', JSON.stringify([...ids]));
+  updateNewBadge();
+  renderListModal();
+}
+function confirmAllNew() {
+  localStorage.setItem('kimono_all_checked_at', new Date().toISOString());
+  localStorage.setItem('kimono_checked_ids', '[]');
+  updateNewBadge();
+  renderListModal();
+}
+function updateNewBadge() {
+  const count = getNewBookings().length;
+  const badge = document.getElementById('newBadge');
+  const btn   = document.getElementById('newBtn');
+  if (!badge || !btn) return;
+  badge.textContent = count;
+  if (count > 0) {
+    btn.style.display = '';
+    btn.classList.add('has-new');
+  } else {
+    btn.style.display = 'none';
+    btn.classList.remove('has-new');
+  }
+}
+
+// ── 予約一覧モーダル ────────────────────────────────
+function openListModal(filterNew) {
+  const fromEl = document.getElementById('listFrom');
+  if (!fromEl.value) fromEl.value = todayStr;
+  if (filterNew) {
+    document.getElementById('listFilterNew').checked = true;
+    document.getElementById('listFrom').value = '';
+    document.getElementById('listTo').value = '';
+  }
+  renderListModal();
+  document.getElementById('listModal').classList.add('open');
+}
+function closeListModal() {
+  document.getElementById('listModal').classList.remove('open');
+}
+function clearListDateFilter() {
+  document.getElementById('listFrom').value = '';
+  document.getElementById('listTo').value = '';
+  renderListModal();
+}
+function renderListModal() {
+  const sort      = document.getElementById('listSort').value;
+  const fromVal   = document.getElementById('listFrom').value;
+  const toVal     = document.getElementById('listTo').value;
+  const filterNew = document.getElementById('listFilterNew').checked;
+
+  let filtered = [...bookings];
+  if (fromVal) filtered = filtered.filter(b => b.date >= fromVal);
+  if (toVal)   filtered = filtered.filter(b => b.date <= toVal);
+  if (filterNew) filtered = filtered.filter(isNewBooking);
+
+  if (sort === 'new') {
+    filtered.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  } else if (sort === 'date-asc') {
+    filtered.sort((a, b) => a.date !== b.date ? a.date.localeCompare(b.date) : a.time.localeCompare(b.time));
+  } else {
+    filtered.sort((a, b) => a.date !== b.date ? b.date.localeCompare(a.date) : b.time.localeCompare(a.time));
+  }
+
+  const tbody = document.getElementById('listTableBody');
+  tbody.innerHTML = '';
+  const newInFiltered = filtered.filter(isNewBooking).length;
+
+  filtered.forEach(b => {
+    const isNew = isNewBooking(b);
+    const d = new Date(b.date + 'T00:00:00');
+    const dateLabel = `${d.getMonth()+1}/${d.getDate()}(${DAY_NAMES[d.getDay()]})`;
+    const totalStr  = b.total > 0 ? `¥${b.total.toLocaleString()}` : '—';
+    const srcLabel  = b.source === 'AJ' ? 'AJ' : b.source === 'WEB' ? 'ウェブ' : b.source === 'MANUAL' ? '手動' : 'じゃらん';
+    const srcColor  = b.source === 'WEB' ? '#0a4a8a' : b.source === 'MANUAL' ? '#5a1a8a' : 'var(--muted)';
+
+    const tr = document.createElement('tr');
+    if (isNew) tr.classList.add('is-new');
+    tr.innerHTML = `
+      <td style="font-family:'DM Mono',monospace;font-size:0.78rem;white-space:nowrap;">
+        ${isNew ? '<span class="new-dot"></span>' : '<span style="display:inline-block;width:12px;"></span>'}${dateLabel}&nbsp;${b.time}
+      </td>
+      <td>${b.name}&nbsp;様</td>
+      <td><span class="${chipClass(b.plan, b.source)}" style="font-size:0.68rem;padding:2px 8px;border-radius:10px;display:inline-block;">${b.plan}</span></td>
+      <td style="font-size:0.75rem;color:var(--muted);">${b.people}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:0.78rem;color:var(--accent);">${totalStr}</td>
+      <td style="font-size:0.7rem;color:${srcColor};">${srcLabel}</td>
+      <td style="white-space:nowrap;">
+        ${isNew
+          ? `<button class="list-confirm-btn" onclick="confirmBooking('${b.id}')">確認しました</button>`
+          : `<span style="font-size:0.68rem;color:var(--muted);">確認済</span>`}
+        <button class="list-detail-btn" onclick="openDetailFromList('${b.id}')">詳細</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('listCount').textContent =
+    `${filtered.length}件表示 / 全${bookings.length}件`;
+
+  const confirmAllBtn = document.getElementById('confirmAllBtn');
+  if (newInFiltered > 0) {
+    confirmAllBtn.style.display = '';
+    confirmAllBtn.textContent = `まとめて確認する（${newInFiltered}件）`;
+  } else {
+    confirmAllBtn.style.display = 'none';
+  }
+
+  const rangeLabel = fromVal || toVal
+    ? `${fromVal || '—'}〜${toVal || '—'}`
+    : '本日以降（全件）';
+  document.getElementById('listSubtitle').textContent =
+    (filterNew ? '新着のみ · ' : '') + rangeLabel;
+}
+function openDetailFromList(id) {
+  closeListModal();
+  const b = bookings.find(x => x.id === id);
+  if (b) {
+    selectedDate = b.date;
+    curYear  = new Date(b.date + 'T00:00:00').getFullYear();
+    curMonth = new Date(b.date + 'T00:00:00').getMonth();
+    renderCalendar();
+    renderSidePanel();
+    openDetail(id);
+  }
+}
 
 // ── 統計 ──────────────────────────────────────────
 function updateStats() {
@@ -681,7 +1081,7 @@ function renderCalendar() {
     dayBookings.slice(0, maxShow).forEach(b => {
       const chip = document.createElement('div');
       chip.className = `booking-chip ${chipClass(b.plan, b.source)}`;
-      chip.textContent = `${b.time} ${b.name}${b.source === 'MANUAL' ? ' ✎' : ''}`;
+      chip.textContent = `${b.time} ${b.name}${b.source === 'MANUAL' ? ' ✎' : b.source === 'WEB' ? ' ✦' : ''}`;
       chip.onclick = (e) => { e.stopPropagation(); openDetail(b.id); };
       cell.appendChild(chip);
     });
@@ -728,7 +1128,7 @@ function renderSidePanel() {
     card.innerHTML = `
       <div class="bc-time">${b.time}</div>
       <div class="bc-name">${b.name} 様</div>
-      <span class="bc-plan ${chipClass(b.plan, b.source)}">${b.plan}${b.source === 'MANUAL' ? ' ✎' : ''}</span>
+      <span class="bc-plan ${chipClass(b.plan, b.source)}">${b.plan}${b.source === 'MANUAL' ? ' ✎' : b.source === 'WEB' ? ' ✦' : ''}</span>
       <div class="bc-people">${b.people}</div>
     `;
     card.onclick = () => openDetail(b.id);
@@ -769,18 +1169,20 @@ function openDetail(id) {
     <div class="detail-row"><span class="detail-label">備考</span><span class="detail-value">${(b.remarks || '').replace(/アクティビティジャパン予約管理システムをご利用ください。?/g, '').trim()}</span></div>
     ${b.source === 'MANUAL'
       ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#5a1a8a;">✎ 手動入力${b.channel ? '（' + b.channel + '）' : ''}</span></div>`
-      : `<div class="detail-row"><span class="detail-label">管理画面</span><span class="detail-value">${
-          b.source === 'AJ'
-            ? `<a href="https://ptn.activityjapan.com/reserve/detail/${b.reservationId}" target="_blank" style="color:var(--accent);">AJ管理画面 →</a>`
-            : `<a href="https://acb.jalan.net/gw/kanri/slogin.html" target="_blank" style="color:var(--accent);">じゃらん管理画面 →</a>`
-        }</span></div>`
+      : b.source === 'WEB'
+        ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#0a4a8a;">✦ ウェブ予約</span></div>`
+        : `<div class="detail-row"><span class="detail-label">管理画面</span><span class="detail-value">${
+            b.source === 'AJ'
+              ? `<a href="https://ptn.activityjapan.com/reserve/detail/${b.reservationId}" target="_blank" style="color:var(--accent);">AJ管理画面 →</a>`
+              : `<a href="https://acb.jalan.net/gw/kanri/slogin.html" target="_blank" style="color:var(--accent);">じゃらん管理画面 →</a>`
+          }</span></div>`
     }
     <div class="detail-row"><span class="detail-label">受付日時</span><span class="detail-value" style="font-size:0.75rem;color:var(--muted);">${new Date(b.createdAt).toLocaleString('ja-JP')}</span></div>
   `;
 
-  // MANUAL予約はボタンを「編集」に切り替え
+  // MANUAL・WEB予約はボタンを「編集」に切り替え
   const delBtn = document.querySelector('.del-btn');
-  if (b.source === 'MANUAL') {
+  if (b.source === 'MANUAL' || b.source === 'WEB') {
     delBtn.textContent = 'この予約を編集する';
     delBtn.onclick = editManualFromCalendar;
     delBtn.style.cssText = 'border-color:var(--muted);color:var(--muted);';
@@ -812,9 +1214,9 @@ async function deleteBooking() {
   const target = bookings.find(b => b.id === activeBookingId);
   if (!target) return;
 
-  if (target.source === 'MANUAL') {
-    // 手動予約：GASスプレッドシートから削除
-    if (!confirm('この手動予約を削除しますか？\n（この操作は元に戻せません）')) return;
+  if (target.source === 'MANUAL' || target.source === 'WEB') {
+    // 手動・ウェブ予約：GASスプレッドシートから削除
+    if (!confirm('この予約を削除しますか？\n（この操作は元に戻せません）')) return;
     try {
       await fetch(GAS_URL + '?' + new URLSearchParams({ key: ACCESS_KEY, action: 'delete', id: activeBookingId }));
     } catch(e) { console.warn('GAS削除エラー:', e); }
@@ -955,7 +1357,10 @@ function printReceipt() {
       }).join('') : '<div class="print-receipt-row"><span class="print-receipt-label"></span><span class="print-receipt-value">なし</span></div>';
 
   const totalStr = b.total > 0 ? `¥${b.total.toLocaleString()}` : '来店時お見積もり';
-  const src = b.source === 'AJ' ? 'ActivityJapan' : b.source === 'MANUAL' ? `手動入力（${b.channel || ''}）` : 'じゃらんnet';
+  const src = b.source === 'AJ' ? 'ActivityJapan'
+    : b.source === 'WEB'    ? 'ウェブ予約'
+    : b.source === 'MANUAL' ? `手動入力（${b.channel || ''}）`
+    : 'じゃらんnet';
 
   setPrintArea(`
     <div class="print-page">
@@ -1146,6 +1551,152 @@ function printDailyReport() {
     </div>
   `);
   window.print();
+}
+
+// ── 変更・キャンセル申請管理 ─────────────────────────
+let pendingRequests = [];
+let allRequests     = [];
+
+async function loadRequests() {
+  if (!GAS_URL || GAS_URL === 'YOUR_GAS_DEPLOY_URL_HERE') return;
+  try {
+    const res = await fetch(GAS_URL + '?' + new URLSearchParams({ key: ACCESS_KEY, action: 'getRequests', status: 'all' }));
+    const data = JSON.parse(await res.text());
+    if (data.success) {
+      allRequests     = data.requests || [];
+      pendingRequests = allRequests.filter(r => r.status === 'pending');
+      updateRequestBadge();
+    }
+  } catch(e) {
+    console.warn('申請読み込みエラー:', e);
+  }
+}
+
+function updateRequestBadge() {
+  const count = pendingRequests.length;
+  const badge = document.getElementById('reqBadge');
+  const btn   = document.getElementById('reqBtn');
+  if (!badge || !btn) return;
+  badge.textContent = count;
+  btn.style.display = count > 0 ? '' : 'none';
+}
+
+function openRequestModal() {
+  renderRequestModal();
+  document.getElementById('reqModal').classList.add('open');
+}
+
+function closeRequestModal() {
+  document.getElementById('reqModal').classList.remove('open');
+}
+
+function renderRequestModal() {
+  const filter   = document.getElementById('reqFilter').value;
+  const displayed = filter === 'pending' ? pendingRequests : allRequests;
+
+  const tbody = document.getElementById('reqTableBody');
+  tbody.innerHTML = '';
+
+  if (displayed.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);font-size:0.82rem;">申請はありません</td></tr>`;
+    document.getElementById('reqCount').textContent = '0件';
+    document.getElementById('reqSubtitle').textContent = filter === 'pending' ? '未処理の申請はありません' : '申請履歴はありません';
+    return;
+  }
+
+  displayed.forEach(req => {
+    const booking = bookings.find(b => b.id === req.bookingId);
+    const origLabel = booking
+      ? `${formatDate(booking.date)}&nbsp;${booking.time}`
+      : `<span style="color:var(--muted);">${req.bookingId}</span>`;
+
+    const typeClass = req.type === 'change' ? 'req-type-change' : 'req-type-cancel';
+    const typeLabel = req.type === 'change' ? '変更' : 'キャンセル';
+
+    const sub = new Date(req.submittedAt);
+    const subLabel = `${sub.getMonth()+1}/${sub.getDate()} ${String(sub.getHours()).padStart(2,'0')}:${String(sub.getMinutes()).padStart(2,'0')}`;
+
+    const wishHtml = req.type === 'change' && req.newDate
+      ? `${formatDate(req.newDate)}${req.newTime ? '&nbsp;' + req.newTime : ''}`
+      : req.type === 'cancel' ? '<span style="color:var(--accent);">キャンセル希望</span>' : '—';
+
+    const isPending = req.status === 'pending';
+    const statusLabel = req.status === 'approved'
+      ? `<span style="color:var(--green);font-size:0.7rem;">✔ 承認済</span>`
+      : req.status === 'rejected'
+        ? `<span style="color:var(--muted);font-size:0.7rem;">✖ 却下済</span>`
+        : '';
+
+    const actionHtml = isPending ? `
+      <button class="req-approve-btn" onclick="approveRequest('${req.requestId}')">承認</button>
+      <button class="req-reject-btn"  onclick="showRejectNote('${req.requestId}')">却下</button>
+      <div class="req-note-wrap" id="rejectNote_${req.requestId}">
+        <input class="req-note-input" type="text" placeholder="却下理由（任意）" id="noteInput_${req.requestId}">
+        <button class="req-note-send" onclick="rejectRequest('${req.requestId}')">送信</button>
+      </div>
+    ` : statusLabel;
+
+    const tr = document.createElement('tr');
+    if (isPending) tr.style.background = '#fffbf0';
+    tr.innerHTML = `
+      <td style="font-family:'DM Mono',monospace;font-size:0.75rem;white-space:nowrap;">${subLabel}</td>
+      <td><span class="req-type-badge ${typeClass}">${typeLabel}</span></td>
+      <td style="font-size:0.8rem;">
+        <div style="font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--muted);">${req.bookingId}</div>
+        <div>${req.bookingName} 様</div>
+      </td>
+      <td style="font-size:0.78rem;white-space:nowrap;">${origLabel}</td>
+      <td style="font-size:0.78rem;white-space:nowrap;">${wishHtml}</td>
+      <td style="font-size:0.78rem;color:var(--muted);max-width:160px;word-break:break-all;">${req.message || '—'}</td>
+      <td>${actionHtml}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('reqCount').textContent = `${displayed.length}件`;
+  document.getElementById('reqSubtitle').textContent = filter === 'pending'
+    ? `${pendingRequests.length}件が承認待ちです`
+    : `全${allRequests.length}件（未処理: ${pendingRequests.length}件）`;
+}
+
+function showRejectNote(requestId) {
+  const wrap = document.getElementById('rejectNote_' + requestId);
+  if (wrap) wrap.classList.toggle('open');
+}
+
+async function approveRequest(requestId) {
+  if (!confirm('この申請を承認しますか？\nお客様に確認メールが送信されます。')) return;
+  await doProcessRequest(requestId, 'approve', '');
+}
+
+async function rejectRequest(requestId) {
+  const input = document.getElementById('noteInput_' + requestId);
+  const note  = input ? input.value.trim() : '';
+  if (!confirm('この申請を却下しますか？\nお客様に却下メールが送信されます。')) return;
+  await doProcessRequest(requestId, 'reject', note);
+}
+
+async function doProcessRequest(requestId, decision, adminNote) {
+  try {
+    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'processRequest', requestId, decision, adminNote });
+    const res  = await fetch(GAS_URL + '?' + params);
+    const data = JSON.parse(await res.text());
+    if (data.success) {
+      // Update local arrays
+      const req = allRequests.find(r => r.requestId === requestId);
+      if (req) req.status = decision === 'approve' ? 'approved' : 'rejected';
+      pendingRequests = allRequests.filter(r => r.status === 'pending');
+      updateRequestBadge();
+      renderRequestModal();
+      // If approved change request, refresh bookings to reflect new date
+      if (decision === 'approve') refreshBookings();
+    } else {
+      alert('処理に失敗しました: ' + (data.error || '不明なエラー'));
+    }
+  } catch(e) {
+    alert('通信エラーが発生しました。再度お試しください。');
+    console.warn('processRequest error:', e);
+  }
 }
 
 // ── 初期化 ────────────────────────────────────────
