@@ -622,19 +622,25 @@ function parseAJChangeEmail(body) {
   try {
     // 予約番号: 【予約番号】：2602281866326
     const idMatch = body.match(/(?:【予約番号】|予約番号)[：:]\s*(\d+)/);
-    if (!idMatch) return null;
+    if (!idMatch) { Logger.log('AJ変更メール: 予約番号が見つかりません'); return null; }
     const reservationId = idMatch[1];
 
-    // 実施日: アクティビティ実施日：2026年04月04日
-    const dateMatch = body.match(/アクティビティ実施日[：:]\s*(\d{4})年(\d{1,2})月(\d{1,2})日/);
-    if (!dateMatch) return null;
+    // 実施日: 「アクティビティ実施日時：」or「アクティビティ実施日：」（時 の有無を許容）
+    // → 旧コードは「実施日：」しか対応していなかったため「実施日時：」で null を返していたバグを修正
+    const dateMatch = body.match(/アクティビティ実施日(?:時)?[：:]\s*(\d{4})年(\d{1,2})月(\d{1,2})日/)
+      // フォールバック: 本文先頭行「2026年04月04日：プラン名…」形式
+      || body.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日[：:]/m);
+    if (!dateMatch) { Logger.log('AJ変更メール(#' + reservationId + '): 実施日が見つかりません'); return null; }
     const date = dateMatch[1] + '-'
       + String(dateMatch[2]).padStart(2, '0') + '-'
       + String(dateMatch[3]).padStart(2, '0');
 
-    // 時刻: コース名：11:30コース
-    const timeMatch = body.match(/コース名[：:]\s*(\d{2}:\d{2})/);
+    // 時刻: 「コース名：11:30コース」形式
+    // フォールバック: 括弧内「（11:30）」形式（確定メールと同じ形式になった場合）
+    const timeMatch = body.match(/コース名[：:]\s*(\d{2}:\d{2})/)
+      || body.match(/[（(](\d{2}:\d{2})\s*[）)]/);
     const time = timeMatch ? timeMatch[1] : '00:00';
+    if (!timeMatch) Logger.log('AJ変更メール(#' + reservationId + '): 時刻が見つかりません（00:00 を使用）');
 
     // プラン名
     const planMatch = body.match(/プラン名[：:]\s*([^\n]+)/);
