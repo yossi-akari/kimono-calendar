@@ -367,23 +367,66 @@ function parsePlanType(planStr) {
 // =============================================================
 function getActivityJapanBookings() {
   try {
-    const today    = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-    const bookings = [];
+    const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
 
-    const threads = GmailApp.search(
+    // reservationId → { booking, receivedAt }
+    const originalMap = {};
+    const changeMap   = {};
+
+    // ① 確定予約通知メール
+    const newThreads = GmailApp.search(
       'from:reserve-system@activityjapan.com subject:確定予約通知', 0, 100
     );
-
-    for (const thread of threads) {
+    for (const thread of newThreads) {
       for (const message of thread.getMessages()) {
-        const body    = message.getPlainBody();
-        const booking = parseAJEmail(body);
-        if (booking && booking.date >= today) {
-          bookings.push(booking);
+        const booking = parseAJEmail(message.getPlainBody());
+        if (!booking) continue;
+        const prev = originalMap[booking.reservationId];
+        if (!prev || message.getDate() > prev.receivedAt) {
+          originalMap[booking.reservationId] = { booking, receivedAt: message.getDate() };
         }
       }
     }
 
+    // ② 予約内容変更通知メール
+    const changeThreads = GmailApp.search(
+      'subject:予約内容変更のお知らせ', 0, 100
+    );
+    for (const thread of changeThreads) {
+      for (const message of thread.getMessages()) {
+        const booking = parseAJChangeEmail(message.getPlainBody());
+        if (!booking) continue;
+        const prev = changeMap[booking.reservationId];
+        if (!prev || message.getDate() > prev.receivedAt) {
+          changeMap[booking.reservationId] = { booking, receivedAt: message.getDate() };
+        }
+      }
+    }
+
+    // マージ：変更メールがある場合は日時・内容を更新し、氏名等は元予約から引き継ぐ
+    const merged = {};
+    for (const [id, orig] of Object.entries(originalMap)) {
+      if (changeMap[id]) {
+        const changed = changeMap[id].booking;
+        merged[id] = {
+          ...changed,
+          name:      orig.booking.name,
+          email:     orig.booking.email,
+          tel:       orig.booking.tel,
+          createdAt: orig.booking.createdAt,
+          remarks:   changed.remarks || orig.booking.remarks,
+          bookingStatus: '変更済'
+        };
+      } else {
+        merged[id] = orig.booking;
+      }
+    }
+    // 確定メールが取得範囲外でも変更メールだけある場合
+    for (const [id, ch] of Object.entries(changeMap)) {
+      if (!merged[id]) merged[id] = ch.booking;
+    }
+
+    const bookings = Object.values(merged).filter(b => b.date >= today);
     Logger.log('ActivityJapan(Gmail): ' + bookings.length + '件取得');
     return bookings;
 
@@ -484,6 +527,77 @@ function parseAJEmail(body) {
   } catch(e) { return null; }
 }
 
+// ActivityJapan 予約内容変更メールをパース
+// 件名：【アクティビティジャパン】予約内容変更のお知らせ
+function parseAJChangeEmail(body) {
+  try {
+    // 予約番号: 【予約番号】：2602281866326
+    const idMatch = body.match(/(?:【予約番号】|予約番号)[：:]\s*(\d+)/);
+    if (!idMatch) return null;
+    const reservationId = idMatch[1];
+
+    // 実施日: アクティビティ実施日：2026年04月04日
+    const dateMatch = body.match(/アクティビティ実施日[：:]\s*(\d{4})年(\d{1,2})月(\d{1,2})日/);
+    if (!dateMatch) return null;
+    const date = dateMatch[1] + '-'
+      + String(dateMatch[2]).padStart(2, '0') + '-'
+      + String(dateMatch[3]).padStart(2, '0');
+
+    // 時刻: コース名：11:30コース
+    const timeMatch = body.match(/コース名[：:]\s*(\d{2}:\d{2})/);
+    const time = timeMatch ? timeMatch[1] : '00:00';
+
+    // プラン名
+    const planMatch = body.match(/プラン名[：:]\s*([^\n]+)/);
+    const planRaw = planMatch ? planMatch[1].trim() : '';
+
+    // 申込数セクション解析（申込数 ～ 合計料金 の間）
+    const PEOPLE_KW = ['大人', '女性', '男性', 'カップル', '小人'];
+    const peopleItems = [];
+    const optionsList = [];
+
+    const secStart = body.indexOf('申込数');
+    const secEnd   = body.indexOf('合計料金');
+    if (secStart >= 0 && secEnd > secStart) {
+      const section = body.substring(secStart, secEnd);
+      // 「カップル1組」「男性ヘアセット1人」のような形式をマッチ
+      const lineRegex = /([^\s\u3000\n\r][^\n\r]*?)(\d+)(人|名|組)/g;
+      let m;
+      while ((m = lineRegex.exec(section)) !== null) {
+        const rawName = m[1].replace(/[\s\u3000　]+/g, '').replace(/申込数[：:]?/, '').trim();
+        const count   = m[2];
+        if (!rawName) continue;
+        const kw = PEOPLE_KW.find(k => {
+          if (!rawName.startsWith(k)) return false;
+          const next = rawName.slice(k.length);
+          return !next || !/^[ぁ-んァ-ヶー一-龯々]/.test(next);
+        });
+        if (kw) {
+          peopleItems.push(`${kw}${count}名`);
+        } else {
+          optionsList.push({ name: rawName + '×' + count, price: 0 });
+        }
+      }
+    }
+
+    const peopleStr = peopleItems.length > 0 ? peopleItems.join('・') : '1名';
+
+    // 合計料金
+    const amtMatch = body.match(/合計料金[^：:0-9]*[：:]\s*([\d,]+)/);
+    const total = amtMatch ? parseInt(amtMatch[1].replace(/,/g, '')) : 0;
+
+    return {
+      id: 'aj_' + reservationId, source: 'AJ',
+      date, time, name: '',   // 氏名は確定予約メールから引き継ぐ
+      plan: parsePlanType(planRaw),
+      people: peopleStr,
+      options: optionsList, total, email: '', tel: '', remarks: '',
+      createdAt: new Date().toISOString(),
+      reservationId, bookingStatus: '変更済'
+    };
+  } catch(e) { return null; }
+}
+
 // =============================================================
 // ── 手動予約（スプレッドシート保存） ──────────────────────────────
 // =============================================================
@@ -517,7 +631,13 @@ function getManualSheetBookings() {
     if (data.length <= 1) return [];
     const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
     return data.slice(1)
-      .filter(row => row[0] && String(row[1]) >= today)
+      .filter(row => {
+        if (!row[0]) return false;
+        const d = row[1] instanceof Date
+          ? Utilities.formatDate(row[1], 'Asia/Tokyo', 'yyyy-MM-dd')
+          : String(row[1]);
+        return d >= today;
+      })
       .map(row => {
         const src = String(row[5]) === 'ウェブサイト' && String(row[0]).startsWith('HP-') ? 'WEB' : 'MANUAL';
         return {
