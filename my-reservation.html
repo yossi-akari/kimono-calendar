@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>予約確認・変更 | きものレンタル あかり</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200;300;400&family=Noto+Sans+JP:wght@300;400&family=DM+Mono:wght@300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:    #1c1a18;
+  --paper:  #faf8f4;
+  --cream:  #f2ede4;
+  --line:   #e0d9ce;
+  --muted:  #9a9080;
+  --accent: #c83535;
+  --gold:   #b8882a;
+  --green:  #4a6741;
+  --white:  #ffffff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--paper); color: var(--ink); font-family: 'Noto Sans JP', sans-serif; font-weight: 300; min-height: 100vh; }
+
+.hero { background: var(--ink); color: var(--paper); text-align: center; padding: 56px 24px 44px; position: relative; overflow: hidden; }
+.hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 20% 50%, rgba(139,58,58,0.15) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(184,136,42,0.1) 0%, transparent 60%); pointer-events: none; }
+.hero-eyebrow { font-family: 'DM Mono', monospace; font-size: 0.68rem; letter-spacing: 0.3em; color: var(--gold); margin-bottom: 12px; }
+.hero h1 { font-family: 'Noto Serif JP', serif; font-weight: 200; font-size: clamp(1.6rem, 5vw, 2.4rem); letter-spacing: 0.2em; }
+.hero p { font-size: 0.82rem; color: rgba(250,248,244,0.55); letter-spacing: 0.06em; margin-top: 10px; }
+.hero-line { width: 1px; height: 32px; background: linear-gradient(to bottom, transparent, var(--gold), transparent); margin: 22px auto 0; }
+
+.main { max-width: 620px; margin: 0 auto; padding: 48px 24px 80px; }
+.section-label { font-family: 'DM Mono', monospace; font-size: 0.68rem; letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase; margin-bottom: 18px; }
+
+/* フォーム */
+.field { margin-bottom: 16px; }
+label { display: block; font-size: 0.72rem; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+input[type="text"], input[type="email"], input[type="date"], select, textarea {
+  width: 100%; border: 1px solid var(--line); border-radius: 1px;
+  padding: 11px 14px; font-family: 'Noto Sans JP', sans-serif;
+  font-size: 0.88rem; font-weight: 300; color: var(--ink);
+  background: var(--white); outline: none; transition: border-color 0.2s;
+  -webkit-appearance: none;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 80px; }
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M6 8L0 0h12z' fill='%239a9080'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px;
+}
+
+.submit-btn {
+  width: 100%; background: var(--ink); color: var(--paper); border: none;
+  padding: 16px; font-family: 'Noto Serif JP', serif; font-size: 0.9rem;
+  letter-spacing: 0.2em; cursor: pointer; border-radius: 1px; transition: opacity 0.2s;
+}
+.submit-btn:hover { opacity: 0.85; }
+.submit-btn:disabled { opacity: 0.45; cursor: default; }
+.btn-ghost {
+  background: transparent !important; color: var(--ink) !important;
+  border: 1px solid var(--line) !important; font-family: 'Noto Sans JP', sans-serif !important;
+  letter-spacing: 0.05em !important; font-size: 0.85rem !important;
+}
+.btn-row { display: flex; gap: 12px; }
+.btn-cancel {
+  width: 100%; background: none; border: 1px solid var(--accent); color: var(--accent);
+  padding: 14px; font-family: 'Noto Sans JP', sans-serif; font-size: 0.88rem;
+  letter-spacing: 0.1em; cursor: pointer; border-radius: 1px; transition: all 0.2s;
+}
+.btn-cancel:hover { background: var(--accent); color: white; }
+
+/* 予約詳細カード */
+.booking-card {
+  border: 1px solid var(--line); border-radius: 2px; padding: 24px;
+  background: var(--white); margin-bottom: 24px;
+}
+.detail-row { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 0.84rem; }
+.detail-row:last-child { border-bottom: none; }
+.detail-label { color: var(--muted); min-width: 80px; flex-shrink: 0; }
+.detail-value { flex: 1; }
+
+/* ステータスバナー */
+.pending-banner {
+  background: #fffbe6; border: 1px solid #e8d88a; border-radius: 1px;
+  padding: 14px 18px; font-size: 0.82rem; color: #7a6a00; line-height: 1.8; margin-bottom: 24px;
+}
+.pending-banner strong { display: block; margin-bottom: 4px; }
+
+/* 区切り */
+.divider { height: 1px; background: var(--line); margin: 32px 0; }
+.notice { background: var(--cream); border-radius: 1px; padding: 14px 18px; font-size: 0.78rem; color: var(--muted); line-height: 1.9; margin-bottom: 20px; }
+
+/* 成功画面 */
+.success-box { text-align: center; padding: 40px 0; }
+.success-icon { font-size: 2.4rem; margin-bottom: 16px; }
+.success-title { font-family: 'Noto Serif JP', serif; font-weight: 300; font-size: 1.3rem; letter-spacing: 0.1em; margin-bottom: 10px; }
+.success-text { font-size: 0.85rem; color: var(--muted); line-height: 2; }
+
+/* エラー */
+.error-msg { font-size: 0.78rem; color: var(--accent); margin-top: 8px; }
+
+/* 画面切替 */
+.screen { display: none; }
+.screen.active { display: block; }
+
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+.screen.active { animation: fadeUp 0.3s ease both; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="hero-eyebrow">RESERVATION</div>
+  <h1>予約確認・変更</h1>
+  <p>きものレンタル あかり</p>
+  <div class="hero-line"></div>
+</div>
+
+<div class="main">
+
+  <!-- ① 照会フォーム -->
+  <div class="screen active" id="screenLookup">
+    <div class="section-label">予約を確認する</div>
+    <div class="notice">
+      予約確認メールに記載の予約番号とメールアドレスを入力してください。<br>
+      ※ ウェブサイトから送信した予約（HP-から始まる番号）のみ確認できます。
+    </div>
+    <div class="field">
+      <label>予約番号</label>
+      <input type="text" id="inputId" placeholder="HP-1234567890123" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>メールアドレス</label>
+      <input type="email" id="inputEmail" placeholder="example@email.com" autocomplete="email">
+    </div>
+    <div id="lookupError" class="error-msg" style="margin-bottom:12px;"></div>
+    <button class="submit-btn" id="lookupBtn" onclick="lookupBooking()">予約を確認する</button>
+  </div>
+
+  <!-- ② 予約詳細 + 操作選択 -->
+  <div class="screen" id="screenDetail">
+    <div class="section-label">ご予約内容</div>
+    <div id="pendingBanner"></div>
+    <div class="booking-card" id="detailCard"></div>
+    <div id="actionButtons"></div>
+  </div>
+
+  <!-- ③a 変更申請フォーム -->
+  <div class="screen" id="screenChange">
+    <div class="section-label">日時変更を申請する</div>
+    <div class="notice">
+      ご希望の新しい来店日時をご入力ください。<br>
+      店舗が確認後、メールにてご連絡いたします（承認まで数日かかる場合があります）。
+    </div>
+    <div class="field">
+      <label>新しい来店日</label>
+      <input type="date" id="newDate" onchange="onNewDateChange()">
+      <div id="newDateError" style="display:none;font-size:0.72rem;color:var(--accent);margin-top:5px;">水曜日は定休日のため選択できません</div>
+    </div>
+    <div class="field">
+      <label>新しい来店時間</label>
+      <select id="newTime">
+        <option value="">選択してください</option>
+        <option>09:00</option><option>09:30</option>
+        <option>10:00</option><option>10:30</option>
+        <option>11:00</option><option>11:30</option>
+        <option>12:00</option><option>12:30</option>
+        <option>13:00</option><option>13:30</option>
+        <option>14:00</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>ご要望・メッセージ（任意）</label>
+      <textarea id="changeMessage" placeholder="変更理由やご要望があればご記入ください"></textarea>
+    </div>
+    <div id="changeError" class="error-msg" style="margin-bottom:12px;"></div>
+    <div class="btn-row">
+      <button class="submit-btn btn-ghost" onclick="showDetail()" style="flex:1;">← 戻る</button>
+      <button class="submit-btn" id="changeSubmitBtn" onclick="submitChange()" style="flex:2;">変更申請を送る</button>
+    </div>
+  </div>
+
+  <!-- ③b キャンセル申請フォーム -->
+  <div class="screen" id="screenCancel">
+    <div class="section-label">予約のキャンセルを申請する</div>
+    <div class="notice">
+      キャンセルは店舗の確認後に確定となります。<br>
+      メールにてご連絡いたします（確定まで数日かかる場合があります）。
+    </div>
+    <div class="booking-card" id="cancelDetailCard" style="margin-bottom:20px;"></div>
+    <div class="field">
+      <label>キャンセル理由（任意）</label>
+      <textarea id="cancelMessage" placeholder="ご理由があればご記入ください"></textarea>
+    </div>
+    <div id="cancelError" class="error-msg" style="margin-bottom:12px;"></div>
+    <div class="btn-row">
+      <button class="submit-btn btn-ghost" onclick="showDetail()" style="flex:1;">← 戻る</button>
+      <button class="btn-cancel" id="cancelSubmitBtn" onclick="submitCancel()" style="flex:2;">キャンセルを申請する</button>
+    </div>
+  </div>
+
+  <!-- ④ 完了画面 -->
+  <div class="screen" id="screenDone">
+    <div class="success-box">
+      <div class="success-icon">✉</div>
+      <div class="success-title" id="doneTitle"></div>
+      <p class="success-text" id="doneText"></p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const GAS_URL    = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
+const ACCESS_KEY = 'AkariKimono2026_mK9x';
+const DAY_JA     = ['日','月','火','水','木','金','土'];
+
+let currentBooking = null;
+
+// URLパラメータから予約番号を自動入力
+(function() {
+  const params = new URLSearchParams(location.search);
+  const id = params.get('id');
+  if (id) {
+    document.getElementById('inputId').value = id;
+    document.getElementById('inputEmail').focus();
+  }
+})();
+
+// ── 画面切替 ──────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── 日付フォーマット ──────────────────────────────
+function fmtDate(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DAY_JA[d.getDay()]}）`;
+}
+
+// ── 予約照会 ──────────────────────────────────────
+async function lookupBooking() {
+  const id    = document.getElementById('inputId').value.trim();
+  const email = document.getElementById('inputEmail').value.trim();
+  const errEl = document.getElementById('lookupError');
+  errEl.textContent = '';
+  if (!id || !email) { errEl.textContent = '予約番号とメールアドレスを入力してください'; return; }
+
+  const btn = document.getElementById('lookupBtn');
+  btn.disabled = true; btn.textContent = '確認中...';
+  try {
+    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'getBookingForCustomer', id, email });
+    const res  = await fetch(GAS_URL + '?' + params.toString());
+    const data = await res.json();
+    if (!data.success) { errEl.textContent = data.error || '予約が見つかりません'; return; }
+    currentBooking = data.booking;
+    renderDetail(data.booking, data.pendingRequest);
+    showScreen('screenDetail');
+  } catch(e) {
+    errEl.textContent = 'エラーが発生しました。しばらくしてから再度お試しください。';
+  } finally {
+    btn.disabled = false; btn.textContent = '予約を確認する';
+  }
+}
+
+// ── 詳細画面レンダリング ──────────────────────────
+function renderDetail(b, pending) {
+  const optStr   = b.options && b.options.length > 0
+    ? b.options.map(o => typeof o === 'string' ? o : o.name).join('、') : 'なし';
+  const totalStr = b.total > 0 ? `¥${b.total.toLocaleString()}（税込）` : '来店時お見積もり';
+
+  document.getElementById('detailCard').innerHTML = `
+    <div class="detail-row"><span class="detail-label">予約番号</span><span class="detail-value" style="font-family:'DM Mono',monospace;font-size:0.82em;">${b.reservationId}</span></div>
+    <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${fmtDate(b.date)}　${b.time}</span></div>
+    <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${b.plan}</span></div>
+    <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${b.people}</span></div>
+    <div class="detail-row"><span class="detail-label">オプション</span><span class="detail-value">${optStr}</span></div>
+    <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);font-family:'DM Mono',monospace;">${totalStr}</span></div>
+    ${b.remarks ? `<div class="detail-row"><span class="detail-label">備考</span><span class="detail-value">${b.remarks}</span></div>` : ''}
+  `;
+
+  // 未処理申請がある場合のバナー
+  const bannerEl = document.getElementById('pendingBanner');
+  if (pending) {
+    const typeLabel = pending.type === 'cancel' ? 'キャンセル' : '日時変更';
+    const reqDate   = pending.newDate ? `（希望日：${fmtDate(pending.newDate)} ${pending.newTime}）` : '';
+    bannerEl.innerHTML = `<div class="pending-banner"><strong>⏳ ${typeLabel}申請中</strong>${typeLabel}のご申請を受け付けました${reqDate}。店舗の確認後にメールにてご連絡します。</div>`;
+  } else {
+    bannerEl.innerHTML = '';
+  }
+
+  // アクションボタン
+  const actionEl = document.getElementById('actionButtons');
+  const pastDate = b.date < new Date().toISOString().slice(0, 10);
+  if (pastDate) {
+    actionEl.innerHTML = '<p style="text-align:center;font-size:0.82rem;color:var(--muted);padding:20px 0;">来店日が過ぎた予約は変更できません。</p>';
+  } else if (pending) {
+    actionEl.innerHTML = '<p style="text-align:center;font-size:0.82rem;color:var(--muted);padding:20px 0;">現在申請中のリクエストがあります。店舗よりご連絡をお待ちください。</p>';
+  } else {
+    actionEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <button class="submit-btn" onclick="showChange()">日時の変更を申請する</button>
+        <button class="btn-cancel" onclick="showCancel()">予約をキャンセルする</button>
+      </div>
+    `;
+  }
+}
+
+function showDetail() { showScreen('screenDetail'); }
+
+// ── 変更申請画面 ──────────────────────────────────
+function showChange() {
+  document.getElementById('newDate').min = new Date().toISOString().split('T')[0];
+  document.getElementById('newDate').value = '';
+  document.getElementById('newTime').value = '';
+  document.getElementById('changeMessage').value = '';
+  document.getElementById('changeError').textContent = '';
+  showScreen('screenChange');
+}
+
+function onNewDateChange() {
+  const val = document.getElementById('newDate').value;
+  const errEl = document.getElementById('newDateError');
+  if (val) {
+    const day = new Date(val + 'T00:00:00').getDay();
+    if (day === 3) {
+      errEl.style.display = 'block';
+      document.getElementById('newDate').value = '';
+      return;
+    }
+  }
+  errEl.style.display = 'none';
+}
+
+async function submitChange() {
+  const b       = currentBooking;
+  const newDate = document.getElementById('newDate').value;
+  const newTime = document.getElementById('newTime').value;
+  const message = document.getElementById('changeMessage').value.trim();
+  const errEl   = document.getElementById('changeError');
+  errEl.textContent = '';
+  if (!newDate || !newTime) { errEl.textContent = '新しい来店日時を選択してください'; return; }
+  if (newDate === b.date && newTime === b.time) { errEl.textContent = '現在と同じ日時です。別の日時を選択してください'; return; }
+
+  const btn = document.getElementById('changeSubmitBtn');
+  btn.disabled = true; btn.textContent = '送信中...';
+  try {
+    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'submitRequest', id: b.id, email: b.email, type: 'change', newDate, newTime, message });
+    const res  = await fetch(GAS_URL + '?' + params.toString());
+    const data = await res.json();
+    if (!data.success) { errEl.textContent = data.error || '送信に失敗しました'; return; }
+    showDone('change');
+  } catch(e) {
+    errEl.textContent = 'エラーが発生しました。お電話（076-201-8119）にてご連絡ください。';
+  } finally {
+    btn.disabled = false; btn.textContent = '変更申請を送る';
+  }
+}
+
+// ── キャンセル申請画面 ────────────────────────────
+function showCancel() {
+  const b = currentBooking;
+  const optStr   = b.options && b.options.length > 0
+    ? b.options.map(o => typeof o === 'string' ? o : o.name).join('、') : 'なし';
+  const totalStr = b.total > 0 ? `¥${b.total.toLocaleString()}（税込）` : '来店時お見積もり';
+  document.getElementById('cancelDetailCard').innerHTML = `
+    <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${fmtDate(b.date)}　${b.time}</span></div>
+    <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${b.plan}</span></div>
+    <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${b.people}</span></div>
+    <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);">${totalStr}</span></div>
+  `;
+  document.getElementById('cancelMessage').value = '';
+  document.getElementById('cancelError').textContent = '';
+  showScreen('screenCancel');
+}
+
+async function submitCancel() {
+  const b       = currentBooking;
+  const message = document.getElementById('cancelMessage').value.trim();
+  const errEl   = document.getElementById('cancelError');
+  errEl.textContent = '';
+
+  const btn = document.getElementById('cancelSubmitBtn');
+  btn.disabled = true; btn.textContent = '送信中...';
+  try {
+    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'submitRequest', id: b.id, email: b.email, type: 'cancel', message });
+    const res  = await fetch(GAS_URL + '?' + params.toString());
+    const data = await res.json();
+    if (!data.success) { errEl.textContent = data.error || '送信に失敗しました'; return; }
+    showDone('cancel');
+  } catch(e) {
+    errEl.textContent = 'エラーが発生しました。お電話（076-201-8119）にてご連絡ください。';
+  } finally {
+    btn.disabled = false; btn.textContent = 'キャンセルを申請する';
+  }
+}
+
+// ── 完了画面 ──────────────────────────────────────
+function showDone(type) {
+  if (type === 'change') {
+    document.getElementById('doneTitle').textContent = '変更申請を受け付けました';
+    document.getElementById('doneText').innerHTML =
+      '店舗にて内容を確認いたします。<br>確定しましたらメールにてご連絡します。<br><br>ご不明な点はお電話にてお問い合わせください。<br>きものレンタル あかり　TEL：076-201-8119';
+  } else {
+    document.getElementById('doneTitle').textContent = 'キャンセル申請を受け付けました';
+    document.getElementById('doneText').innerHTML =
+      '店舗にて内容を確認いたします。<br>確定しましたらメールにてご連絡します。<br><br>ご不明な点はお電話にてお問い合わせください。<br>きものレンタル あかり　TEL：076-201-8119';
+  }
+  showScreen('screenDone');
+}
+</script>
+</body>
+</html>
