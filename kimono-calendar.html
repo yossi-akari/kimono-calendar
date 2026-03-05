@@ -369,6 +369,36 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .avail-remain { background: #27ae60; color: #fff; }
 .cal-cell.day-closed { background: #fff5f5 !important; opacity: 0.75; }
 
+/* スロット管理パネル */
+.slot-panel { margin-top: 14px; border-top: 1px solid #ede8e4; padding-top: 10px; }
+.slot-panel-title {
+  font-size: 0.72rem; font-weight: 700; color: var(--muted);
+  letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px;
+}
+.slot-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 0; border-bottom: 1px solid #f5f0ec;
+}
+.slot-row:last-child { border-bottom: none; }
+.slot-time {
+  font-size: 0.78rem; font-family: 'DM Mono', monospace;
+  width: 42px; flex-shrink: 0; color: #555;
+}
+.slot-status { flex: 1; font-size: 0.76rem; }
+.slot-free   { color: #27ae60; }
+.slot-taken  { color: #888; }
+.slot-blocked-lbl { color: #c83535; font-weight: 700; }
+.slot-block-btn {
+  font-size: 0.68rem; padding: 2px 7px; border-radius: 4px;
+  border: 1px solid; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  transition: background 0.15s;
+}
+.slot-block-btn.do-block   { background:#fff; border-color:#c83535; color:#c83535; }
+.slot-block-btn.do-block:hover { background:#fde8e0; }
+.slot-block-btn.do-unblock { background:#c83535; border-color:#c83535; color:#fff; }
+.slot-block-btn.do-unblock:hover { background:#a02020; }
+.slot-block-btn:disabled   { opacity:0.35; cursor:not-allowed; }
+
 /* サイドパネル印刷ボタン */
 .side-print-btn {
   background: none; border: 1px solid var(--line); color: var(--muted);
@@ -588,6 +618,11 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
         </button>
       </div>
     </div>
+    <!-- スロット管理パネル（日付選択後に表示） -->
+    <div class="slot-panel" id="slotPanel" style="display:none;">
+      <div class="slot-panel-title">スロット管理</div>
+      <div id="slotGrid"><!-- JS で描画 --></div>
+    </div>
     <div class="side-bookings" id="sideBookings">
       <div class="side-empty">日付をクリックして<br>予約を確認</div>
     </div>
@@ -763,6 +798,10 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 // ★ Google Apps ScriptのデプロイURL（GAS側のACCESS_KEYと一致させてください）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
 const ACCESS_KEY = 'AkariKimono2026_mK9x';
+
+// スロットブロック管理
+let currentBlockedSlots = new Set(); // 選択中日付のブロック済み時間帯
+let slotPanelLoading = false;
 
 // 自動更新
 let autoRefreshTimer = null;
@@ -1137,7 +1176,12 @@ function renderCalendar() {
       + (dow === 0 ? ' sunday' : '')
       + (dow === 6 ? ' saturday' : '')
       + (isClosed ? ' day-closed' : '');
-    cell.onclick = () => { selectedDate = dateStr; renderCalendar(); renderSidePanel(); };
+    cell.onclick = () => {
+      selectedDate = dateStr;
+      currentBlockedSlots = new Set(); // 日付切替時にリセット
+      renderCalendar();
+      renderSidePanel();
+    };
 
     // 日付
     const dateDiv = document.createElement('div');
@@ -1241,6 +1285,100 @@ function renderSidePanel() {
     card.onclick = () => openDetail(b.id);
     container.appendChild(card);
   });
+
+  // スロット管理パネルを非同期で描画
+  renderSlotPanel();
+}
+
+// ── スロット管理パネル ────────────────────────────
+async function renderSlotPanel() {
+  const panel = document.getElementById('slotPanel');
+  const grid  = document.getElementById('slotGrid');
+  if (!panel || !grid || !selectedDate) return;
+  panel.style.display = '';
+  grid.innerHTML = '<div style="font-size:0.72rem;color:var(--muted);padding:4px 0;">読み込み中…</div>';
+
+  // ブロック済みスロットをGASから取得
+  try {
+    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'getBlockedSlots', date: selectedDate });
+    const res  = await fetch(GAS_URL + '?' + params);
+    const data = await res.json();
+    if (data.success) {
+      currentBlockedSlots = new Set((data.blocked || []).map(b => b.time));
+    }
+  } catch(e) {
+    currentBlockedSlots = new Set();
+  }
+
+  // この日の予約を時間帯ごとにまとめる
+  const dayBookings = bookings.filter(b => b.date === selectedDate);
+  const bookedMap   = {};
+  dayBookings.forEach(b => {
+    if (!bookedMap[b.time]) bookedMap[b.time] = [];
+    bookedMap[b.time].push(b.name);
+  });
+
+  grid.innerHTML = '';
+  ALL_TIMES.forEach(t => {
+    const isBlocked = currentBlockedSlots.has(t);
+    const names     = bookedMap[t] || [];
+    const isBooked  = names.length > 0;
+
+    let statusHtml;
+    if (isBlocked) {
+      statusHtml = '<span class="slot-blocked-lbl">受付不可</span>';
+    } else if (isBooked) {
+      statusHtml = `<span class="slot-taken">${names.map(n => n + ' 様').join('・')}</span>`;
+    } else {
+      statusHtml = '<span class="slot-free">空き</span>';
+    }
+
+    const btnClass = isBlocked ? 'do-unblock' : 'do-block';
+    const btnLabel = isBlocked ? 'ブロック解除' : 'ブロック';
+    // 予約済みスロットはブロック操作不可（既に埋まっているため）
+    const btnDisabled = (isBooked && !isBlocked) ? 'disabled' : '';
+
+    const row = document.createElement('div');
+    row.className = 'slot-row';
+    row.innerHTML = `
+      <span class="slot-time">${t}</span>
+      <span class="slot-status">${statusHtml}</span>
+      <button class="slot-block-btn ${btnClass}"
+        onclick="toggleSlotBlock('${t}')" ${btnDisabled}>${btnLabel}</button>
+    `;
+    grid.appendChild(row);
+  });
+}
+
+async function toggleSlotBlock(time) {
+  const isBlocked = currentBlockedSlots.has(time);
+  const action    = isBlocked ? 'unblockSlot' : 'blockSlot';
+  const msg       = isBlocked
+    ? `${time} のブロックを解除しますか？\n（顧客からの予約を再び受け付けます）`
+    : `${time} を「受付不可」にしますか？\n（顧客からの予約を受け付けなくなります）`;
+  if (!confirm(msg)) return;
+
+  try {
+    const body = JSON.stringify({
+      key: ACCESS_KEY, action, date: selectedDate, time,
+      reason: isBlocked ? '' : '管理者ブロック'
+    });
+    const res  = await fetch(GAS_URL, { method: 'POST', body });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || '操作に失敗しました');
+
+    if (isBlocked) {
+      currentBlockedSlots.delete(time);
+    } else {
+      currentBlockedSlots.add(time);
+    }
+    // パネルを再描画（GAS再取得なし、ローカル状態を反映）
+    await renderSlotPanel();
+    // カレンダーの残スロット数も更新
+    renderCalendar();
+  } catch(e) {
+    alert('操作に失敗しました: ' + e.message);
+  }
 }
 
 // ── 詳細モーダル ──────────────────────────────────

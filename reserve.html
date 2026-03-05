@@ -361,22 +361,26 @@ async function fetchSlotAvailability(date) {
 }
 
 function updateTimeOptions() {
-  const select = document.getElementById('visitTime');
-  const requested = people.female + people.male + people.child;
+  const select   = document.getElementById('visitTime');
   const currentVal = select.value;
   [...select.options].forEach(opt => {
     if (!opt.value) return;
     const slot = slotAvailability[opt.value];
     if (!slot) { opt.disabled = false; opt.textContent = opt.value; return; }
-    const canBook = slot.remaining >= Math.max(requested, 1);
-    opt.disabled = !canBook;
-    opt.textContent = slot.remaining === 0
-      ? `${opt.value}　満員`
-      : slot.remaining < 2
-        ? `${opt.value}　残り${slot.remaining}名`
-        : opt.value;
+    if (slot.blocked) {
+      // 管理者がブロック → 「受付不可」
+      opt.disabled = true;
+      opt.textContent = `${opt.value}　受付不可`;
+    } else if (slot.remaining <= 0) {
+      // 予約済み
+      opt.disabled = true;
+      opt.textContent = `${opt.value}　予約済`;
+    } else {
+      opt.disabled = false;
+      opt.textContent = opt.value;
+    }
   });
-  // 選択中の時間が満員になった場合はリセット
+  // 選択中の時間が不可になった場合はリセット
   if (currentVal && slotAvailability[currentVal] && !slotAvailability[currentVal].remaining) {
     select.value = '';
   }

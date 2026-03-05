@@ -121,22 +121,38 @@ function doGet(e) {
       let gasBookings = getCachedBookings() || getRawBookings();
       const cancelled = getCancelledIds();
       const manualBookings = getManualSheetBookings();
+      const allBlocked = getAllBlockedSlotsMap(); // { date: Set<time> } ブロック済み一括取得
       const result = {};
       for (let d = 1; d <= daysInMonth; d++) {
         const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
         const ds = allSettings[dateStr] || {};
         const closed = ds.closed === true;
-        // 管理者が上限を設定していればその値、なければ全スロット数
         const limit = ds.limit != null ? ds.limit : totalSlots;
-        // 占有スロット数 = その日に予約が入っている時間帯の種類数（同時間に複数予約でも1カウント）
+        // 予約済み時間帯 + ブロック済み時間帯 の合計占有スロット数
         const bookedForDate = [
           ...gasBookings.filter(b => b.date === dateStr && !cancelled.has(b.reservationId)),
           ...manualBookings.filter(b => b.date === dateStr)
         ];
-        const occupiedSlots = new Set(bookedForDate.map(b => b.time)).size;
+        const blockedForDate = allBlocked[dateStr] || new Set();
+        const occupiedSet = new Set([
+          ...bookedForDate.map(b => b.time),
+          ...blockedForDate
+        ]);
+        const occupiedSlots = occupiedSet.size;
         result[dateStr] = { closed, limit, available: Math.max(0, limit - occupiedSlots) };
       }
       output.setContent(JSON.stringify({ success: true, availability: result }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
+  // ブロック済みスロット一覧取得（管理者サイドパネル用）
+  if (action === 'getBlockedSlots') {
+    try {
+      const date = e.parameter.date;
+      if (!date) throw new Error('date required');
+      output.setContent(JSON.stringify({ success: true, blocked: getBlockedSlotsList(date) }));
     } catch(err) {
       output.setContent(JSON.stringify({ success: false, error: err.message }));
     }
@@ -753,6 +769,69 @@ function deleteManualFromSheet(id) {
 }
 
 // =============================================================
+// ── スロットブロック管理 ───────────────────────────────────────
+// =============================================================
+function getBlockedSlotsSheet() {
+  const ss = getManualSheet().getParent();
+  let sheet = ss.getSheetByName('スロットブロック');
+  if (!sheet) {
+    sheet = ss.insertSheet('スロットブロック');
+    sheet.appendRow(['date', 'time', 'reason']);
+  }
+  return sheet;
+}
+
+// 指定日のブロック済みスロット一覧
+function getBlockedSlotsList(date) {
+  const sheet = getBlockedSlotsSheet();
+  const data  = sheet.getDataRange().getValues();
+  if (data.length <= 1) return [];
+  return data.slice(1)
+    .filter(row => String(row[0]) === date)
+    .map(row => ({ time: String(row[1]), reason: String(row[2] || '') }));
+}
+
+// 月次集計用: 全日のブロック済みスロットをマップで返す { date: Set<time> }
+function getAllBlockedSlotsMap() {
+  const sheet = getBlockedSlotsSheet();
+  const data  = sheet.getDataRange().getValues();
+  if (data.length <= 1) return {};
+  const result = {};
+  data.slice(1).forEach(row => {
+    const date = String(row[0]);
+    const time = String(row[1]);
+    if (!result[date]) result[date] = new Set();
+    result[date].add(time);
+  });
+  return result;
+}
+
+// スロットをブロック（既存なら reason を更新）
+function blockSlotInSheet(date, time, reason) {
+  const sheet = getBlockedSlotsSheet();
+  const data  = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === date && String(data[i][1]) === time) {
+      sheet.getRange(i + 1, 3).setValue(reason || '');
+      return;
+    }
+  }
+  sheet.appendRow([date, time, reason || '']);
+}
+
+// スロットブロックを解除
+function unblockSlotInSheet(date, time) {
+  const sheet = getBlockedSlotsSheet();
+  const data  = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === date && String(data[i][1]) === time) {
+      sheet.deleteRow(i + 1);
+      return;
+    }
+  }
+}
+
+// =============================================================
 // ── 設定シート管理 ────────────────────────────────────────────
 // =============================================================
 function getSettingsSheet() {
@@ -837,8 +916,10 @@ function getAvailabilityForDate(date) {
       ...gasBookings.filter(b => b.date === date && !cancelled.has(b.reservationId)),
       ...getManualSheetBookings().filter(b => b.date === date)
     ];
-    // 占有スロット数 = 予約が入っている時間帯の種類数
-    occupiedSlots = new Set(bookedForDate.map(b => b.time)).size;
+    // ブロック済みスロットも「占有」として加算
+    const blockedTimes = new Set(getBlockedSlotsList(date).map(b => b.time));
+    const occupiedSet = new Set([...bookedForDate.map(b => b.time), ...blockedTimes]);
+    occupiedSlots = occupiedSet.size;
   } catch(e) {
     Logger.log('予約カウントエラー: ' + e.message);
   }
@@ -867,6 +948,14 @@ function doPost(e) {
       output.setContent(JSON.stringify({ success: true }));
     } else if (data.action === 'delete') {
       deleteManualFromSheet(data.id);
+      output.setContent(JSON.stringify({ success: true }));
+    } else if (data.action === 'blockSlot') {
+      if (!data.date || !data.time) throw new Error('date と time が必要です');
+      blockSlotInSheet(data.date, data.time, data.reason || '管理者ブロック');
+      output.setContent(JSON.stringify({ success: true }));
+    } else if (data.action === 'unblockSlot') {
+      if (!data.date || !data.time) throw new Error('date と time が必要です');
+      unblockSlotInSheet(data.date, data.time);
       output.setContent(JSON.stringify({ success: true }));
     } else {
       output.setContent(JSON.stringify({ success: false, error: 'Unknown action' }));
@@ -1018,16 +1107,29 @@ function parsePeopleCount(peopleStr) {
 
 // 指定日の全スロットの空き状況を返す
 function getSlotAvailability(date) {
-  const cached   = getCachedBookings() || [];
-  const manual   = getManualSheetBookings();
+  const cached    = getCachedBookings() || [];
+  const manual    = getManualSheetBookings();
   const cancelled = getCancelledIds();
   const allForDate = [...cached, ...manual].filter(b =>
     b.date === date && !cancelled.has(b.reservationId)
   );
+  // ブロック済み時間帯を取得
+  const blockedList  = getBlockedSlotsList(date);
+  const blockedTimes = new Set(blockedList.map(b => b.time));
+  const blockedReasons = {};
+  blockedList.forEach(b => { blockedReasons[b.time] = b.reason; });
+
   const result = {};
   ALL_TIMES.forEach(t => {
-    const booked = allForDate.filter(b => b.time === t).length; // 人数でなく予約件数
-    result[t] = { booked, remaining: Math.max(0, SLOT_CAPACITY - booked) };
+    const booked  = allForDate.filter(b => b.time === t).length;
+    const blocked = blockedTimes.has(t);
+    result[t] = {
+      booked,
+      blocked,
+      reason: blockedReasons[t] || '',
+      // ブロック済み or 予約済み なら remaining = 0
+      remaining: (blocked || booked >= SLOT_CAPACITY) ? 0 : SLOT_CAPACITY - booked
+    };
   });
   return result;
 }
