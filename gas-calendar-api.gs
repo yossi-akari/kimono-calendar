@@ -10,9 +10,9 @@ const ACCESS_KEY = 'AkariKimono2026_mK9x';
 
 // =============================================================
 // ── 定員設定 ─────────────────────────────────────────────────
-// 1スロット（30分）あたりの最大受入人数
+// 1スロット（30分）あたりの最大受入組数（人数に関わらず1予約=1組）
 // =============================================================
-const SLOT_CAPACITY = 2;
+const SLOT_CAPACITY = 1;
 const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
 
 // サイトのベースURL（予約確認メールのリンクに使用）
@@ -117,7 +117,7 @@ function doGet(e) {
       if (!year || !month) throw new Error('year and month required');
       const daysInMonth  = new Date(year, month, 0).getDate();
       const allSettings  = getAllSettings();
-      const defaultLimit = (allSettings['DEFAULT'] && allSettings['DEFAULT'].limit != null) ? allSettings['DEFAULT'].limit : 2;
+      const totalSlots   = ALL_TIMES.length; // 1日のタイムスロット総数（例:11）
       let gasBookings = getCachedBookings() || getRawBookings();
       const cancelled = getCancelledIds();
       const manualBookings = getManualSheetBookings();
@@ -126,10 +126,15 @@ function doGet(e) {
         const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
         const ds = allSettings[dateStr] || {};
         const closed = ds.closed === true;
-        const limit  = ds.limit != null ? ds.limit : defaultLimit;
-        const gasCount    = gasBookings.filter(b => b.date === dateStr && !cancelled.has(b.reservationId)).length;
-        const manualCount = manualBookings.filter(b => b.date === dateStr).length;
-        result[dateStr] = { closed, limit, available: Math.max(0, limit - gasCount - manualCount) };
+        // 管理者が上限を設定していればその値、なければ全スロット数
+        const limit = ds.limit != null ? ds.limit : totalSlots;
+        // 占有スロット数 = その日に予約が入っている時間帯の種類数（同時間に複数予約でも1カウント）
+        const bookedForDate = [
+          ...gasBookings.filter(b => b.date === dateStr && !cancelled.has(b.reservationId)),
+          ...manualBookings.filter(b => b.date === dateStr)
+        ];
+        const occupiedSlots = new Set(bookedForDate.map(b => b.time)).size;
+        result[dateStr] = { closed, limit, available: Math.max(0, limit - occupiedSlots) };
       }
       output.setContent(JSON.stringify({ success: true, availability: result }));
     } catch(err) {
@@ -815,29 +820,32 @@ function deleteSettingsFromSheet(date) {
 }
 
 function getAvailabilityForDate(date) {
-  const settings       = getAllSettings();
-  const dateSetting    = settings[date]      || {};
-  const defaultSetting = settings['DEFAULT'] || {};
+  const settings    = getAllSettings();
+  const dateSetting = settings[date] || {};
+  const totalSlots  = ALL_TIMES.length; // 1日のタイムスロット総数
 
   const closed = dateSetting.closed === true;
+  // 管理者が上限を設定していればその値、なければ全スロット数
   const limit  = (dateSetting.limit !== null && dateSetting.limit !== undefined)
-    ? dateSetting.limit
-    : ((defaultSetting.limit !== null && defaultSetting.limit !== undefined) ? defaultSetting.limit : 2);
+    ? dateSetting.limit : totalSlots;
 
-  let bookingCount = 0;
+  let occupiedSlots = 0;
   try {
     let gasBookings = getCachedBookings() || getRawBookings();
     const cancelled = getCancelledIds();
-    const gasCount  = gasBookings.filter(b => b.date === date && !cancelled.has(b.reservationId)).length;
-    const manualCount = getManualSheetBookings().filter(b => b.date === date).length;
-    bookingCount = gasCount + manualCount;
+    const bookedForDate = [
+      ...gasBookings.filter(b => b.date === date && !cancelled.has(b.reservationId)),
+      ...getManualSheetBookings().filter(b => b.date === date)
+    ];
+    // 占有スロット数 = 予約が入っている時間帯の種類数
+    occupiedSlots = new Set(bookedForDate.map(b => b.time)).size;
   } catch(e) {
     Logger.log('予約カウントエラー: ' + e.message);
   }
 
   return {
-    date, closed, limit, bookingCount,
-    available: Math.max(0, limit - bookingCount),
+    date, closed, limit, occupiedSlots,
+    available: Math.max(0, limit - occupiedSlots),
     note: dateSetting.note || ''
   };
 }
@@ -1018,8 +1026,7 @@ function getSlotAvailability(date) {
   );
   const result = {};
   ALL_TIMES.forEach(t => {
-    const inSlot = allForDate.filter(b => b.time === t);
-    const booked = inSlot.reduce((sum, b) => sum + parsePeopleCount(b.people), 0);
+    const booked = allForDate.filter(b => b.time === t).length; // 人数でなく予約件数
     result[t] = { booked, remaining: Math.max(0, SLOT_CAPACITY - booked) };
   });
   return result;

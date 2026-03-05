@@ -729,7 +729,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
         <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
           <input type="number" id="settingsLimit" min="0" max="20" placeholder="—"
             style="width:68px;padding:6px 8px;border:1px solid var(--line);border-radius:2px;font-family:'DM Mono',monospace;font-size:0.9rem;">
-          <span style="font-size:0.78rem;color:var(--muted);">組　（空白 = デフォルト: <span id="settingsDefaultShow">2</span>組）</span>
+          <span style="font-size:0.78rem;color:var(--muted);">スロット　（空白 = デフォルト: <span id="settingsDefaultShow">11</span>スロット）</span>
         </div>
       </div>
       <div class="detail-row" style="flex-direction:column;gap:6px;padding:10px 0;">
@@ -780,7 +780,9 @@ let selectedDate = todayStr;
 let bookings = [];
 let activeBookingId = null;
 let settings = {};
-let defaultLimit = 2;
+const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
+const TOTAL_SLOTS = ALL_TIMES.length; // 1日のタイムスロット総数 = 11
+let defaultLimit = TOTAL_SLOTS; // 管理者未設定時はスロット総数がデフォルト上限
 
 // プランごとのチップカラー
 function chipClass(planName, source) {
@@ -829,7 +831,7 @@ async function loadFromGAS() {
       });
       if (data.settings) {
         settings = data.settings;
-        defaultLimit = (settings['DEFAULT'] && settings['DEFAULT'].limit != null) ? settings['DEFAULT'].limit : 2;
+        defaultLimit = (settings['DEFAULT'] && settings['DEFAULT'].limit != null) ? settings['DEFAULT'].limit : TOTAL_SLOTS;
       }
       return true;
     }
@@ -1120,11 +1122,13 @@ function renderCalendar() {
     const isSelected = dateStr === selectedDate;
 
     // 在庫・休業設定
-    const dateSetting = settings[dateStr] || {};
-    const isClosed    = dateSetting.closed === true;
-    const cellLimit   = (dateSetting.limit != null) ? dateSetting.limit : defaultLimit;
-    const dayCount    = bookings.filter(b => b.date === dateStr).length;
-    const isFull      = !isClosed && cellLimit > 0 && dayCount >= cellLimit;
+    const dateSetting   = settings[dateStr] || {};
+    const isClosed      = dateSetting.closed === true;
+    const cellLimit     = (dateSetting.limit != null) ? dateSetting.limit : defaultLimit;
+    const dayBookingsAll = bookings.filter(b => b.date === dateStr);
+    // 占有スロット数 = 予約が入っている時間帯の種類数（同時間帯複数予約でも1カウント）
+    const occupiedSlots = new Set(dayBookingsAll.map(b => b.time)).size;
+    const isFull        = !isClosed && cellLimit > 0 && occupiedSlots >= cellLimit;
 
     const cell = document.createElement('div');
     cell.className = 'cal-cell'
@@ -1155,7 +1159,7 @@ function renderCalendar() {
     } else if (dateSetting.limit != null) {
       const badge = document.createElement('div');
       badge.className = 'avail-badge avail-remain';
-      badge.textContent = `残${cellLimit - dayCount}`;
+      badge.textContent = `残${cellLimit - occupiedSlots}`;
       cell.appendChild(badge);
     }
 
@@ -1199,18 +1203,20 @@ function renderSidePanel() {
   document.getElementById('sideCount').textContent =
     dayBookings.length > 0 ? `${dayBookings.length}件の予約` : '予約なし';
 
-  // 在庫・休業表示
+  // 在庫・休業表示（スロット単位で判定）
   const ds = settings[selectedDate] || {};
-  const isClosed  = ds.closed === true;
-  const dayLimit  = (ds.limit != null) ? ds.limit : defaultLimit;
-  const remaining = Math.max(0, dayLimit - dayBookings.length);
-  const availEl   = document.getElementById('sideAvail');
+  const isClosed     = ds.closed === true;
+  const dayLimit     = (ds.limit != null) ? ds.limit : defaultLimit;
+  // 占有スロット数 = 予約が入っている時間帯の種類数
+  const sideSlotsOcc = new Set(dayBookings.map(b => b.time)).size;
+  const remaining    = Math.max(0, dayLimit - sideSlotsOcc);
+  const availEl      = document.getElementById('sideAvail');
   if (isClosed) {
     availEl.innerHTML = '<span style="color:#c0392b;font-weight:bold;">臨時休業日</span>' + (ds.note ? `　<span style="color:var(--muted);">${ds.note}</span>` : '');
-  } else if (dayBookings.length >= dayLimit) {
-    availEl.innerHTML = `<span style="color:#e67e22;font-weight:bold;">満員</span> <span style="color:var(--muted);">${dayBookings.length}/${dayLimit}組</span>`;
+  } else if (sideSlotsOcc >= dayLimit) {
+    availEl.innerHTML = `<span style="color:#e67e22;font-weight:bold;">満員</span> <span style="color:var(--muted);">${sideSlotsOcc}/${dayLimit}スロット</span>`;
   } else {
-    availEl.innerHTML = `<span style="color:var(--muted);">残 <span style="color:#27ae60;font-weight:bold;">${remaining}組</span> / ${dayLimit}組</span>`;
+    availEl.innerHTML = `<span style="color:var(--muted);">残 <span style="color:#27ae60;font-weight:bold;">${remaining}スロット</span> / ${dayLimit}スロット</span>`;
   }
 
   const container = document.getElementById('sideBookings');
@@ -1404,7 +1410,7 @@ async function saveDefaultLimit() {
     document.getElementById('settingsDefaultShow').textContent = val;
     renderCalendar();
     renderSidePanel();
-    alert(`デフォルト上限を ${val}組 に更新しました`);
+    alert(`デフォルト上限を ${val}スロット に更新しました`);
   } catch(e) { alert('保存に失敗しました'); }
 }
 
