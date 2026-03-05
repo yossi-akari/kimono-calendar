@@ -370,11 +370,32 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .cal-cell.day-closed { background: #fff5f5 !important; opacity: 0.75; }
 
 /* スロット管理パネル */
-.slot-panel { margin-top: 14px; border-top: 1px solid #ede8e4; padding-top: 10px; }
+.slot-panel { margin-top: 14px; border-top: 1px solid #ede8e4; padding-top: 8px; }
+.slot-panel-header {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none; padding: 2px 0 4px;
+}
+.slot-panel-header:hover .slot-panel-title { color: var(--accent); }
 .slot-panel-title {
   font-size: 0.72rem; font-weight: 700; color: var(--muted);
-  letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px;
+  letter-spacing: 0.06em; text-transform: uppercase; flex: 1;
+  transition: color 0.15s;
 }
+.slot-panel-summary {
+  font-size: 0.7rem; color: var(--muted); margin-right: 2px;
+}
+.slot-panel-summary.has-block { color: #c83535; font-weight: 600; }
+.slot-toggle-btn {
+  font-size: 0.72rem; background: none; border: none;
+  cursor: pointer; color: var(--muted); padding: 0; line-height: 1;
+  transition: transform 0.2s;
+}
+.slot-body {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.25s ease;
+}
+.slot-body.open { max-height: 600px; }
 .slot-row {
   display: flex; align-items: center; gap: 6px;
   padding: 3px 0; border-bottom: 1px solid #f5f0ec;
@@ -620,8 +641,14 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     </div>
     <!-- スロット管理パネル（日付選択後に表示） -->
     <div class="slot-panel" id="slotPanel" style="display:none;">
-      <div class="slot-panel-title">スロット管理</div>
-      <div id="slotGrid"><!-- JS で描画 --></div>
+      <div class="slot-panel-header" onclick="toggleSlotPanelOpen()">
+        <span class="slot-panel-title">スロット管理</span>
+        <span class="slot-panel-summary" id="slotSummary"></span>
+        <button class="slot-toggle-btn" id="slotToggleBtn">🔽</button>
+      </div>
+      <div class="slot-body" id="slotBody">
+        <div id="slotGrid"><!-- JS で描画 --></div>
+      </div>
     </div>
     <div class="side-bookings" id="sideBookings">
       <div class="side-empty">日付をクリックして<br>予約を確認</div>
@@ -801,7 +828,8 @@ const ACCESS_KEY = 'AkariKimono2026_mK9x';
 
 // スロットブロック管理
 let currentBlockedSlots = new Set(); // 選択中日付のブロック済み時間帯
-let slotPanelLoading = false;
+let slotPanelOpen   = false;  // 開閉状態
+let slotPanelLoaded = false;  // データ取得済みフラグ
 
 // 自動更新
 let autoRefreshTimer = null;
@@ -1179,6 +1207,8 @@ function renderCalendar() {
     cell.onclick = () => {
       selectedDate = dateStr;
       currentBlockedSlots = new Set(); // 日付切替時にリセット
+      slotPanelOpen   = false;         // 閉じた状態に戻す
+      slotPanelLoaded = false;         // 再ロードを促す
       renderCalendar();
       renderSidePanel();
     };
@@ -1291,11 +1321,40 @@ function renderSidePanel() {
 }
 
 // ── スロット管理パネル ────────────────────────────
-async function renderSlotPanel() {
+// ヘッダーだけ表示（開閉ボタン付き）。データは開いたときに取得。
+function renderSlotPanel() {
   const panel = document.getElementById('slotPanel');
-  const grid  = document.getElementById('slotGrid');
-  if (!panel || !grid || !selectedDate) return;
+  if (!panel || !selectedDate) return;
   panel.style.display = '';
+  // 開閉状態・ロード済みフラグをリセット（日付が変わったとき）
+  // ※ toggleSlotPanelOpen の外から呼ばれるときは閉じた状態に戻す
+  _applySlotPanelState();
+}
+
+function _applySlotPanelState() {
+  const body    = document.getElementById('slotBody');
+  const btn     = document.getElementById('slotToggleBtn');
+  if (!body || !btn) return;
+  if (slotPanelOpen) {
+    body.classList.add('open');
+    btn.textContent = '🔼';
+  } else {
+    body.classList.remove('open');
+    btn.textContent = '🔽';
+  }
+}
+
+async function toggleSlotPanelOpen() {
+  slotPanelOpen = !slotPanelOpen;
+  _applySlotPanelState();
+  if (slotPanelOpen && !slotPanelLoaded) {
+    await _loadSlotGridData();
+  }
+}
+
+async function _loadSlotGridData() {
+  const grid = document.getElementById('slotGrid');
+  if (!grid || !selectedDate) return;
   grid.innerHTML = '<div style="font-size:0.72rem;color:var(--muted);padding:4px 0;">読み込み中…</div>';
 
   // ブロック済みスロットをGASから取得
@@ -1309,8 +1368,33 @@ async function renderSlotPanel() {
   } catch(e) {
     currentBlockedSlots = new Set();
   }
+  slotPanelLoaded = true;
+  _renderSlotRows();
+  _updateSlotSummary();
+}
 
-  // この日の予約を時間帯ごとにまとめる
+async function _reloadSlotGridData() {
+  slotPanelLoaded = false;
+  await _loadSlotGridData();
+}
+
+function _updateSlotSummary() {
+  const el = document.getElementById('slotSummary');
+  if (!el) return;
+  const blockedCount = currentBlockedSlots.size;
+  if (blockedCount > 0) {
+    el.textContent = `受付不可 ${blockedCount}件`;
+    el.className = 'slot-panel-summary has-block';
+  } else {
+    el.textContent = '';
+    el.className = 'slot-panel-summary';
+  }
+}
+
+function _renderSlotRows() {
+  const grid = document.getElementById('slotGrid');
+  if (!grid || !selectedDate) return;
+
   const dayBookings = bookings.filter(b => b.date === selectedDate);
   const bookedMap   = {};
   dayBookings.forEach(b => {
@@ -1333,9 +1417,8 @@ async function renderSlotPanel() {
       statusHtml = '<span class="slot-free">空き</span>';
     }
 
-    const btnClass = isBlocked ? 'do-unblock' : 'do-block';
-    const btnLabel = isBlocked ? 'ブロック解除' : 'ブロック';
-    // 予約済みスロットはブロック操作不可（既に埋まっているため）
+    const btnClass   = isBlocked ? 'do-unblock' : 'do-block';
+    const btnLabel   = isBlocked ? 'ブロック解除' : 'ブロック';
     const btnDisabled = (isBooked && !isBlocked) ? 'disabled' : '';
 
     const row = document.createElement('div');
@@ -1372,9 +1455,10 @@ async function toggleSlotBlock(time) {
     } else {
       currentBlockedSlots.add(time);
     }
-    // パネルを再描画（GAS再取得なし、ローカル状態を反映）
-    await renderSlotPanel();
-    // カレンダーの残スロット数も更新
+    // グリッドとサマリーをローカル状態で再描画（GAS再取得なし）
+    _renderSlotRows();
+    _updateSlotSummary();
+    // カレンダーセルの残スロット数も更新
     renderCalendar();
   } catch(e) {
     alert('操作に失敗しました: ' + e.message);
