@@ -214,6 +214,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
           <label>ご来店日</label>
           <input type="date" id="visitDate" onchange="onDateChange()">
           <div id="dateError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;">水曜日は定休日のため選択できません</div>
+          <div id="availError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;"></div>
         </div>
         <div class="field">
           <label>ご来店時間</label>
@@ -390,6 +391,8 @@ function selectPlan(el, name, price, isEstimate) {
   el.classList.add('selected');
   plan = { name, price, isEstimate };
   buildOptions();
+  updateKagaVisibility();
+  updateHairAccessoryVisibility();
   checkTuesdayRestriction();
   updateSummary();
 }
@@ -444,6 +447,7 @@ function updatePeople() {
   people.male   = parseInt(document.getElementById('numMale').value);
   people.child  = parseInt(document.getElementById('numChild').value);
   updateMaleOnlyVisibility();
+  updateHairAccessoryVisibility();
   updateTimeOptions();
   updateSummary();
 }
@@ -461,9 +465,11 @@ const OPT_DEFS = [
   { name: 'ロケーション撮影 シルバー（100カット）', price: 33000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
   { name: 'ロケーション撮影 ゴールド（150カット）', price: 55000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
   // 通常オプション
-  { name: 'ヘアセット',       note: '美容師によるヘアセット',             price: 1650, unit: '/名', qtyUnit: '名' },
-  { name: '髪飾り',           note: '',                                   price: 550,  unit: '/個', qtyUnit: '個' },
-  { name: 'メンズヘアセット', note: '美容師によるヘアセット',             price: 880,  unit: '/名', qtyUnit: '名', maleOnly: true },
+  { name: 'ヘアセット',           note: '髪飾りも料金に含まれます',   price: 1650, unit: '/名', qtyUnit: '名' },
+  { name: 'フォーマルヘアセット', note: '髪飾りも料金に含まれます',   price: 4400, unit: '/名', qtyUnit: '名', kagaOnly: true },
+  { name: '髪飾り',               note: '',                            price: 550,  unit: '/個', qtyUnit: '個' },
+  { name: 'メンズヘアセット',     note: '美容師によるヘアセット',     price: 880,  unit: '/名', qtyUnit: '名', maleOnly: true },
+  { name: 'フルメイク',           note: '',                            price: 4400, unit: '/名', qtyUnit: '名' },
   { name: '名古屋帯',         note: '帯を名古屋帯に変更できます',         price: 550,  unit: '',    qtyUnit: '個' },
   { name: 'ぬくぬく肌着',     note: '冬の防寒用肌着（上下セット）',       price: 550,  unit: '/名', qtyUnit: '名' },
   { name: 'コート・ショール', note: '羽織れる防寒アイテム',               price: 550,  unit: '/名', qtyUnit: '名' },
@@ -481,6 +487,7 @@ function buildOptCard(opt) {
   div.id = 'opt_' + opt.name;
   div.dataset.optName = opt.name;
   if (opt.maleOnly) div.dataset.maleOnly = '1';
+  if (opt.kagaOnly) div.dataset.kagaOnly = '1';
   if (opt.wide)     div.classList.add('wide');
 
   const onclick = opt.photoRequired
@@ -569,6 +576,37 @@ function updateMaleOnlyVisibility() {
   });
 }
 
+function updateHairAccessoryVisibility() {
+  const el = document.getElementById('opt_髪飾り');
+  if (!el) return;
+  const isKaga = plan.name === '加賀友禅';
+  const activeQty = isKaga ? (optQty['フォーマルヘアセット'] || 0) : (optQty['ヘアセット'] || 0);
+  const isFull = people.female > 0 && activeQty >= people.female;
+  el.classList.toggle('disabled', isFull);
+  if (isFull && el.classList.contains('checked')) {
+    el.classList.remove('checked');
+    delete options['髪飾り'];
+    optQty['髪飾り'] = 0;
+    updateSummary();
+  }
+}
+
+function updateKagaVisibility() {
+  const isKaga = plan.name === '加賀友禅';
+  const normal = document.getElementById('opt_ヘアセット');
+  const formal = document.getElementById('opt_フォーマルヘアセット');
+  if (normal) normal.style.display = isKaga ? 'none' : '';
+  if (formal) formal.style.display = isKaga ? ''     : 'none';
+  if (isKaga && normal && normal.classList.contains('checked')) {
+    normal.classList.remove('checked');
+    delete options['ヘアセット']; optQty['ヘアセット'] = 0;
+  }
+  if (!isKaga && formal && formal.classList.contains('checked')) {
+    formal.classList.remove('checked');
+    delete options['フォーマルヘアセット']; optQty['フォーマルヘアセット'] = 0;
+  }
+}
+
 // ── オプション切替・個数 ──────────────────────────────
 function toggleOpt(name, price) {
   const el = document.getElementById('opt_' + name);
@@ -584,6 +622,7 @@ function toggleOpt(name, price) {
     options[name] = price;
   }
   updateSummary();
+  updateHairAccessoryVisibility();
 }
 
 function changeQty(name, price, dir) {
@@ -595,6 +634,7 @@ function changeQty(name, price, dir) {
   document.getElementById('qty_' + name).textContent = next;
   document.getElementById('sub_' + name).textContent = '¥' + (price * next).toLocaleString();
   updateSummary();
+  updateHairAccessoryVisibility();
 }
 
 // ── 金額計算・サマリー更新 ───────────────────────────

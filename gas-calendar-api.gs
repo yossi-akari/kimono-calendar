@@ -69,6 +69,74 @@ function doGet(e) {
     }
     return output;
   }
+  if (action === 'getSettings') {
+    try {
+      output.setContent(JSON.stringify({ success: true, settings: getAllSettings() }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
+  if (action === 'saveSettings') {
+    try {
+      const date  = e.parameter.date;
+      const limit = (e.parameter.limit !== '' && e.parameter.limit !== undefined) ? parseInt(e.parameter.limit) : null;
+      const closed = e.parameter.closed === 'true';
+      const note  = e.parameter.note || '';
+      saveSettingsToSheet(date, limit, closed, note);
+      output.setContent(JSON.stringify({ success: true }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
+  if (action === 'deleteSettings') {
+    try {
+      deleteSettingsFromSheet(e.parameter.date);
+      output.setContent(JSON.stringify({ success: true }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
+  if (action === 'getAvailability') {
+    try {
+      const date = e.parameter.date;
+      if (!date) throw new Error('date required');
+      const avail = getAvailabilityForDate(date);
+      output.setContent(JSON.stringify({ success: true, ...avail }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
+  if (action === 'getMonthAvailability') {
+    try {
+      const year  = parseInt(e.parameter.year);
+      const month = parseInt(e.parameter.month);
+      if (!year || !month) throw new Error('year and month required');
+      const daysInMonth  = new Date(year, month, 0).getDate();
+      const allSettings  = getAllSettings();
+      const defaultLimit = (allSettings['DEFAULT'] && allSettings['DEFAULT'].limit != null) ? allSettings['DEFAULT'].limit : 2;
+      let gasBookings = getCachedBookings() || getRawBookings();
+      const cancelled = getCancelledIds();
+      const manualBookings = getManualSheetBookings();
+      const result = {};
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        const ds = allSettings[dateStr] || {};
+        const closed = ds.closed === true;
+        const limit  = ds.limit != null ? ds.limit : defaultLimit;
+        const gasCount    = gasBookings.filter(b => b.date === dateStr && !cancelled.has(b.reservationId)).length;
+        const manualCount = manualBookings.filter(b => b.date === dateStr).length;
+        result[dateStr] = { closed, limit, available: Math.max(0, limit - gasCount - manualCount) };
+      }
+      output.setContent(JSON.stringify({ success: true, availability: result }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
   // 時間帯の空き状況を返す（reserve.html での事前チェック用）
   if (action === 'checkSlot') {
     try {
@@ -677,6 +745,101 @@ function deleteManualFromSheet(id) {
       return;
     }
   }
+}
+
+// =============================================================
+// ── 設定シート管理 ────────────────────────────────────────────
+// =============================================================
+function getSettingsSheet() {
+  const props = PropertiesService.getScriptProperties();
+  let ss;
+  const ssId = props.getProperty('manual_ss_id');
+  if (ssId) {
+    try { ss = SpreadsheetApp.openById(ssId); } catch(e) { ss = null; }
+  }
+  if (!ss) ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (!ss) {
+    ss = SpreadsheetApp.create('着物カレンダー_手動予約');
+    props.setProperty('manual_ss_id', ss.getId());
+  }
+  let sheet = ss.getSheetByName('設定');
+  if (!sheet) {
+    sheet = ss.insertSheet('設定');
+    sheet.appendRow(['date', 'limit', 'closed', 'note']);
+    sheet.appendRow(['DEFAULT', 2, 'FALSE', 'デフォルト上限']);
+  }
+  return sheet;
+}
+
+function getAllSettings() {
+  try {
+    const sheet = getSettingsSheet();
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return {};
+    const result = {};
+    data.slice(1).forEach(row => {
+      const date  = String(row[0]);
+      const limit = (row[1] !== '' && row[1] !== null && !isNaN(row[1])) ? parseInt(row[1]) : null;
+      const closed = String(row[2]).toUpperCase() === 'TRUE';
+      const note  = String(row[3] || '');
+      result[date] = { limit, closed, note };
+    });
+    return result;
+  } catch(e) {
+    Logger.log('設定取得エラー: ' + e.message);
+    return {};
+  }
+}
+
+function saveSettingsToSheet(date, limit, closed, note) {
+  const sheet = getSettingsSheet();
+  const data  = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === date) {
+      sheet.getRange(i + 1, 1, 1, 4).setValues([[date, limit !== null ? limit : '', closed ? 'TRUE' : 'FALSE', note || '']]);
+      return;
+    }
+  }
+  sheet.appendRow([date, limit !== null ? limit : '', closed ? 'TRUE' : 'FALSE', note || '']);
+}
+
+function deleteSettingsFromSheet(date) {
+  const sheet = getSettingsSheet();
+  const data  = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]) === date) {
+      sheet.deleteRow(i + 1);
+      return;
+    }
+  }
+}
+
+function getAvailabilityForDate(date) {
+  const settings       = getAllSettings();
+  const dateSetting    = settings[date]      || {};
+  const defaultSetting = settings['DEFAULT'] || {};
+
+  const closed = dateSetting.closed === true;
+  const limit  = (dateSetting.limit !== null && dateSetting.limit !== undefined)
+    ? dateSetting.limit
+    : ((defaultSetting.limit !== null && defaultSetting.limit !== undefined) ? defaultSetting.limit : 2);
+
+  let bookingCount = 0;
+  try {
+    let gasBookings = getCachedBookings() || getRawBookings();
+    const cancelled = getCancelledIds();
+    const gasCount  = gasBookings.filter(b => b.date === date && !cancelled.has(b.reservationId)).length;
+    const manualCount = getManualSheetBookings().filter(b => b.date === date).length;
+    bookingCount = gasCount + manualCount;
+  } catch(e) {
+    Logger.log('予約カウントエラー: ' + e.message);
+  }
+
+  return {
+    date, closed, limit, bookingCount,
+    available: Math.max(0, limit - bookingCount),
+    note: dateSetting.note || ''
+  };
 }
 
 // =============================================================

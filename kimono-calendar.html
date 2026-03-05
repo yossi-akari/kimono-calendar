@@ -10,25 +10,20 @@
   background: #1c1a18;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 24px;
+  gap: 20px;
 }
 #pin-screen h1 {
   color: #faf8f4; font-family: serif;
   font-weight: 200; font-size: 1.4rem; letter-spacing: 0.15em; margin: 0;
 }
-#pin-display { display: flex; gap: 12px; }
-#pin-display span {
-  width: 14px; height: 14px; border-radius: 50%;
-  border: 1px solid #8b3a3a; background: transparent; transition: background 0.2s;
+#pinInput {
+  background: #2a2520; border: 1px solid #3a3530; color: #faf8f4;
+  padding: 14px 20px; border-radius: 2px; font-size: 1.1rem;
+  width: 260px; outline: none; text-align: center; letter-spacing: 0.25em;
+  transition: border-color 0.2s; font-family: 'DM Mono', monospace;
 }
-#pin-display span.filled { background: #8b3a3a; }
-#pin-keypad { display: grid; grid-template-columns: repeat(3, 64px); gap: 12px; }
-#pin-keypad button {
-  width: 64px; height: 64px; border-radius: 50%;
-  border: 1px solid #3a3530; background: #2a2520; color: #faf8f4;
-  font-size: 1.3rem; cursor: pointer; transition: background 0.15s;
-}
-#pin-keypad button:active { background: #8b3a3a; }
+#pinInput:focus { border-color: #8b3a3a; }
+#pinInput::placeholder { color: #5a5048; letter-spacing: 0.08em; font-size: 0.85rem; font-family: serif; }
 #pin-error { color: #8b3a3a; font-size: 0.85rem; min-height: 1.2em; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200;300;400&family=Noto+Sans+JP:wght@300;400&family=DM+Mono:wght@300&display=swap" rel="stylesheet">
@@ -363,6 +358,17 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 .close-btn2 { background: var(--ink); color: white; border: none; padding: 8px 18px; border-radius: 2px; font-size: 0.8rem; cursor: pointer; transition: opacity 0.2s; }
 .close-btn2:hover { opacity: 0.8; }
 
+/* ── 在庫バッジ ── */
+.avail-badge {
+  position: absolute; top: 4px; left: 4px;
+  font-size: 0.52rem; font-family: 'DM Mono', monospace; font-weight: bold;
+  padding: 1px 4px; border-radius: 2px; line-height: 1.4;
+}
+.avail-closed { background: #c0392b; color: #fff; }
+.avail-full   { background: #e67e22; color: #fff; }
+.avail-remain { background: #27ae60; color: #fff; }
+.cal-cell.day-closed { background: #fff5f5 !important; opacity: 0.75; }
+
 /* サイドパネル印刷ボタン */
 .side-print-btn {
   background: none; border: 1px solid var(--line); color: var(--muted);
@@ -491,28 +497,24 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 <body>
 <div id="pin-screen">
   <h1>予約管理カレンダー</h1>
-  <div id="pin-display">
-    <span></span><span></span><span></span><span></span><span></span><span></span>
-  </div>
-  <div id="pin-keypad">
-    <button onclick="pinInput('1')">1</button><button onclick="pinInput('2')">2</button><button onclick="pinInput('3')">3</button>
-    <button onclick="pinInput('4')">4</button><button onclick="pinInput('5')">5</button><button onclick="pinInput('6')">6</button>
-    <button onclick="pinInput('7')">7</button><button onclick="pinInput('8')">8</button><button onclick="pinInput('9')">9</button>
-    <button onclick="pinClear()" style="font-size:0.85rem;color:#9a9080;">C</button>
-    <button onclick="pinInput('0')">0</button>
-    <button onclick="pinDelete()" style="font-size:0.85rem;color:#9a9080;">⌫</button>
-  </div>
+  <input type="password" id="pinInput" placeholder="PINコードを入力" maxlength="8" autocomplete="off" inputmode="text">
   <div id="pin-error"></div>
 </div>
 <script>
 (function(){
-  const PIN='171005'; let entered='';
-  if(sessionStorage.getItem('auth')==='ok') document.getElementById('pin-screen').style.display='none';
-  window.pinInput=function(d){ if(entered.length>=6)return; entered+=d; updateDots();
-    if(entered.length===6){ setTimeout(()=>{ if(entered===PIN){ sessionStorage.setItem('auth','ok'); document.getElementById('pin-screen').style.display='none'; } else { document.getElementById('pin-error').textContent='PINが違います'; entered=''; updateDots(); setTimeout(()=>document.getElementById('pin-error').textContent='',1500); } },100); } };
-  window.pinDelete=function(){ entered=entered.slice(0,-1); updateDots(); };
-  window.pinClear=function(){ entered=''; updateDots(); };
-  function updateDots(){ document.querySelectorAll('#pin-display span').forEach((d,i)=>d.classList.toggle('filled',i<entered.length)); }
+  const PIN='56785678';
+  const screen=document.getElementById('pin-screen');
+  const input=document.getElementById('pinInput');
+  const err=document.getElementById('pin-error');
+  if(sessionStorage.getItem('auth')==='ok') screen.style.display='none';
+  else input.focus();
+  input.addEventListener('input',function(){
+    err.textContent='';
+    if(this.value.length===8){
+      if(this.value===PIN){ sessionStorage.setItem('auth','ok'); screen.style.display='none'; }
+      else{ err.textContent='PINが違います'; this.value=''; setTimeout(()=>err.textContent='',1500); }
+    }
+  });
 })();
 </script>
 
@@ -573,12 +575,16 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     <div class="side-header">
       <div class="date-label" id="sideDateLabel">日付を選択してください</div>
       <div class="booking-count" id="sideCount"></div>
-      <div style="display:flex;gap:6px;margin-top:8px;">
+      <div id="sideAvail" style="font-family:'DM Mono',monospace;font-size:0.72rem;margin-top:3px;"></div>
+      <div style="display:flex;gap:6px;margin-top:8px;align-items:center;">
         <button class="side-print-btn" onclick="printDayList()" id="btnPrintList" title="この日の予約一覧を印刷">
           🖨 一覧印刷
         </button>
         <button class="side-print-btn" onclick="printDailyReport()" id="btnPrintReport" title="日報を作成">
           📋 日報
+        </button>
+        <button class="side-print-btn" onclick="openSettingsModal()" title="この日の在庫・休業設定" style="margin-left:auto;">
+          ⚙ 設定
         </button>
       </div>
     </div>
@@ -704,6 +710,55 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   </div>
 </div>
 
+<!-- 設定モーダル -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header">
+      <h2 id="settingsTitle">予約設定</h2>
+      <button class="modal-close-btn" onclick="closeSettingsModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-row" style="align-items:center;padding:10px 0;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.88rem;">
+          <input type="checkbox" id="settingsClosed" style="width:15px;height:15px;">
+          臨時休業日として設定する
+        </label>
+      </div>
+      <div class="detail-row" style="flex-direction:column;gap:6px;padding:10px 0;">
+        <span class="detail-label">1日の上限（組数）</span>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+          <input type="number" id="settingsLimit" min="0" max="20" placeholder="—"
+            style="width:68px;padding:6px 8px;border:1px solid var(--line);border-radius:2px;font-family:'DM Mono',monospace;font-size:0.9rem;">
+          <span style="font-size:0.78rem;color:var(--muted);">組　（空白 = デフォルト: <span id="settingsDefaultShow">2</span>組）</span>
+        </div>
+      </div>
+      <div class="detail-row" style="flex-direction:column;gap:6px;padding:10px 0;">
+        <span class="detail-label">メモ</span>
+        <input type="text" id="settingsNote" placeholder="例: 追加スタッフ出勤"
+          style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:2px;font-family:inherit;font-size:0.85rem;margin-top:4px;">
+      </div>
+      <div class="detail-row" style="flex-direction:column;gap:6px;padding:10px 0;border-top:2px solid var(--line);">
+        <span class="detail-label" style="font-weight:bold;color:var(--ink);">デフォルト設定（全日共通）</span>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
+          <span style="font-size:0.8rem;color:var(--muted);">通常の上限:</span>
+          <input type="number" id="settingsDefaultLimit" min="0" max="20"
+            style="width:60px;padding:6px 8px;border:1px solid var(--line);border-radius:2px;font-family:'DM Mono',monospace;font-size:0.9rem;">
+          <span style="font-size:0.78rem;color:var(--muted);">組</span>
+          <button onclick="saveDefaultLimit()"
+            style="padding:5px 12px;border:1px solid var(--line);border-radius:2px;font-size:0.75rem;cursor:pointer;background:var(--cream);transition:all 0.15s;">
+            更新
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="del-btn" id="btnDeleteSettings" onclick="deleteSettingsForDate()" style="display:none;">設定を削除</button>
+      <button class="close-btn2" style="background:var(--muted);" onclick="closeSettingsModal()">キャンセル</button>
+      <button class="close-btn2" onclick="saveSettingsForDate()">保存する</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ★ Google Apps ScriptのデプロイURL（GAS側のACCESS_KEYと一致させてください）
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
@@ -724,6 +779,8 @@ let curYear = today.getFullYear(), curMonth = today.getMonth();
 let selectedDate = todayStr;
 let bookings = [];
 let activeBookingId = null;
+let settings = {};
+let defaultLimit = 2;
 
 // プランごとのチップカラー
 function chipClass(planName, source) {
@@ -770,6 +827,10 @@ async function loadFromGAS() {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
         return a.time.localeCompare(b.time);
       });
+      if (data.settings) {
+        settings = data.settings;
+        defaultLimit = (settings['DEFAULT'] && settings['DEFAULT'].limit != null) ? settings['DEFAULT'].limit : 2;
+      }
       return true;
     }
   } catch (e) {
@@ -1058,12 +1119,20 @@ function renderCalendar() {
     const isToday = dateStr === todayStr;
     const isSelected = dateStr === selectedDate;
 
+    // 在庫・休業設定
+    const dateSetting = settings[dateStr] || {};
+    const isClosed    = dateSetting.closed === true;
+    const cellLimit   = (dateSetting.limit != null) ? dateSetting.limit : defaultLimit;
+    const dayCount    = bookings.filter(b => b.date === dateStr).length;
+    const isFull      = !isClosed && cellLimit > 0 && dayCount >= cellLimit;
+
     const cell = document.createElement('div');
     cell.className = 'cal-cell'
       + (isToday ? ' today' : '')
       + (isSelected ? ' selected' : '')
       + (dow === 0 ? ' sunday' : '')
-      + (dow === 6 ? ' saturday' : '');
+      + (dow === 6 ? ' saturday' : '')
+      + (isClosed ? ' day-closed' : '');
     cell.onclick = () => { selectedDate = dateStr; renderCalendar(); renderSidePanel(); };
 
     // 日付
@@ -1071,6 +1140,24 @@ function renderCalendar() {
     dateDiv.className = 'cell-date';
     dateDiv.textContent = d;
     cell.appendChild(dateDiv);
+
+    // 在庫バッジ
+    if (isClosed) {
+      const badge = document.createElement('div');
+      badge.className = 'avail-badge avail-closed';
+      badge.textContent = '休';
+      cell.appendChild(badge);
+    } else if (isFull) {
+      const badge = document.createElement('div');
+      badge.className = 'avail-badge avail-full';
+      badge.textContent = '満';
+      cell.appendChild(badge);
+    } else if (dateSetting.limit != null) {
+      const badge = document.createElement('div');
+      badge.className = 'avail-badge avail-remain';
+      badge.textContent = `残${cellLimit - dayCount}`;
+      cell.appendChild(badge);
+    }
 
     // 予約チップ（時間順）
     const dayBookings = bookings
@@ -1111,6 +1198,20 @@ function renderSidePanel() {
 
   document.getElementById('sideCount').textContent =
     dayBookings.length > 0 ? `${dayBookings.length}件の予約` : '予約なし';
+
+  // 在庫・休業表示
+  const ds = settings[selectedDate] || {};
+  const isClosed  = ds.closed === true;
+  const dayLimit  = (ds.limit != null) ? ds.limit : defaultLimit;
+  const remaining = Math.max(0, dayLimit - dayBookings.length);
+  const availEl   = document.getElementById('sideAvail');
+  if (isClosed) {
+    availEl.innerHTML = '<span style="color:#c0392b;font-weight:bold;">臨時休業日</span>' + (ds.note ? `　<span style="color:var(--muted);">${ds.note}</span>` : '');
+  } else if (dayBookings.length >= dayLimit) {
+    availEl.innerHTML = `<span style="color:#e67e22;font-weight:bold;">満員</span> <span style="color:var(--muted);">${dayBookings.length}/${dayLimit}組</span>`;
+  } else {
+    availEl.innerHTML = `<span style="color:var(--muted);">残 <span style="color:#27ae60;font-weight:bold;">${remaining}組</span> / ${dayLimit}組</span>`;
+  }
 
   const container = document.getElementById('sideBookings');
   container.innerHTML = '';
@@ -1235,6 +1336,81 @@ async function deleteBooking() {
   renderCalendar();
   renderSidePanel();
 }
+
+// ── 設定モーダル ──────────────────────────────────
+function openSettingsModal() {
+  const d   = new Date(selectedDate + 'T00:00:00');
+  const ds  = settings[selectedDate] || {};
+  document.getElementById('settingsTitle').textContent =
+    `${d.getMonth()+1}月${d.getDate()}日（${DAY_NAMES[d.getDay()]}）の設定`;
+  document.getElementById('settingsClosed').checked = ds.closed === true;
+  document.getElementById('settingsLimit').value    = ds.limit != null ? ds.limit : '';
+  document.getElementById('settingsNote').value     = ds.note || '';
+  document.getElementById('settingsDefaultShow').textContent  = defaultLimit;
+  document.getElementById('settingsDefaultLimit').value       = defaultLimit;
+  document.getElementById('btnDeleteSettings').style.display  =
+    (ds.closed || ds.limit != null || ds.note) ? 'inline-block' : 'none';
+  document.getElementById('settingsModal').classList.add('open');
+}
+
+function closeSettingsModal() {
+  document.getElementById('settingsModal').classList.remove('open');
+}
+
+async function saveSettingsForDate() {
+  const closed   = document.getElementById('settingsClosed').checked;
+  const limitVal = document.getElementById('settingsLimit').value;
+  const limit    = limitVal !== '' ? parseInt(limitVal) : null;
+  const note     = document.getElementById('settingsNote').value;
+  try {
+    const params = new URLSearchParams({
+      key: ACCESS_KEY, action: 'saveSettings',
+      date: selectedDate,
+      limit: limit !== null ? limit : '',
+      closed: closed ? 'true' : 'false',
+      note
+    });
+    await fetch(GAS_URL + '?' + params);
+    settings[selectedDate] = { limit, closed, note };
+    closeSettingsModal();
+    renderCalendar();
+    renderSidePanel();
+  } catch(e) { alert('設定の保存に失敗しました'); }
+}
+
+async function deleteSettingsForDate() {
+  if (!confirm('この日の設定を削除しますか？')) return;
+  try {
+    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'deleteSettings', date: selectedDate });
+    await fetch(GAS_URL + '?' + params);
+    delete settings[selectedDate];
+    closeSettingsModal();
+    renderCalendar();
+    renderSidePanel();
+  } catch(e) { alert('設定の削除に失敗しました'); }
+}
+
+async function saveDefaultLimit() {
+  const val = parseInt(document.getElementById('settingsDefaultLimit').value);
+  if (isNaN(val) || val < 0) { alert('正しい値を入力してください'); return; }
+  try {
+    const params = new URLSearchParams({
+      key: ACCESS_KEY, action: 'saveSettings',
+      date: 'DEFAULT', limit: val, closed: 'false', note: 'デフォルト上限'
+    });
+    await fetch(GAS_URL + '?' + params);
+    settings['DEFAULT'] = { limit: val, closed: false, note: 'デフォルト上限' };
+    defaultLimit = val;
+    document.getElementById('settingsDefaultShow').textContent = val;
+    renderCalendar();
+    renderSidePanel();
+    alert(`デフォルト上限を ${val}組 に更新しました`);
+  } catch(e) { alert('保存に失敗しました'); }
+}
+
+document.getElementById('settingsModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeSettingsModal();
+});
 
 // ── ナビ ──────────────────────────────────────────
 function changeMonth(dir) {
