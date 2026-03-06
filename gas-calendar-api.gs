@@ -488,9 +488,13 @@ function getActivityJapanBookings() {
     const changeMap   = {};
 
     // ① 確定予約通知メール
+    // subject フィルタを除去: AJが件名を「確定予約通知」→「即時確定予約通知」に変更したため
+    // subject:確定予約通知 では「即時確定予約通知」がGmailの日本語トークナイザでマッチしない
+    // parseAJEmail() が予約番号+日時を必須チェックするので、無関係メールは自動除外される
     const newThreads = GmailApp.search(
-      'from:reserve-system@activityjapan.com subject:確定予約通知', 0, 100
+      'from:reserve-system@activityjapan.com', 0, 200
     );
+    Logger.log('AJ確定メール: スレッド' + newThreads.length + '件');
     for (const thread of newThreads) {
       for (const message of thread.getMessages()) {
         const booking = parseAJEmail(message.getPlainBody());
