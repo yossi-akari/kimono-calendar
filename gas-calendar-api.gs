@@ -118,7 +118,8 @@ function doGet(e) {
       const daysInMonth  = new Date(year, month, 0).getDate();
       const allSettings  = getAllSettings();
       const totalSlots   = ALL_TIMES.length; // 1日のタイムスロット総数（例:11）
-      let gasBookings = getCachedBookings() || getRawBookings();
+      const _cachedM = getCachedBookings();
+      let gasBookings = (_cachedM && _cachedM.length > 0) ? _cachedM : getRawBookings();
       const cancelled = getCancelledIds();
       const manualBookings = getManualSheetBookings();
       const allBlocked = getAllBlockedSlotsMap(); // { date: Set<time> } ブロック済み一括取得
@@ -142,6 +143,18 @@ function doGet(e) {
         result[dateStr] = { closed, limit, available: Math.max(0, limit - occupiedSlots) };
       }
       output.setContent(JSON.stringify({ success: true, availability: result }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
+  // 管理者: キャッシュを強制クリア（予約が反映されない場合の緊急リセット用）
+  if (action === 'clearCache') {
+    try {
+      clearCache();
+      const fresh = getRawBookings();
+      setCachedBookings(fresh);
+      output.setContent(JSON.stringify({ success: true, refreshed: fresh.length }));
     } catch(err) {
       output.setContent(JSON.stringify({ success: false, error: err.message }));
     }
@@ -234,10 +247,14 @@ function doGet(e) {
 
   try {
     // 確定予約はキャッシュ利用（重い処理）
+    // !bookings だけでは [] が truthy なので length も確認する
     let bookings = getCachedBookings();
-    if (!bookings) {
+    if (!bookings || bookings.length === 0) {
       bookings = getRawBookings();
+      Logger.log('キャッシュミス → Gmail再取得: ' + bookings.length + '件');
       setCachedBookings(bookings);
+    } else {
+      Logger.log('キャッシュヒット: ' + bookings.length + '件');
     }
     // キャンセルは毎回リアルタイムで取得・除外（キャッシュなし）
     const cancelledIds = getCancelledIds();
@@ -300,12 +317,20 @@ function getCancelledIds() {
   } catch(e) { Logger.log('じゃらんキャンセルエラー: ' + e.message); }
 
   // ActivityJapan キャンセルメール
+  // ※ activity-japan@activityjapan.com は変更通知なども送信する場合があるため、
+  //   メール本文にキャンセル関連ワードがある場合のみ予約番号を取得する
   try {
     const threads = GmailApp.search('from:activity-japan@activityjapan.com', 0, 200);
     for (const thread of threads) {
       for (const msg of thread.getMessages()) {
-        const m = msg.getPlainBody().match(/予約番号[：:]\s*(\d+)/);
-        if (m) ids.add(m[1]);
+        const body = msg.getPlainBody();
+        // キャンセル・取消の文言がない場合はスキップ（変更通知メールを誤って除外しない）
+        if (!body.match(/キャンセル|取消|取り消し|解除|ご予約を.*キャンセル/)) continue;
+        const m = body.match(/予約番号[：:]\s*(\d+)/);
+        if (m) {
+          ids.add(m[1]);
+          Logger.log('AJキャンセル確認: #' + m[1]);
+        }
       }
     }
   } catch(e) { Logger.log('AJキャンセルエラー: ' + e.message); }
@@ -478,8 +503,9 @@ function getActivityJapanBookings() {
     }
 
     // ② 予約内容変更通知メール
+    // from フィルタを追加して無関係なメールを除外
     const changeThreads = GmailApp.search(
-      'subject:予約内容変更のお知らせ', 0, 100
+      '(from:activity-japan@activityjapan.com OR from:reserve-system@activityjapan.com) subject:予約内容変更のお知らせ', 0, 100
     );
     for (const thread of changeThreads) {
       for (const message of thread.getMessages()) {
@@ -916,7 +942,8 @@ function getAvailabilityForDate(date) {
 
   let occupiedSlots = 0;
   try {
-    let gasBookings = getCachedBookings() || getRawBookings();
+    const _cachedA = getCachedBookings();
+    let gasBookings = (_cachedA && _cachedA.length > 0) ? _cachedA : getRawBookings();
     const cancelled = getCancelledIds();
     const bookedForDate = [
       ...gasBookings.filter(b => b.date === date && !cancelled.has(b.reservationId)),
@@ -980,6 +1007,8 @@ function getCachedBookings() {
   catch(e) { return null; }
 }
 function setCachedBookings(b) {
+  // 空配列はキャッシュしない（GMail API一時エラー時に空が永続化するのを防ぐ）
+  if (!b || b.length === 0) return;
   try { const s = JSON.stringify(b); if (s.length < 90000) CacheService.getScriptCache().put('bookings_v1', s, 3600); }
   catch(e) {}
 }

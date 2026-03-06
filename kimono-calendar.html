@@ -669,6 +669,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     <button class="header-btn" onclick="openListModal(false)">📋 一覧</button>
     <a href="kimono-booking.html" class="header-btn accent" target="_blank">＋ 予約を手動入力</a>
     <button class="header-btn" onclick="refreshBookings()">↻ 更新</button>
+    <button class="header-btn" onclick="forceClearCache()" title="GASキャッシュをリセットして再取得（予約が反映されない場合）" style="opacity:0.6;font-size:0.72rem;">⚡ キャッシュ再取得</button>
   </div>
 </div>
 
@@ -1122,6 +1123,26 @@ async function loadFromGAS() {
     console.warn('GAS読み込みエラー:', e);
   }
   return false;
+}
+
+// GASのキャッシュを強制クリアして再取得（予約が反映されない場合の緊急手段）
+async function forceClearCache() {
+  if (!GAS_URL || GAS_URL === 'YOUR_GAS_DEPLOY_URL_HERE') return;
+  const statusEl = document.getElementById('syncStatus');
+  if (statusEl) statusEl.textContent = 'キャッシュリセット中...';
+  try {
+    const res = await fetch(GAS_URL + '?' + new URLSearchParams({ key: ACCESS_KEY, action: 'clearCache' }));
+    const data = JSON.parse(await res.text());
+    if (data.success) {
+      if (statusEl) statusEl.textContent = `リセット完了 (${data.refreshed}件取得)`;
+      await refreshBookings();
+    } else {
+      if (statusEl) statusEl.textContent = 'リセット失敗: ' + (data.error || '不明');
+    }
+  } catch(e) {
+    console.warn('キャッシュリセットエラー:', e);
+    if (statusEl) statusEl.textContent = 'リセット失敗';
+  }
 }
 
 async function refreshBookings() {
