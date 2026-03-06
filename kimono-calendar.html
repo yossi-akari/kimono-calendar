@@ -617,6 +617,16 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   padding: 8px 20px; border-radius: 2px; font-size: 0.82rem; cursor: pointer;
 }
 .rp-modal-print-btn:hover { opacity: 0.85; }
+.rp-save-indicator {
+  font-size: 0.72rem; color: #8ecf8e; opacity: 0;
+  transition: opacity 0.5s; white-space: nowrap;
+}
+.rp-save-indicator.show { opacity: 1; }
+.rp-modal-input.rp-auto { background: #f3f8ee; }
+.rp-modal-hint {
+  font-size: 0.68rem; color: var(--muted);
+  flex-shrink: 0; white-space: nowrap; line-height: 1.3;
+}
 </style>
 </head>
 <body>
@@ -738,6 +748,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   <div class="rp-modal">
     <div class="rp-modal-header">
       <h2>📋 日報　金額入力</h2>
+      <span class="rp-save-indicator" id="rpSaveIndicator">保存済 ✓</span>
       <button onclick="closeRpModal()" style="background:none;border:none;color:rgba(255,255,255,0.6);font-size:1.2rem;cursor:pointer;line-height:1;">×</button>
     </div>
     <div class="rp-modal-body">
@@ -753,22 +764,22 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
         <div class="rp-modal-section-title">カード売上</div>
         <div class="rp-modal-row">
           <span class="rp-modal-label">VISA</span>
-          <input class="rp-modal-input" type="number" id="rpVisa" placeholder="0" min="0" oninput="calcRpCardTotal()">
+          <input class="rp-modal-input" type="number" id="rpVisa" placeholder="0" min="0" oninput="calcRpCardTotal(); scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
         <div class="rp-modal-row">
           <span class="rp-modal-label">JCB</span>
-          <input class="rp-modal-input" type="number" id="rpJcb" placeholder="0" min="0" oninput="calcRpCardTotal()">
+          <input class="rp-modal-input" type="number" id="rpJcb" placeholder="0" min="0" oninput="calcRpCardTotal(); scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
         <div class="rp-modal-row">
           <span class="rp-modal-label">UC</span>
-          <input class="rp-modal-input" type="number" id="rpUc" placeholder="0" min="0" oninput="calcRpCardTotal()">
+          <input class="rp-modal-input" type="number" id="rpUc" placeholder="0" min="0" oninput="calcRpCardTotal(); scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
         <div class="rp-modal-row" style="border-top:1px solid var(--line);padding-top:5px;margin-top:2px;">
           <span class="rp-modal-label bold">カード合計</span>
-          <input class="rp-modal-input" type="number" id="rpCardTotal" placeholder="自動計算" min="0">
+          <input class="rp-modal-input" type="number" id="rpCardTotal" placeholder="自動計算" min="0" oninput="scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
       </div>
@@ -777,23 +788,23 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
       <div class="rp-modal-section">
         <div class="rp-modal-section-title">事前決済（追加）</div>
         <div class="rp-modal-row">
-          <input class="rp-modal-detail-input" type="text" id="rpExtra1Name" placeholder="名称（例: 楽天トラベル）">
-          <input class="rp-modal-input" type="number" id="rpExtra1Amt" placeholder="0" min="0">
+          <input class="rp-modal-detail-input" type="text" id="rpExtra1Name" placeholder="名称（例: 楽天トラベル）" oninput="scheduleRpSave()">
+          <input class="rp-modal-input" type="number" id="rpExtra1Amt" placeholder="0" min="0" oninput="scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
         <div class="rp-modal-row">
-          <input class="rp-modal-detail-input" type="text" id="rpExtra2Name" placeholder="名称">
-          <input class="rp-modal-input" type="number" id="rpExtra2Amt" placeholder="0" min="0">
+          <input class="rp-modal-detail-input" type="text" id="rpExtra2Name" placeholder="名称" oninput="scheduleRpSave()">
+          <input class="rp-modal-input" type="number" id="rpExtra2Amt" placeholder="0" min="0" oninput="scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
         <div class="rp-modal-row">
-          <input class="rp-modal-detail-input" type="text" id="rpExtra3Name" placeholder="名称">
-          <input class="rp-modal-input" type="number" id="rpExtra3Amt" placeholder="0" min="0">
+          <input class="rp-modal-detail-input" type="text" id="rpExtra3Name" placeholder="名称" oninput="scheduleRpSave()">
+          <input class="rp-modal-input" type="number" id="rpExtra3Amt" placeholder="0" min="0" oninput="scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
         <div class="rp-modal-row">
-          <input class="rp-modal-detail-input" type="text" id="rpExtra4Name" placeholder="名称">
-          <input class="rp-modal-input" type="number" id="rpExtra4Amt" placeholder="0" min="0">
+          <input class="rp-modal-detail-input" type="text" id="rpExtra4Name" placeholder="名称" oninput="scheduleRpSave()">
+          <input class="rp-modal-input" type="number" id="rpExtra4Amt" placeholder="0" min="0" oninput="scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
       </div>
@@ -803,12 +814,12 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
         <div class="rp-modal-section-title">クーポン / ポイント</div>
         <div class="rp-modal-row">
           <span class="rp-modal-label">クーポン</span>
-          <input class="rp-modal-input" type="number" id="rpCoupon" placeholder="0" min="0">
+          <input class="rp-modal-input" type="number" id="rpCoupon" placeholder="0" min="0" oninput="scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
         <div class="rp-modal-row">
           <span class="rp-modal-label">ポイント</span>
-          <input class="rp-modal-input" type="number" id="rpPoint" placeholder="0" min="0">
+          <input class="rp-modal-input" type="number" id="rpPoint" placeholder="0" min="0" oninput="scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
         </div>
       </div>
@@ -818,23 +829,25 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
         <div class="rp-modal-section-title">合計・出金</div>
         <div class="rp-modal-row">
           <span class="rp-modal-label wide bold">本日売上合計</span>
-          <input class="rp-modal-input" type="number" id="rpDayTotal" placeholder="0" min="0">
+          <input class="rp-modal-input" type="number" id="rpDayTotal" placeholder="0" min="0" oninput="calcRpMonthTotal()">
           <span class="rp-modal-yen">円</span>
         </div>
         <div class="rp-modal-row">
           <span class="rp-modal-label wide bold">月間売上合計</span>
-          <input class="rp-modal-input" type="number" id="rpMonthTotal" placeholder="0" min="0">
+          <input class="rp-modal-input rp-auto" type="number" id="rpMonthTotal" placeholder="自動累計" min="0" oninput="scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
+          <span class="rp-modal-hint">月累計</span>
         </div>
         <div class="rp-modal-row">
           <span class="rp-modal-label wide">出金額</span>
-          <input class="rp-modal-input" type="number" id="rpCashOut" placeholder="0" min="0">
+          <input class="rp-modal-input" type="number" id="rpCashOut" placeholder="0" min="0" oninput="calcRpOffice()">
           <span class="rp-modal-yen">円</span>
         </div>
         <div class="rp-modal-row">
           <span class="rp-modal-label wide">事務所持ち帰り</span>
-          <input class="rp-modal-input" type="number" id="rpOffice" placeholder="0" min="0">
+          <input class="rp-modal-input rp-auto" type="number" id="rpOffice" placeholder="自動計算" min="0" oninput="scheduleRpSave()">
           <span class="rp-modal-yen">円</span>
+          <span class="rp-modal-hint">現金売上−出金</span>
         </div>
       </div>
 
@@ -1034,6 +1047,8 @@ let selectedDate = todayStr;
 let bookings = [];
 let activeBookingId = null;
 let settings = {};
+let rpCashSale = 0;       // 現金売上（日報モーダルで事務所持ち帰り自動計算用）
+let _rpSaveTimer = null;  // 日報自動保存タイマー
 const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
 const TOTAL_SLOTS = ALL_TIMES.length; // 1日のタイムスロット総数 = 11
 let defaultLimit = TOTAL_SLOTS; // 管理者未設定時はスロット総数がデフォルト上限
@@ -2001,36 +2016,140 @@ function printReceipt() {
 }
 
 // ⑩-① 日報 金額入力モーダル
+// ── 日報 localStorage キー ────────────────────
+function getRpKey(date) { return 'kimono_report_' + date; }
+
+// 自動保存（デバウンス）
+function scheduleRpSave() {
+  clearTimeout(_rpSaveTimer);
+  _rpSaveTimer = setTimeout(saveRpData, 700);
+}
+
+// 現在のモーダル入力を localStorage に保存
+function saveRpData() {
+  if (!selectedDate) return;
+  const getVal = id => parseInt(document.getElementById(id).value) || 0;
+  const getStr = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+  const data = {
+    date: selectedDate,
+    visa: getVal('rpVisa'), jcb: getVal('rpJcb'), uc: getVal('rpUc'),
+    cardTotal: getVal('rpCardTotal'),
+    extras: [
+      { name: getStr('rpExtra1Name'), amt: getVal('rpExtra1Amt') },
+      { name: getStr('rpExtra2Name'), amt: getVal('rpExtra2Amt') },
+      { name: getStr('rpExtra3Name'), amt: getVal('rpExtra3Amt') },
+      { name: getStr('rpExtra4Name'), amt: getVal('rpExtra4Amt') },
+    ],
+    coupon: getVal('rpCoupon'), point: getVal('rpPoint'),
+    dayTotal: getVal('rpDayTotal'), monthTotal: getVal('rpMonthTotal'),
+    cashOut: getVal('rpCashOut'), office: getVal('rpOffice'),
+    savedAt: new Date().toISOString(),
+  };
+  localStorage.setItem(getRpKey(selectedDate), JSON.stringify(data));
+  // 保存済みインジケータ
+  const ind = document.getElementById('rpSaveIndicator');
+  if (ind) {
+    ind.classList.add('show');
+    clearTimeout(ind._hideTimer);
+    ind._hideTimer = setTimeout(() => ind.classList.remove('show'), 2500);
+  }
+}
+
+// localStorage から読み込んでフォームに反映。返値: 読み込み成功 true / なし false
+function loadRpData(date) {
+  const raw = localStorage.getItem(getRpKey(date));
+  if (!raw) return false;
+  try {
+    const d = JSON.parse(raw);
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = (v > 0 ? v : ''); };
+    const setStr = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+    setVal('rpVisa', d.visa); setVal('rpJcb', d.jcb); setVal('rpUc', d.uc);
+    setVal('rpCardTotal', d.cardTotal);
+    (d.extras || []).forEach((e, i) => {
+      setStr('rpExtra' + (i+1) + 'Name', e.name);
+      setVal('rpExtra' + (i+1) + 'Amt',  e.amt);
+    });
+    setVal('rpCoupon', d.coupon); setVal('rpPoint', d.point);
+    setVal('rpDayTotal', d.dayTotal);
+    setVal('rpCashOut', d.cashOut); setVal('rpOffice', d.office);
+    // monthTotal は再計算するので読み込まない
+    return true;
+  } catch(e) { return false; }
+}
+
+// 月間売上合計 = 当月全保存済み日報の dayTotal 合計（当日分は現在入力値）
+function calcRpMonthTotal() {
+  if (!selectedDate) return;
+  const d = new Date(selectedDate + 'T00:00:00');
+  const prefix = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-';
+  const currentDayTotal = parseInt(document.getElementById('rpDayTotal').value) || 0;
+  let total = 0;
+  for (let day = 1; day <= 31; day++) {
+    const dateStr = prefix + String(day).padStart(2, '0');
+    if (dateStr === selectedDate) {
+      total += currentDayTotal;
+    } else {
+      const raw = localStorage.getItem(getRpKey(dateStr));
+      if (raw) { try { total += JSON.parse(raw).dayTotal || 0; } catch(e) {} }
+    }
+  }
+  document.getElementById('rpMonthTotal').value = total > 0 ? total : '';
+  scheduleRpSave();
+}
+
+// 事務所持ち帰り = 現金売上(自動) - 出金額（負なら 0）
+function calcRpOffice() {
+  const cashOut = parseInt(document.getElementById('rpCashOut').value) || 0;
+  const office  = Math.max(0, rpCashSale - cashOut);
+  document.getElementById('rpOffice').value = office > 0 ? office : '';
+  scheduleRpSave();
+}
+
+// モーダルを開く
 function openDailyReportModal() {
   if (!selectedDate) { alert('日付を選択してください'); return; }
 
-  // 自動集計値を参考表示
-  const d = new Date(selectedDate + 'T00:00:00');
-  const dayBks   = bookings.filter(b => b.date === selectedDate);
-  const monthBks = bookings.filter(b => {
-    const bd = new Date(b.date + 'T00:00:00');
-    return bd.getFullYear() === d.getFullYear() && bd.getMonth() === d.getMonth();
-  });
+  // 現金売上を計算して保持（事務所持ち帰り自動計算用）
+  const dayBks = bookings.filter(b => b.date === selectedDate);
+  const localB = dayBks.filter(b => b.source === 'MANUAL' || (b.payment && b.payment.includes('現地')));
   const ajB    = dayBks.filter(b => b.source === 'AJ');
   const jaranB = dayBks.filter(b => b.source !== 'AJ' && b.source !== 'MANUAL');
-  const localB = dayBks.filter(b => b.source === 'MANUAL' || (b.payment && b.payment.includes('現地')));
-  const ajTotal    = ajB.reduce((s,b) => s + (b.total||0), 0);
-  const jaranTotal = jaranB.reduce((s,b) => s + (b.total||0), 0);
-  const localTotal = localB.reduce((s,b) => s + (b.total||0), 0);
-  const dayTotal   = dayBks.reduce((s,b) => s + (b.total||0), 0);
+  rpCashSale          = localB.reduce((s,b) => s + (b.total||0), 0);
+  const ajTotal       = ajB.reduce((s,b)    => s + (b.total||0), 0);
+  const jaranTotal    = jaranB.reduce((s,b)  => s + (b.total||0), 0);
+  const dayTotal      = dayBks.reduce((s,b)  => s + (b.total||0), 0);
 
+  // 参考値を表示
   const fmtRef = (label, val) => val > 0 ? `<span>${label}：¥${val.toLocaleString()}</span>` : '';
   document.getElementById('rpRefValues').innerHTML = [
-    fmtRef('現金/手動', localTotal),
-    fmtRef('AJ事前', ajTotal),
+    fmtRef('現金/手動', rpCashSale),
+    fmtRef('AJ事前',    ajTotal),
     fmtRef('じゃらん事前', jaranTotal),
     `<span style="font-weight:bold;">予約計：¥${dayTotal.toLocaleString()}</span>`,
   ].filter(Boolean).join('');
+
+  // フォームをクリア → 保存済みデータがあれば復元
+  ['rpVisa','rpJcb','rpUc','rpCardTotal',
+   'rpExtra1Name','rpExtra1Amt','rpExtra2Name','rpExtra2Amt',
+   'rpExtra3Name','rpExtra3Amt','rpExtra4Name','rpExtra4Amt',
+   'rpCoupon','rpPoint','rpDayTotal','rpMonthTotal','rpCashOut','rpOffice'
+  ].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  loadRpData(selectedDate);
+
+  // 月間売上合計 と 事務所持ち帰り を再計算
+  calcRpMonthTotal();
+  calcRpOffice();
+
+  // 保存済みインジケータをリセット
+  const ind = document.getElementById('rpSaveIndicator');
+  if (ind) ind.classList.remove('show');
 
   document.getElementById('rpModal').classList.add('open');
 }
 
 function closeRpModal() {
+  clearTimeout(_rpSaveTimer);
+  saveRpData(); // 閉じる前に即時保存
   document.getElementById('rpModal').classList.remove('open');
 }
 
@@ -2043,6 +2162,7 @@ function calcRpCardTotal() {
 }
 
 function executeRpPrint() {
+  saveRpData(); // 印刷前に確実に保存
   const getVal = id => parseInt(document.getElementById(id).value) || 0;
   const getStr = id => document.getElementById(id).value.trim();
   printDailyReport({
@@ -2063,7 +2183,7 @@ function executeRpPrint() {
     cashOut:    getVal('rpCashOut'),
     office:     getVal('rpOffice'),
   });
-  closeRpModal();
+  document.getElementById('rpModal').classList.remove('open');
 }
 
 // ⑩ 日報（売上報告書フォーマット）
