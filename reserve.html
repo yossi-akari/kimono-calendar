@@ -121,105 +121,69 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .modal-close { background: var(--ink); color: white; border: none; padding: 14px 32px; font-family: 'Noto Sans JP', sans-serif; font-size: 0.85rem; letter-spacing: 0.1em; cursor: pointer; border-radius: 1px; }
 .modal-close:hover { opacity: 0.8; }
 
+/* 言語切替ボタン */
+.lang-switcher { position: fixed; top: 12px; right: 16px; z-index: 300; display: flex; gap: 4px; }
+.lang-btn { background: rgba(28,26,24,0.75); color: #faf8f4; border: none; padding: 5px 10px; font-size: 0.66rem; letter-spacing: 0.06em; cursor: pointer; border-radius: 2px; font-family: 'Noto Sans JP', sans-serif; transition: background 0.2s; }
+.lang-btn.active { background: var(--accent); }
+.lang-btn:hover:not(.active) { background: var(--ink); }
+
 @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
 
+<!-- 言語切替 -->
+<div class="lang-switcher">
+  <button class="lang-btn active" id="lbtn-ja" onclick="setLang('ja')">JP</button>
+  <button class="lang-btn" id="lbtn-en" onclick="setLang('en')">EN</button>
+  <button class="lang-btn" id="lbtn-zh" onclick="setLang('zh')">繁中</button>
+</div>
+
 <div class="hero">
   <div class="hero-eyebrow">KIMONO RENTAL</div>
-  <h1>着物レンタル<br>ご予約</h1>
-  <p>特別な一日を、丁寧に。</p>
+  <h1 id="heroTitle">着物レンタル<br>ご予約</h1>
+  <p id="heroSub">特別な一日を、丁寧に。</p>
   <div class="hero-line"></div>
 </div>
 
 <div class="steps">
-  <div class="step active" id="step1"><div class="step-num">1</div><span>プラン</span></div>
+  <div class="step active" id="step1"><div class="step-num">1</div><span id="stepLbl1">プラン</span></div>
   <div class="step-sep"></div>
-  <div class="step" id="step2"><div class="step-num">2</div><span>日時・人数</span></div>
+  <div class="step" id="step2"><div class="step-num">2</div><span id="stepLbl2">日時・人数</span></div>
   <div class="step-sep"></div>
-  <div class="step" id="step3"><div class="step-num">3</div><span>オプション</span></div>
+  <div class="step" id="step3"><div class="step-num">3</div><span id="stepLbl3">オプション</span></div>
   <div class="step-sep"></div>
-  <div class="step" id="step4"><div class="step-num">4</div><span>お客様情報</span></div>
+  <div class="step" id="step4"><div class="step-num">4</div><span id="stepLbl4">お客様情報</span></div>
 </div>
 
 <div class="main">
 
   <!-- Step 1 -->
   <div id="sc1">
-    <div class="section-label">プランを選択</div>
+    <div class="section-label" id="planSectionLabel">プランを選択</div>
     <div class="common-box">
-      <strong>全プラン共通（含まれるもの）</strong>
-      着物・帯・長襦袢・草履・バッグ・足袋・着付け　／　雨天時：雨傘無料レンタル
+      <strong id="commonBoxTitle">全プラン共通（含まれるもの）</strong>
+      <span id="commonBoxContent">着物・帯・長襦袢・草履・バッグ・足袋・着付け　／　雨天時：雨傘無料レンタル</span>
     </div>
-    <div class="plans">
-      <div class="plan-card" onclick="selectPlan(this,'ベーシック',2970,false)">
-        <div class="plan-badge">BASIC</div>
-        <div class="plan-name">ベーシック</div>
-        <div class="plan-price">¥2,970 <span>/ 女性1名</span></div>
-        <div class="plan-note">お得に着物街歩き。あらかじめ帯もコーディネートしてあるプラン</div>
-      </div>
-      <div class="plan-card" onclick="selectPlan(this,'スタンダード',3960,false)">
-        <div class="plan-badge">STANDARD</div>
-        <div class="plan-name">スタンダード</div>
-        <div class="plan-price">¥3,960 <span>/ 女性1名</span></div>
-        <div class="plan-note">豊富なラインナップから<br>お好みの一着を</div>
-      </div>
-      <div class="plan-card" onclick="selectPlan(this,'プレミアム',4950,false)">
-        <div class="plan-badge badge-gold">PREMIUM</div>
-        <div class="plan-name">プレミアム</div>
-        <div class="plan-price">¥4,950 <span>/ 女性1名</span></div>
-        <div class="plan-note">上質な着物・帯で<br>特別感ある装いを</div>
-      </div>
-      <div class="plan-card" onclick="selectPlan(this,'撮影付き',2970,false)">
-        <div class="plan-badge badge-gold">PHOTO</div>
-        <div class="plan-name">撮影付き</div>
-        <div class="plan-price">¥2,970 <span>/ 女性1名</span></div>
-        <div class="plan-note">スタジオやロケーション撮影希望の方向けのプラン</div>
-      </div>
-      <div class="plan-card" onclick="selectPlan(this,'加賀友禅',41800,false)">
-        <div class="plan-badge badge-kaga">KAGA YUZEN</div>
-        <div class="plan-name">加賀友禅</div>
-        <div class="plan-price">¥41,800 <span>/ 女性1名</span></div>
-        <div class="plan-note">伝統工芸・加賀友禅の<br>本物の美しさを体感</div>
-      </div>
-      <div class="plan-card" onclick="selectPlan(this,'成人式下見',0,true)">
-        <div class="plan-badge badge-green">SEIJIN-SHIKI</div>
-        <div class="plan-name">成人式下見</div>
-        <div class="plan-price estimate">来店時お見積もり</div>
-        <div class="plan-note">振袖をじっくり<br>ご試着いただけます</div>
-      </div>
-      <div class="plan-card" onclick="selectPlan(this,'卒業式下見',0,true)">
-        <div class="plan-badge badge-green">SOTSUGYOU-SHIKI</div>
-        <div class="plan-name">卒業式下見</div>
-        <div class="plan-price estimate">来店時お見積もり</div>
-        <div class="plan-note">袴・着物コーディネートを<br>ご提案いたします</div>
-      </div>
-      <div class="plan-card" onclick="selectPlan(this,'期間限定',2970,false)">
-        <div class="plan-badge badge-red">LIMITED</div>
-        <div class="plan-name">期間限定プラン</div>
-        <div class="plan-price">¥2,970 <span>/ 女性1名</span></div>
-        <div class="plan-note">期間限定キャンペーンでお得に着物レンタル</div>
-      </div>
-    </div>
-    <button class="submit-btn" onclick="goStep(2)" style="max-width:340px;display:block;margin:0 auto;">次へ — 日時・人数を選ぶ</button>
+    <div class="plans" id="plansGrid"></div>
+    <button class="submit-btn" id="step1NextBtn" onclick="goStep(2)" style="max-width:340px;display:block;margin:0 auto;">次へ — 日時・人数を選ぶ</button>
   </div>
 
   <!-- Step 2 -->
   <div id="sc2" style="display:none;">
     <div class="form-block">
-      <div class="section-label">ご来店日時</div>
+      <div class="section-label" id="dateSectionLabel">ご来店日時</div>
       <div class="form-row">
         <div class="field">
-          <label>ご来店日</label>
+          <label id="visitDateLabel">ご来店日</label>
           <input type="date" id="visitDate" onchange="onDateChange()">
           <div id="dateError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;">水曜日は定休日のため選択できません</div>
           <div id="availError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;"></div>
         </div>
         <div class="field">
-          <label>ご来店時間</label>
+          <label id="visitTimeLabel">ご来店時間</label>
           <select id="visitTime">
-            <option value="">選択してください</option>
+            <option value="" id="timeSelectOpt">選択してください</option>
             <option>09:00</option><option>09:30</option>
             <option>10:00</option><option>10:30</option>
             <option>11:00</option><option>11:30</option>
@@ -231,10 +195,10 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       </div>
     </div>
     <div class="form-block">
-      <div class="section-label">人数</div>
+      <div class="section-label" id="peopleSectionLabel">人数</div>
       <div class="form-row-3">
         <div class="field">
-          <label>女性人数</label>
+          <label id="femaleLbl">女性人数</label>
           <select id="numFemale" onchange="updatePeople()">
             <option value="0">0名</option><option value="1" selected>1名</option>
             <option value="2">2名</option><option value="3">3名</option>
@@ -242,7 +206,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
           </select>
         </div>
         <div class="field">
-          <label>男性人数（¥4,400/名）</label>
+          <label id="maleLbl">男性人数（¥4,400/名）</label>
           <select id="numMale" onchange="updatePeople()">
             <option value="0" selected>0名</option><option value="1">1名</option>
             <option value="2">2名</option><option value="3">3名</option>
@@ -250,7 +214,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
           </select>
         </div>
         <div class="field">
-          <label>小人 3〜10歳（¥3,300/名）</label>
+          <label id="childLbl">小人 3〜10歳（¥3,300/名）</label>
           <select id="numChild" onchange="updatePeople()">
             <option value="0" selected>0名</option><option value="1">1名</option>
             <option value="2">2名</option><option value="3">3名</option>
@@ -259,67 +223,67 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       </div>
     </div>
     <div class="summary-box">
-      <div class="summary-row"><span class="summary-label">プラン</span><span id="s2Plan">—</span></div>
-      <div class="summary-row"><span class="summary-label">女性</span><span id="s2Female">—</span></div>
-      <div class="summary-row" id="s2MaleRow" style="display:none"><span class="summary-label">男性</span><span id="s2Male">—</span></div>
-      <div class="summary-row" id="s2ChildRow" style="display:none"><span class="summary-label">小人</span><span id="s2Child">—</span></div>
-      <div class="summary-row total"><span>小計</span><span id="s2Total">—</span></div>
+      <div class="summary-row"><span class="summary-label" id="s2PlanLbl">プラン</span><span id="s2Plan">—</span></div>
+      <div class="summary-row"><span class="summary-label" id="s2FemaleLbl">女性</span><span id="s2Female">—</span></div>
+      <div class="summary-row" id="s2MaleRow" style="display:none"><span class="summary-label" id="s2MaleLbl">男性</span><span id="s2Male">—</span></div>
+      <div class="summary-row" id="s2ChildRow" style="display:none"><span class="summary-label" id="s2ChildLbl">小人</span><span id="s2Child">—</span></div>
+      <div class="summary-row total"><span id="s2SubtotalLbl">小計</span><span id="s2Total">—</span></div>
     </div>
     <div class="btn-row">
-      <button class="submit-btn btn-ghost" onclick="goStep(1)" style="flex:1;">← 戻る</button>
-      <button class="submit-btn" onclick="goStep(3)" style="flex:2;">次へ — オプション選択</button>
+      <button class="submit-btn btn-ghost" id="step2BackBtn" onclick="goStep(1)" style="flex:1;">← 戻る</button>
+      <button class="submit-btn" id="step2NextBtn" onclick="goStep(3)" style="flex:2;">次へ — オプション選択</button>
     </div>
   </div>
 
   <!-- Step 3 -->
   <div id="sc3" style="display:none;">
     <div class="photo-required-section" id="photoRequiredSection">
-      <div class="photo-required-label">撮影プランを選択（必須）</div>
+      <div class="photo-required-label" id="photoReqLabel">撮影プランを選択（必須）</div>
       <div class="photo-required-grid" id="photoRequiredGrid"></div>
       <div class="photo-req-error" id="photoReqError">撮影プランをいずれか1つ選択してください</div>
     </div>
     <div class="form-block">
-      <div class="section-label">オプション（任意）</div>
+      <div class="section-label" id="optSectionLabel">オプション（任意）</div>
       <div class="options-grid" id="optionsGrid"></div>
     </div>
     <div class="summary-box">
-      <div class="summary-row"><span class="summary-label">プラン・人数小計</span><span id="s3Base">—</span></div>
-      <div class="summary-row" id="s3OptRow" style="display:none"><span class="summary-label">オプション</span><span id="s3Opt">—</span></div>
-      <div class="summary-row total"><span>合計（税込）</span><span id="s3Total">—</span></div>
+      <div class="summary-row"><span class="summary-label" id="s3BaseLbl">プラン・人数小計</span><span id="s3Base">—</span></div>
+      <div class="summary-row" id="s3OptRow" style="display:none"><span class="summary-label" id="s3OptLbl">オプション</span><span id="s3Opt">—</span></div>
+      <div class="summary-row total"><span id="s3TotalLbl">合計（税込）</span><span id="s3Total">—</span></div>
     </div>
     <div class="btn-row">
-      <button class="submit-btn btn-ghost" onclick="goStep(2)" style="flex:1;">← 戻る</button>
-      <button class="submit-btn" onclick="goStep(4)" style="flex:2;">次へ — お客様情報入力</button>
+      <button class="submit-btn btn-ghost" id="step3BackBtn" onclick="goStep(2)" style="flex:1;">← 戻る</button>
+      <button class="submit-btn" id="step3NextBtn" onclick="goStep(4)" style="flex:2;">次へ — お客様情報入力</button>
     </div>
   </div>
 
   <!-- Step 4 -->
   <div id="sc4" style="display:none;">
     <div class="form-block">
-      <div class="section-label">お客様情報</div>
+      <div class="section-label" id="customerSectionLabel">お客様情報</div>
       <div class="form-row">
-        <div class="field"><label>お名前（姓）</label><input type="text" id="lastName" placeholder="山田"></div>
-        <div class="field"><label>お名前（名）</label><input type="text" id="firstName" placeholder="花子"></div>
+        <div class="field"><label id="lastNameLabel">お名前（姓）</label><input type="text" id="lastName" placeholder="山田"></div>
+        <div class="field"><label id="firstNameLabel">お名前（名）</label><input type="text" id="firstName" placeholder="花子"></div>
       </div>
-      <div class="field"><label>メールアドレス</label><input type="email" id="email" placeholder="example@email.com"></div>
-      <div class="field"><label>電話番号</label><input type="tel" id="tel" placeholder="090-0000-0000"></div>
+      <div class="field"><label id="emailLabel">メールアドレス</label><input type="email" id="email" placeholder="example@email.com"></div>
+      <div class="field"><label id="telLabel">電話番号</label><input type="tel" id="tel" placeholder="090-0000-0000"></div>
     </div>
     <div class="form-block">
-      <div class="section-label">ご要望・備考</div>
+      <div class="section-label" id="remarksSectionLabel">ご要望・備考</div>
       <textarea id="remarks" placeholder="ご質問・ご要望などがあればご記入ください"></textarea>
     </div>
     <div class="summary-box">
-      <div class="summary-row"><span class="summary-label">プラン</span><span id="s4Plan">—</span></div>
-      <div class="summary-row"><span class="summary-label">来店日時</span><span id="s4Date">—</span></div>
-      <div class="summary-row"><span class="summary-label">人数</span><span id="s4People">—</span></div>
-      <div class="summary-row" id="s4OptRow" style="display:none"><span class="summary-label">オプション</span><span id="s4Opt">—</span></div>
-      <div class="summary-row total"><span>合計（税込）</span><span id="s4Total">—</span></div>
+      <div class="summary-row"><span class="summary-label" id="s4PlanLbl">プラン</span><span id="s4Plan">—</span></div>
+      <div class="summary-row"><span class="summary-label" id="s4DateLbl">来店日時</span><span id="s4Date">—</span></div>
+      <div class="summary-row"><span class="summary-label" id="s4PeopleLbl">人数</span><span id="s4People">—</span></div>
+      <div class="summary-row" id="s4OptRow" style="display:none"><span class="summary-label" id="s4OptLbl">オプション</span><span id="s4Opt">—</span></div>
+      <div class="summary-row total"><span id="s4TotalLbl">合計（税込）</span><span id="s4Total">—</span></div>
     </div>
     <div id="estimateNotice" style="display:none;" class="notice">
       ※ 選択されたプランは来店時お見積もりとなります。合計金額は当日ご確認いただきます。
     </div>
     <div class="btn-row">
-      <button class="submit-btn btn-ghost" onclick="goStep(3)" style="flex:1;">← 戻る</button>
+      <button class="submit-btn btn-ghost" id="step4BackBtn" onclick="goStep(3)" style="flex:1;">← 戻る</button>
       <button class="submit-btn" id="submitBtn" onclick="submitForm()" style="flex:2;">予約を確定する</button>
     </div>
   </div>
@@ -330,10 +294,10 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 <div class="modal-overlay" id="completeModal">
   <div class="modal">
     <div class="modal-icon">🎋</div>
-    <h2>ご予約ありがとうございます</h2>
-    <p>内容をご確認ください。<br>当日のご来店をお待ちしております。</p>
+    <h2 id="modalTitle">ご予約ありがとうございます</h2>
+    <p id="modalText">内容をご確認ください。<br>当日のご来店をお待ちしております。</p>
     <div class="modal-detail" id="modalDetail"></div>
-    <button class="modal-close" onclick="document.getElementById('completeModal').classList.remove('open')">閉じる</button>
+    <button class="modal-close" id="modalCloseBtn" onclick="document.getElementById('completeModal').classList.remove('open')">閉じる</button>
   </div>
 </div>
 
@@ -345,9 +309,439 @@ let plan   = { name: null, price: 0, isEstimate: false };
 let people = { female: 1, male: 0, child: 0 };
 let options  = {};
 let optQty   = {};
-let slotAvailability = {}; // { '09:00': { booked: N, remaining: N }, ... }
+let slotAvailability = {};
+let currentLang = 'ja';
 
-// 空き状況を取得して時間セレクトに反映
+// ── 翻訳データ ────────────────────────────────────────
+const I18N = {
+  ja: {
+    pageTitle: '着物レンタル ご予約',
+    heroTitle: '着物レンタル<br>ご予約',
+    heroSub: '特別な一日を、丁寧に。',
+    step1: 'プラン', step2: '日時・人数', step3: 'オプション', step4: 'お客様情報',
+    planSectionLabel: 'プランを選択',
+    commonBoxTitle: '全プラン共通（含まれるもの）',
+    commonBoxContent: '着物・帯・長襦袢・草履・バッグ・足袋・着付け　／　雨天時：雨傘無料レンタル',
+    planPrice: '/ 女性1名',
+    planEstimate: '来店時お見積もり',
+    step1Next: '次へ — 日時・人数を選ぶ',
+    dateSectionLabel: 'ご来店日時',
+    visitDate: 'ご来店日', visitTime: 'ご来店時間',
+    timeSelect: '選択してください',
+    slotBlocked: '受付不可', slotFull: '予約済',
+    peopleSectionLabel: '人数',
+    femaleLabel: '女性人数',
+    maleLabel: '男性人数（¥4,400/名）',
+    childLabel: '小人 3〜10歳（¥3,300/名）',
+    s2PlanLbl: 'プラン', s2FemaleLbl: '女性', s2MaleLbl: '男性', s2ChildLbl: '小人',
+    s2SubtotalLbl: '小計',
+    step2Back: '← 戻る', step2Next: '次へ — オプション選択',
+    photoReqLabel: '撮影プランを選択（必須）',
+    optSectionLabel: 'オプション（任意）',
+    s3BaseLbl: 'プラン・人数小計', s3OptLbl: 'オプション', s3TotalLbl: '合計（税込）',
+    step3Back: '← 戻る', step3Next: '次へ — お客様情報入力',
+    photoReqError: '撮影プランをいずれか1つ選択してください',
+    customerSectionLabel: 'お客様情報',
+    lastNameLabel: 'お名前（姓）', lastNamePh: '山田',
+    firstNameLabel: 'お名前（名）', firstNamePh: '花子',
+    emailLabel: 'メールアドレス',
+    telLabel: '電話番号', telPh: '090-0000-0000',
+    remarksSectionLabel: 'ご要望・備考',
+    remarksPh: 'ご質問・ご要望などがあればご記入ください',
+    s4PlanLbl: 'プラン', s4DateLbl: '来店日時', s4PeopleLbl: '人数',
+    s4OptLbl: 'オプション', s4TotalLbl: '合計（税込）',
+    step4Back: '← 戻る',
+    submitBtn: '予約を確定する', submitting: '送信中...',
+    estimateNotice: '※ 選択されたプランは来店時お見積もりとなります。合計金額は当日ご確認いただきます。',
+    modalTitle: 'ご予約ありがとうございます',
+    modalText: '内容をご確認ください。<br>当日のご来店をお待ちしております。',
+    modalClose: '閉じる',
+    modalName: 'お名前', modalPlan: 'プラン', modalDate: '来店日時',
+    modalPeople: '人数', modalOpt: 'オプション', modalTotal: '合計',
+    modalContact: 'ご連絡先', modalSuffix: '様',
+    alertSelectPlan: 'プランを選択してください',
+    alertDateTime: 'ご来店日時を入力してください',
+    alertWednesday: '水曜日は定休日のため選択できません',
+    alertPhotoReq: '撮影プランをいずれか1つ選択してください',
+    alertName: 'お名前を入力してください',
+    alertEmail: 'メールアドレスを入力してください',
+    alertTel: '電話番号を入力してください',
+    alertSlotFull: (time) => `選択された時間帯（${time}）は満員です。\n別の時間帯をお選びください。`,
+    alertSlotInsuf: (time, rem) => `選択された時間帯（${time}）の空きが不足しています（残り${rem}名）。\n人数を減らすか、別の時間帯をお選びください。`,
+    alertNetErr: '予約の送信に失敗しました。\nお手数ですが、お電話（076-201-8119）にてご連絡ください。',
+    estimate: '来店時お見積もり',
+    formatDate: (y, m, d, dow) => {
+      const days = ['日','月','火','水','木','金','土'];
+      return `${y}年${m}月${d}日（${days[dow]}）`;
+    },
+    joinSep: '、',
+  },
+  en: {
+    pageTitle: 'Kimono Rental Reservation',
+    heroTitle: 'Kimono Rental<br>Reservation',
+    heroSub: 'Making every special day unforgettable.',
+    step1: 'Plan', step2: 'Date & Guests', step3: 'Options', step4: 'Your Info',
+    planSectionLabel: 'Select a Plan',
+    commonBoxTitle: 'All plans include:',
+    commonBoxContent: 'Kimono, obi, nagajuban, zori, bag, tabi & dressing service / Free umbrella on rainy days',
+    planPrice: '/ 1 female',
+    planEstimate: 'Estimate on visit',
+    step1Next: 'Next — Select Date & Guests',
+    dateSectionLabel: 'Visit Date & Time',
+    visitDate: 'Visit Date', visitTime: 'Visit Time',
+    timeSelect: 'Please select',
+    slotBlocked: 'Unavailable', slotFull: 'Fully Booked',
+    peopleSectionLabel: 'Number of Guests',
+    femaleLabel: 'Female Guests',
+    maleLabel: 'Male Guests (¥4,400/person)',
+    childLabel: 'Children 3–10 yrs (¥3,300/person)',
+    s2PlanLbl: 'Plan', s2FemaleLbl: 'Female', s2MaleLbl: 'Male', s2ChildLbl: 'Child',
+    s2SubtotalLbl: 'Subtotal',
+    step2Back: '← Back', step2Next: 'Next — Select Options',
+    photoReqLabel: 'Select Photography Plan (Required)',
+    optSectionLabel: 'Options (Optional)',
+    s3BaseLbl: 'Plan & Guests Subtotal', s3OptLbl: 'Options', s3TotalLbl: 'Total (incl. tax)',
+    step3Back: '← Back', step3Next: 'Next — Enter Your Info',
+    photoReqError: 'Please select one photography plan',
+    customerSectionLabel: 'Customer Information',
+    lastNameLabel: 'Last Name', lastNamePh: 'Smith',
+    firstNameLabel: 'First Name', firstNamePh: 'Jane',
+    emailLabel: 'Email Address',
+    telLabel: 'Phone Number', telPh: '+1-000-000-0000',
+    remarksSectionLabel: 'Notes / Requests',
+    remarksPh: 'Any questions or special requests?',
+    s4PlanLbl: 'Plan', s4DateLbl: 'Visit Date & Time', s4PeopleLbl: 'Guests',
+    s4OptLbl: 'Options', s4TotalLbl: 'Total (incl. tax)',
+    step4Back: '← Back',
+    submitBtn: 'Confirm Booking', submitting: 'Submitting...',
+    estimateNotice: '※ The selected plan will be quoted upon arrival. The total will be confirmed on the day of your visit.',
+    modalTitle: 'Thank you for your reservation!',
+    modalText: 'Please review your booking details.<br>We look forward to welcoming you.',
+    modalClose: 'Close',
+    modalName: 'Name', modalPlan: 'Plan', modalDate: 'Visit Date & Time',
+    modalPeople: 'Guests', modalOpt: 'Options', modalTotal: 'Total',
+    modalContact: 'Contact', modalSuffix: '',
+    alertSelectPlan: 'Please select a plan.',
+    alertDateTime: 'Please enter your visit date and time.',
+    alertWednesday: 'We are closed on Wednesdays. Please choose another day.',
+    alertPhotoReq: 'Please select one photography plan.',
+    alertName: 'Please enter your name.',
+    alertEmail: 'Please enter your email address.',
+    alertTel: 'Please enter your phone number.',
+    alertSlotFull: (time) => `The ${time} slot is fully booked.\nPlease choose another time.`,
+    alertSlotInsuf: (time, rem) => `Not enough availability at ${time} (${rem} remaining).\nPlease reduce guests or choose another time.`,
+    alertNetErr: 'Failed to submit your reservation.\nPlease contact us by phone: 076-201-8119.',
+    estimate: 'Estimate on visit',
+    formatDate: (y, m, d, dow) => {
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      return `${months[m-1]} ${d}, ${y} (${days[dow]})`;
+    },
+    joinSep: ', ',
+  },
+  zh: {
+    pageTitle: '和服租借 預約',
+    heroTitle: '和服租借<br>預約',
+    heroSub: '讓特別的一天，更加完美。',
+    step1: '方案', step2: '日期・人數', step3: '加購選項', step4: '顧客資訊',
+    planSectionLabel: '選擇方案',
+    commonBoxTitle: '所有方案皆包含：',
+    commonBoxContent: '和服・腰帶・長襦袢・草履・提包・足袋・著裝服務 ／ 雨天：免費提供雨傘',
+    planPrice: '/ 女性1名',
+    planEstimate: '來店時報價',
+    step1Next: '下一步 — 選擇日期・人數',
+    dateSectionLabel: '來店日期及時間',
+    visitDate: '來店日期', visitTime: '來店時間',
+    timeSelect: '請選擇',
+    slotBlocked: '不可預約', slotFull: '已額滿',
+    peopleSectionLabel: '人數',
+    femaleLabel: '女性人數',
+    maleLabel: '男性人數（¥4,400/名）',
+    childLabel: '兒童 3〜10歲（¥3,300/名）',
+    s2PlanLbl: '方案', s2FemaleLbl: '女性', s2MaleLbl: '男性', s2ChildLbl: '兒童',
+    s2SubtotalLbl: '小計',
+    step2Back: '← 返回', step2Next: '下一步 — 選擇加購項目',
+    photoReqLabel: '選擇攝影方案（必選）',
+    optSectionLabel: '加購選項（可選）',
+    s3BaseLbl: '方案・人數小計', s3OptLbl: '加購項目', s3TotalLbl: '合計（含稅）',
+    step3Back: '← 返回', step3Next: '下一步 — 輸入顧客資訊',
+    photoReqError: '請選擇一個攝影方案',
+    customerSectionLabel: '顧客資訊',
+    lastNameLabel: '姓氏', lastNamePh: '陳',
+    firstNameLabel: '名字', firstNamePh: '小明',
+    emailLabel: '電子郵件',
+    telLabel: '電話號碼', telPh: '+886-000-000-000',
+    remarksSectionLabel: '備注・需求',
+    remarksPh: '如有任何問題或特殊需求，請在此填寫',
+    s4PlanLbl: '方案', s4DateLbl: '來店日期/時間', s4PeopleLbl: '人數',
+    s4OptLbl: '加購項目', s4TotalLbl: '合計（含稅）',
+    step4Back: '← 返回',
+    submitBtn: '確認預約', submitting: '傳送中...',
+    estimateNotice: '※ 所選方案將於來店時提供報價，總金額將於當天確認。',
+    modalTitle: '感謝您的預約！',
+    modalText: '請確認您的預約詳情。<br>期待您的光臨。',
+    modalClose: '關閉',
+    modalName: '姓名', modalPlan: '方案', modalDate: '來店日期/時間',
+    modalPeople: '人數', modalOpt: '加購項目', modalTotal: '合計',
+    modalContact: '聯絡方式', modalSuffix: ' 先生/女士',
+    alertSelectPlan: '請選擇方案。',
+    alertDateTime: '請輸入來店日期和時間。',
+    alertWednesday: '每週三休息，請選擇其他日期。',
+    alertPhotoReq: '請選擇一個攝影方案。',
+    alertName: '請輸入姓名。',
+    alertEmail: '請輸入電子郵件。',
+    alertTel: '請輸入電話號碼。',
+    alertSlotFull: (time) => `${time} 時段已額滿。\n請選擇其他時段。`,
+    alertSlotInsuf: (time, rem) => `${time} 時段空位不足（剩餘 ${rem} 名）。\n請減少人數或選擇其他時段。`,
+    alertNetErr: '預約傳送失敗。\n請撥打電話聯絡我們：076-201-8119。',
+    estimate: '來店時報價',
+    formatDate: (y, m, d, dow) => {
+      const days = ['日','一','二','三','四','五','六'];
+      return `${y}年${m}月${d}日（週${days[dow]}）`;
+    },
+    joinSep: '、',
+  },
+};
+
+// ── プラン定義 ────────────────────────────────────────
+const PLAN_DEFS = [
+  { name: 'ベーシック',   price: 2970,  isEstimate: false, badge: 'BASIC',          badgeClass: '',
+    ja: { displayName: 'ベーシック',   note: 'お得に着物街歩き。あらかじめ帯もコーディネートしてあるプラン' },
+    en: { displayName: 'Basic',        note: 'Best value for a kimono city stroll. Obi is pre-coordinated.' },
+    zh: { displayName: '基本方案',     note: '超值和服街道漫步，腰帶已預先搭配完成。' } },
+  { name: 'スタンダード', price: 3960,  isEstimate: false, badge: 'STANDARD',       badgeClass: '',
+    ja: { displayName: 'スタンダード', note: '豊富なラインナップから<br>お好みの一着を' },
+    en: { displayName: 'Standard',     note: 'Choose your favorite from our wide selection.' },
+    zh: { displayName: '標準方案',     note: '從豐富的款式中，挑選您心儀的一套。' } },
+  { name: 'プレミアム',   price: 4950,  isEstimate: false, badge: 'PREMIUM',        badgeClass: 'badge-gold',
+    ja: { displayName: 'プレミアム',   note: '上質な着物・帯で<br>特別感ある装いを' },
+    en: { displayName: 'Premium',      note: 'Dress in premium kimono & obi for a truly special look.' },
+    zh: { displayName: '優質方案',     note: '穿上高品質和服與腰帶，感受特別的優雅。' } },
+  { name: '撮影付き',    price: 2970,  isEstimate: false, badge: 'PHOTO',          badgeClass: 'badge-gold',
+    ja: { displayName: '撮影付き',    note: 'スタジオやロケーション撮影希望の方向けのプラン' },
+    en: { displayName: 'With Photo',  note: 'Designed for customers who want studio or location photography.' },
+    zh: { displayName: '含攝影方案',  note: '適合希望進行攝影工作室或外景拍攝的顧客。' } },
+  { name: '加賀友禅',    price: 41800, isEstimate: false, badge: 'KAGA YUZEN',     badgeClass: 'badge-kaga',
+    ja: { displayName: '加賀友禅',    note: '伝統工芸・加賀友禅の<br>本物の美しさを体感' },
+    en: { displayName: 'Kaga Yuzen',  note: 'Experience the authentic beauty of Kaga Yuzen traditional craft.' },
+    zh: { displayName: '加賀友禅',   note: '親身體驗加賀友禅這項傳統工藝之美。' } },
+  { name: '成人式下見',  price: 0,     isEstimate: true,  badge: 'SEIJIN-SHIKI',  badgeClass: 'badge-green',
+    ja: { displayName: '成人式下見',  note: '振袖をじっくり<br>ご試着いただけます' },
+    en: { displayName: 'Coming-of-Age Preview', note: 'Try on furisode at your leisure to find your perfect style.' },
+    zh: { displayName: '成人式試穿',  note: '請從容地試穿振袖，找到您最喜歡的款式。' } },
+  { name: '卒業式下見',  price: 0,     isEstimate: true,  badge: 'SOTSUGYOU-SHIKI', badgeClass: 'badge-green',
+    ja: { displayName: '卒業式下見',  note: '袴・着物コーディネートを<br>ご提案いたします' },
+    en: { displayName: 'Graduation Preview', note: "We'll help coordinate your hakama or kimono ensemble." },
+    zh: { displayName: '畢業式試穿',  note: '我們將為您提供袴・和服的搭配建議。' } },
+  { name: '期間限定',    price: 2970,  isEstimate: false, badge: 'LIMITED',        badgeClass: 'badge-red',
+    ja: { displayName: '期間限定プラン', note: '期間限定キャンペーンでお得に着物レンタル' },
+    en: { displayName: 'Limited Time', note: 'A special limited-time campaign for budget-friendly kimono rental.' },
+    zh: { displayName: '限時方案',    note: '限時優惠，超值和服租借活動。' } },
+];
+
+// ── オプション定義 ────────────────────────────────────
+const OPT_DEFS = [
+  { name: 'スタジオ撮影（データ渡し）',             price: 4950,  qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+    en: { name: 'Studio Photo (Digital Data)',           qtyUnit: 'session' },
+    zh: { name: '攝影工作室（數位檔案）',                 qtyUnit: '次' } },
+  { name: 'スタジオ撮影（データ＋2Lプリント2枚）',  price: 7700,  qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+    en: { name: 'Studio Photo (Digital + 2 Prints)',     qtyUnit: 'session' },
+    zh: { name: '攝影工作室（數位+2張相片）',              qtyUnit: '次' } },
+  { name: 'ロケーション撮影 ブロンズ（50カット）',  price: 22000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+    en: { name: 'Location Photo Bronze (50 shots)',      qtyUnit: 'session' },
+    zh: { name: '外景攝影 銅牌（50張）',                  qtyUnit: '次' } },
+  { name: 'ロケーション撮影 シルバー（100カット）', price: 33000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+    en: { name: 'Location Photo Silver (100 shots)',     qtyUnit: 'session' },
+    zh: { name: '外景攝影 銀牌（100張）',                 qtyUnit: '次' } },
+  { name: 'ロケーション撮影 ゴールド（150カット）', price: 55000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+    en: { name: 'Location Photo Gold (150 shots)',       qtyUnit: 'session' },
+    zh: { name: '外景攝影 金牌（150張）',                 qtyUnit: '次' } },
+  { name: 'ヘアセット',           note: '髪飾りも料金に含まれます',   price: 1650, unit: '/名', qtyUnit: '名',
+    en: { name: 'Hair Styling',          note: 'Hair accessories included',         unit: '/person', qtyUnit: 'person' },
+    zh: { name: '髮型設計',              note: '含髮飾',                             unit: '/名', qtyUnit: '名' } },
+  { name: 'フォーマルヘアセット', note: '髪飾りも料金に含まれます',   price: 4400, unit: '/名', qtyUnit: '名', kagaOnly: true,
+    en: { name: 'Formal Hair Styling',   note: 'Hair accessories included',         unit: '/person', qtyUnit: 'person' },
+    zh: { name: '正式髮型設計',          note: '含髮飾',                             unit: '/名', qtyUnit: '名' } },
+  { name: '髪飾り',               note: '',                            price: 550,  unit: '/個', qtyUnit: '個',
+    en: { name: 'Hair Accessories',      note: '',                                  unit: '/piece', qtyUnit: 'piece' },
+    zh: { name: '髮飾',                  note: '',                                  unit: '/個', qtyUnit: '個' } },
+  { name: 'メンズヘアセット',     note: '美容師によるヘアセット',     price: 880,  unit: '/名', qtyUnit: '名', maleOnly: true,
+    en: { name: "Men's Hair Styling",    note: 'Hair set by a professional stylist', unit: '/person', qtyUnit: 'person' },
+    zh: { name: '男士髮型設計',          note: '由專業美容師提供',                    unit: '/名', qtyUnit: '名' } },
+  { name: 'フルメイク',           note: '',                            price: 4400, unit: '/名', qtyUnit: '名',
+    en: { name: 'Full Makeup',           note: '',                                  unit: '/person', qtyUnit: 'person' },
+    zh: { name: '全臉彩妝',              note: '',                                  unit: '/名', qtyUnit: '名' } },
+  { name: '名古屋帯',         note: '帯を名古屋帯に変更できます',         price: 550,  unit: '',    qtyUnit: '個',
+    en: { name: 'Nagoya-obi Upgrade',    note: 'Change the obi to Nagoya-obi',      unit: '',    qtyUnit: 'item' },
+    zh: { name: '升級名古屋帶',          note: '可更換為名古屋帶',                    unit: '',    qtyUnit: '個' } },
+  { name: 'ぬくぬく肌着',     note: '冬の防寒用肌着（上下セット）',       price: 550,  unit: '/名', qtyUnit: '名',
+    en: { name: 'Winter Thermal Wear',   note: 'Winter thermal undergarment set (top & bottom)', unit: '/person', qtyUnit: 'person' },
+    zh: { name: '冬季保暖內衣',          note: '冬季保暖內衣（上下套裝）',             unit: '/名', qtyUnit: '名' } },
+  { name: 'コート・ショール', note: '羽織れる防寒アイテム',               price: 550,  unit: '/名', qtyUnit: '名',
+    en: { name: 'Coat / Shawl',          note: 'Wearable outerwear for cold weather', unit: '/person', qtyUnit: 'person' },
+    zh: { name: '外套・披肩',            note: '禦寒外衣',                            unit: '/名', qtyUnit: '名' } },
+  { name: '翌日返却',         note: 'お客様が持ち出し→翌日返却（火曜日来店は選択不可）', price: 1100, unit: '', qtyUnit: '個',
+    en: { name: 'Next-day Return',       note: 'You take home & return the next day (not available on Tue visits)', unit: '', qtyUnit: 'item' },
+    zh: { name: '隔日歸還',              note: '顧客帶回後隔日歸還（週二來店不可選）', unit: '', qtyUnit: '個' } },
+  { name: 'ホテル返却',       note: 'スタッフがホテルまでお届け。フロントに返却。（火曜日来店は選択不可）', price: 1650, unit: '', qtyUnit: '個',
+    en: { name: 'Hotel Return',          note: 'Staff delivers to hotel; return at front desk (not available on Tue visits)', unit: '', qtyUnit: 'item' },
+    zh: { name: '飯店歸還',              note: '工作人員送至飯店，於前台歸還（週二來店不可選）', unit: '', qtyUnit: '個' } },
+  { name: '人力車',           note: '30分コース。コースは事前相談可能。',  price: 8800, unit: '/台（2名）', qtyUnit: '台', wide: true,
+    en: { name: 'Rickshaw Ride',         note: '30-min course. Route can be discussed in advance.', unit: '/vehicle (2 persons)', qtyUnit: 'vehicle' },
+    zh: { name: '人力車體驗',            note: '30分鐘路線，可事先商量路線。',          unit: '/台（2名）', qtyUnit: '台' } },
+  { name: '観光タクシー',     note: '2時間乗り放題。コースはドライバーにお申し出ください。', price: 9900, unit: '/台（4名）', qtyUnit: '台', wide: true,
+    en: { name: 'Sightseeing Taxi',      note: '2-hour unlimited ride. Ask the driver for course options.', unit: '/vehicle (4 persons)', qtyUnit: 'vehicle' },
+    zh: { name: '觀光計程車',            note: '2小時暢遊，路線請告知司機。',           unit: '/台（4名）', qtyUnit: '台' } },
+];
+
+// ── 翻訳ヘルパー ─────────────────────────────────────
+const tl = () => I18N[currentLang];
+
+function optName(opt) {
+  const l = currentLang;
+  return (l !== 'ja' && opt[l] && opt[l].name) ? opt[l].name : opt.name;
+}
+function optNote(opt) {
+  const l = currentLang;
+  return (l !== 'ja' && opt[l] && opt[l].note !== undefined) ? opt[l].note : (opt.note || '');
+}
+function optUnit(opt) {
+  const l = currentLang;
+  return (l !== 'ja' && opt[l] && opt[l].unit !== undefined) ? opt[l].unit : (opt.unit || '');
+}
+function optQtyUnit(opt) {
+  const l = currentLang;
+  return (l !== 'ja' && opt[l] && opt[l].qtyUnit) ? opt[l].qtyUnit : opt.qtyUnit;
+}
+function getOptDisplayName(name) {
+  const opt = OPT_DEFS.find(o => o.name === name);
+  return opt ? optName(opt) : name;
+}
+function makePeopleStr(forDisplay) {
+  // forDisplay: 画面表示用（現在の言語）/ 保存用は常に日本語
+  if (forDisplay && currentLang === 'en') {
+    const parts = [];
+    if (people.female > 0) parts.push(`${people.female} ${people.female === 1 ? 'Female' : 'Females'}`);
+    if (people.male   > 0) parts.push(`${people.male} ${people.male === 1 ? 'Male' : 'Males'}`);
+    if (people.child  > 0) parts.push(`${people.child} ${people.child === 1 ? 'Child' : 'Children'}`);
+    return parts.join(' · ');
+  }
+  if (forDisplay && currentLang === 'zh') {
+    let p = `女性${people.female}名`;
+    if (people.male  > 0) p += `・男性${people.male}名`;
+    if (people.child > 0) p += `・兒童${people.child}名`;
+    return p;
+  }
+  // ja (and saved value)
+  let p = `女性${people.female}名`;
+  if (people.male  > 0) p += `・男性${people.male}名`;
+  if (people.child > 0) p += `・小人${people.child}名`;
+  return p;
+}
+
+// ── 言語切替 ─────────────────────────────────────────
+function setLang(lang) {
+  currentLang = lang;
+  document.documentElement.lang = lang === 'zh' ? 'zh-TW' : lang;
+  ['ja','en','zh'].forEach(l => {
+    document.getElementById('lbtn-' + l).classList.toggle('active', l === lang);
+  });
+  applyLang();
+  buildPlanCards();
+  buildOptions();
+  updateSummary();
+}
+
+function applyLang() {
+  const t = tl();
+  document.title = t.pageTitle;
+  document.getElementById('heroTitle').innerHTML = t.heroTitle;
+  document.getElementById('heroSub').textContent = t.heroSub;
+  document.getElementById('stepLbl1').textContent = t.step1;
+  document.getElementById('stepLbl2').textContent = t.step2;
+  document.getElementById('stepLbl3').textContent = t.step3;
+  document.getElementById('stepLbl4').textContent = t.step4;
+  document.getElementById('planSectionLabel').textContent = t.planSectionLabel;
+  document.getElementById('commonBoxTitle').textContent   = t.commonBoxTitle;
+  document.getElementById('commonBoxContent').textContent = t.commonBoxContent;
+  document.getElementById('step1NextBtn').textContent     = t.step1Next;
+  document.getElementById('dateSectionLabel').textContent = t.dateSectionLabel;
+  document.getElementById('visitDateLabel').textContent   = t.visitDate;
+  document.getElementById('visitTimeLabel').textContent   = t.visitTime;
+  document.getElementById('timeSelectOpt').textContent    = t.timeSelect;
+  document.getElementById('dateError').textContent        = t.alertWednesday;
+  document.getElementById('peopleSectionLabel').textContent = t.peopleSectionLabel;
+  document.getElementById('femaleLbl').textContent = t.femaleLabel;
+  document.getElementById('maleLbl').textContent   = t.maleLabel;
+  document.getElementById('childLbl').textContent  = t.childLabel;
+  document.getElementById('s2PlanLbl').textContent    = t.s2PlanLbl;
+  document.getElementById('s2FemaleLbl').textContent  = t.s2FemaleLbl;
+  document.getElementById('s2MaleLbl').textContent    = t.s2MaleLbl;
+  document.getElementById('s2ChildLbl').textContent   = t.s2ChildLbl;
+  document.getElementById('s2SubtotalLbl').textContent = t.s2SubtotalLbl;
+  document.getElementById('step2BackBtn').textContent = t.step2Back;
+  document.getElementById('step2NextBtn').textContent = t.step2Next;
+  document.getElementById('photoReqLabel').textContent = t.photoReqLabel;
+  document.getElementById('photoReqError').textContent = t.photoReqError;
+  document.getElementById('optSectionLabel').textContent = t.optSectionLabel;
+  document.getElementById('s3BaseLbl').textContent  = t.s3BaseLbl;
+  document.getElementById('s3OptLbl').textContent   = t.s3OptLbl;
+  document.getElementById('s3TotalLbl').textContent = t.s3TotalLbl;
+  document.getElementById('step3BackBtn').textContent = t.step3Back;
+  document.getElementById('step3NextBtn').textContent = t.step3Next;
+  document.getElementById('customerSectionLabel').textContent = t.customerSectionLabel;
+  document.getElementById('lastNameLabel').textContent  = t.lastNameLabel;
+  document.getElementById('lastName').placeholder       = t.lastNamePh;
+  document.getElementById('firstNameLabel').textContent = t.firstNameLabel;
+  document.getElementById('firstName').placeholder      = t.firstNamePh;
+  document.getElementById('emailLabel').textContent     = t.emailLabel;
+  document.getElementById('telLabel').textContent       = t.telLabel;
+  document.getElementById('tel').placeholder            = t.telPh;
+  document.getElementById('remarksSectionLabel').textContent = t.remarksSectionLabel;
+  document.getElementById('remarks').placeholder        = t.remarksPh;
+  document.getElementById('s4PlanLbl').textContent   = t.s4PlanLbl;
+  document.getElementById('s4DateLbl').textContent   = t.s4DateLbl;
+  document.getElementById('s4PeopleLbl').textContent = t.s4PeopleLbl;
+  document.getElementById('s4OptLbl').textContent    = t.s4OptLbl;
+  document.getElementById('s4TotalLbl').textContent  = t.s4TotalLbl;
+  document.getElementById('step4BackBtn').textContent = t.step4Back;
+  document.getElementById('submitBtn').textContent    = t.submitBtn;
+  document.getElementById('estimateNotice').textContent = t.estimateNotice;
+  document.getElementById('modalTitle').textContent   = t.modalTitle;
+  document.getElementById('modalText').innerHTML      = t.modalText;
+  document.getElementById('modalCloseBtn').textContent = t.modalClose;
+  updateTimeOptions();
+}
+
+// ── プランカード生成 ──────────────────────────────────
+function buildPlanCards() {
+  const grid = document.getElementById('plansGrid');
+  grid.innerHTML = '';
+  const lang = currentLang;
+  const t = tl();
+  PLAN_DEFS.forEach(pd => {
+    const langData    = pd[lang] || pd.ja;
+    const displayName = langData.displayName || pd.name;
+    const note        = langData.note || pd.ja.note;
+    const priceHtml   = pd.isEstimate
+      ? `<div class="plan-price estimate">${t.planEstimate}</div>`
+      : `<div class="plan-price">¥${pd.price.toLocaleString()} <span>${t.planPrice}</span></div>`;
+    const card = document.createElement('div');
+    card.className = 'plan-card';
+    // 既に選択中のプランは選択状態を復元
+    if (plan.name === pd.name) card.classList.add('selected');
+    card.onclick = () => selectPlan(card, pd.name, pd.price, pd.isEstimate);
+    card.innerHTML = `
+      <div class="plan-badge ${pd.badgeClass}">${pd.badge}</div>
+      <div class="plan-name">${displayName}</div>
+      ${priceHtml}
+      <div class="plan-note">${note}</div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+// ── 空き状況を取得して時間セレクトに反映 ─────────────
 async function fetchSlotAvailability(date) {
   try {
     const params = new URLSearchParams({ key: ACCESS_KEY, action: 'checkSlot', date });
@@ -361,6 +755,7 @@ async function fetchSlotAvailability(date) {
 }
 
 function updateTimeOptions() {
+  const t = tl();
   const select   = document.getElementById('visitTime');
   const currentVal = select.value;
   [...select.options].forEach(opt => {
@@ -368,19 +763,16 @@ function updateTimeOptions() {
     const slot = slotAvailability[opt.value];
     if (!slot) { opt.disabled = false; opt.textContent = opt.value; return; }
     if (slot.blocked) {
-      // 管理者がブロック → 「受付不可」
       opt.disabled = true;
-      opt.textContent = `${opt.value}　受付不可`;
+      opt.textContent = `${opt.value}　${t.slotBlocked}`;
     } else if (slot.remaining <= 0) {
-      // 予約済み
       opt.disabled = true;
-      opt.textContent = `${opt.value}　予約済`;
+      opt.textContent = `${opt.value}　${t.slotFull}`;
     } else {
       opt.disabled = false;
       opt.textContent = opt.value;
     }
   });
-  // 選択中の時間が不可になった場合はリセット
   if (currentVal && slotAvailability[currentVal] && !slotAvailability[currentVal].remaining) {
     select.value = '';
   }
@@ -389,7 +781,7 @@ function updateTimeOptions() {
 // 来店日の最小値を今日に設定
 document.getElementById('visitDate').min = new Date().toISOString().split('T')[0];
 
-// ── プラン選択 ───────────────────────────────────────
+// ── プラン選択 ────────────────────────────────────────
 function selectPlan(el, name, price, isEstimate) {
   document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
@@ -407,14 +799,14 @@ function onDateChange() {
   const errEl = document.getElementById('dateError');
   if (val) {
     const day = new Date(val + 'T00:00:00').getDay();
-    if (day === 3) { // 水曜日
+    if (day === 3) {
       errEl.style.display = 'block';
       document.getElementById('visitDate').value = '';
       slotAvailability = {};
       updateTimeOptions();
       return;
     }
-    fetchSlotAvailability(val); // 空き状況を取得
+    fetchSlotAvailability(val);
   } else {
     slotAvailability = {};
     updateTimeOptions();
@@ -456,40 +848,13 @@ function updatePeople() {
   updateSummary();
 }
 
-// ── オプション定義 ────────────────────────────────────
-// photoRequired: 撮影付きプランで必須選択（1択）
-// photoOnly:     撮影付きプランのみ表示
-// maleOnly:      男性がいる場合のみ表示
-// wide:          グリッド全幅
-const OPT_DEFS = [
-  // 撮影付きプラン 必須（1択）
-  { name: 'スタジオ撮影（データ渡し）',             price: 4950,  qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
-  { name: 'スタジオ撮影（データ＋2Lプリント2枚）',  price: 7700,  qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
-  { name: 'ロケーション撮影 ブロンズ（50カット）',  price: 22000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
-  { name: 'ロケーション撮影 シルバー（100カット）', price: 33000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
-  { name: 'ロケーション撮影 ゴールド（150カット）', price: 55000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true },
-  // 通常オプション
-  { name: 'ヘアセット',           note: '髪飾りも料金に含まれます',   price: 1650, unit: '/名', qtyUnit: '名' },
-  { name: 'フォーマルヘアセット', note: '髪飾りも料金に含まれます',   price: 4400, unit: '/名', qtyUnit: '名', kagaOnly: true },
-  { name: '髪飾り',               note: '',                            price: 550,  unit: '/個', qtyUnit: '個' },
-  { name: 'メンズヘアセット',     note: '美容師によるヘアセット',     price: 880,  unit: '/名', qtyUnit: '名', maleOnly: true },
-  { name: 'フルメイク',           note: '',                            price: 4400, unit: '/名', qtyUnit: '名' },
-  { name: '名古屋帯',         note: '帯を名古屋帯に変更できます',         price: 550,  unit: '',    qtyUnit: '個' },
-  { name: 'ぬくぬく肌着',     note: '冬の防寒用肌着（上下セット）',       price: 550,  unit: '/名', qtyUnit: '名' },
-  { name: 'コート・ショール', note: '羽織れる防寒アイテム',               price: 550,  unit: '/名', qtyUnit: '名' },
-  { name: '翌日返却',         note: 'お客様が持ち出し→翌日返却（火曜日来店は選択不可）', price: 1100, unit: '', qtyUnit: '個' },
-  { name: 'ホテル返却',       note: 'スタッフがホテルまでお届け。フロントに返却。（火曜日来店は選択不可）', price: 1650, unit: '', qtyUnit: '個' },
-  { name: '人力車',           note: '30分コース。コースは事前相談可能。',  price: 8800, unit: '/台（2名）', qtyUnit: '台', wide: true },
-  { name: '観光タクシー',     note: '2時間乗り放題。コースはドライバーにお申し出ください。', price: 9900, unit: '/台（4名）', qtyUnit: '台', wide: true },
-];
-
 // ── オプションカード生成 ──────────────────────────────
 function buildOptCard(opt) {
   optQty[opt.name] = 0;
   const div = document.createElement('div');
   div.className = 'option-item' + (opt.photoRequired ? ' photo-req' : '');
   div.id = 'opt_' + opt.name;
-  div.dataset.optName = opt.name;
+  div.dataset.optName = opt.name;  // 内部キー（常に日本語）
   if (opt.maleOnly) div.dataset.maleOnly = '1';
   if (opt.kagaOnly) div.dataset.kagaOnly = '1';
   if (opt.wide)     div.classList.add('wide');
@@ -498,22 +863,27 @@ function buildOptCard(opt) {
     ? `selectPhotoOpt('${opt.name}',${opt.price})`
     : `toggleOpt('${opt.name}',${opt.price})`;
 
+  const dispName = optName(opt);
+  const note     = optNote(opt);
+  const unit     = optUnit(opt);
+  const qtyU     = optQtyUnit(opt);
+
   div.innerHTML = `
     <div class="option-top" onclick="${onclick}">
       <div class="option-check" id="chk_${opt.name}">✓</div>
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
-          <span>${opt.name}</span>
-          ${opt.note && opt.wide ? `<span style="font-size:0.68rem;color:var(--muted);">${opt.note}</span>` : ''}
+          <span>${dispName}</span>
+          ${note && opt.wide ? `<span style="font-size:0.68rem;color:var(--muted);">${note}</span>` : ''}
         </div>
-        ${opt.note && !opt.wide ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:2px;">${opt.note}</div>` : ''}
+        ${note && !opt.wide ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:2px;">${note}</div>` : ''}
       </div>
-      <span class="option-price">¥${opt.price.toLocaleString()}${opt.unit || ''}</span>
+      <span class="option-price">¥${opt.price.toLocaleString()}${unit}</span>
     </div>
     <div class="option-qty-row" ${opt.photoRequired ? 'style="display:none!important"' : ''}>
       <button class="qty-btn" type="button" onclick="changeQty('${opt.name}',${opt.price},-1)">−</button>
       <span class="qty-val" id="qty_${opt.name}">1</span>
-      <span class="qty-label">${opt.qtyUnit}</span>
+      <span class="qty-label">${qtyU}</span>
       <button class="qty-btn" type="button" onclick="changeQty('${opt.name}',${opt.price},1)">＋</button>
       <span class="qty-subtotal" id="sub_${opt.name}">¥${opt.price.toLocaleString()}</span>
     </div>
@@ -641,7 +1011,7 @@ function changeQty(name, price, dir) {
   updateHairAccessoryVisibility();
 }
 
-// ── 金額計算・サマリー更新 ───────────────────────────
+// ── 金額計算・サマリー更新 ────────────────────────────
 function calcBase() {
   if (plan.isEstimate) return null;
   return plan.price * people.female + 4400 * people.male + 3300 * people.child;
@@ -650,49 +1020,67 @@ function calcBase() {
 function fmt(n) { return `¥${n.toLocaleString()}`; }
 
 function updateSummary() {
+  const t        = tl();
   const base     = calcBase();
   const optTotal = Object.values(options).reduce((a, b) => a + b, 0);
   const total    = base !== null ? base + optTotal : null;
   const optNames = Object.entries(optQty)
     .filter(([k, v]) => v > 0 && options[k])
-    .map(([k, v]) => v > 1 ? `${k}×${v}` : k).join('、');
+    .map(([k, v]) => {
+      const disp = getOptDisplayName(k);
+      return v > 1 ? `${disp}×${v}` : disp;
+    }).join(t.joinSep);
 
   const s = id => document.getElementById(id);
-  s('s2Plan').textContent    = plan.name || '—';
-  s('s2Female').textContent  = plan.name && !plan.isEstimate
-    ? `${people.female}名 × ${fmt(plan.price)} = ${fmt(plan.price * people.female)}`
-    : `${people.female}名`;
+
+  // Get current plan display name
+  const planDef = PLAN_DEFS.find(p => p.name === plan.name);
+  const planDisplay = planDef ? (planDef[currentLang] || planDef.ja).displayName : (plan.name || '—');
+
+  s('s2Plan').textContent    = planDisplay || '—';
+
+  // Female summary
+  if (currentLang === 'en') {
+    s('s2Female').textContent = plan.name && !plan.isEstimate
+      ? `${people.female} × ${fmt(plan.price)} = ${fmt(plan.price * people.female)}`
+      : `${people.female}`;
+    s('s2Male').textContent  = `${people.male} × ¥4,400 = ${fmt(4400 * people.male)}`;
+    s('s2Child').textContent = `${people.child} × ¥3,300 = ${fmt(3300 * people.child)}`;
+  } else {
+    s('s2Female').textContent = plan.name && !plan.isEstimate
+      ? `${people.female}名 × ${fmt(plan.price)} = ${fmt(plan.price * people.female)}`
+      : `${people.female}名`;
+    s('s2Male').textContent  = `${people.male}名 × ¥4,400 = ${fmt(4400 * people.male)}`;
+    s('s2Child').textContent = `${people.child}名 × ¥3,300 = ${fmt(3300 * people.child)}`;
+  }
+
   s('s2MaleRow').style.display  = people.male  > 0 ? 'flex' : 'none';
   s('s2ChildRow').style.display = people.child > 0 ? 'flex' : 'none';
-  s('s2Male').textContent  = `${people.male}名 × ¥4,400 = ${fmt(4400 * people.male)}`;
-  s('s2Child').textContent = `${people.child}名 × ¥3,300 = ${fmt(3300 * people.child)}`;
-  s('s2Total').textContent = base !== null ? fmt(base) : '来店時お見積もり';
+  s('s2Total').textContent = base !== null ? fmt(base) : t.estimate;
 
-  s('s3Base').textContent          = base !== null ? fmt(base) : '来店時お見積もり';
+  s('s3Base').textContent          = base !== null ? fmt(base) : t.estimate;
   s('s3OptRow').style.display      = optTotal > 0 ? 'flex' : 'none';
   s('s3Opt').textContent           = `${optNames}　+${fmt(optTotal)}`;
-  s('s3Total').textContent         = total !== null ? fmt(total) : '来店時お見積もり';
+  s('s3Total').textContent         = total !== null ? fmt(total) : t.estimate;
 
-  s('s4Plan').textContent          = plan.name || '—';
+  s('s4Plan').textContent          = planDisplay || '—';
   s('s4OptRow').style.display      = optTotal > 0 ? 'flex' : 'none';
   s('s4Opt').textContent           = optNames;
-  s('s4Total').textContent         = total !== null ? fmt(total) : '来店時お見積もり';
-  let p = `女性${people.female}名`;
-  if (people.male  > 0) p += `・男性${people.male}名`;
-  if (people.child > 0) p += `・小人${people.child}名`;
-  s('s4People').textContent = p;
+  s('s4Total').textContent         = total !== null ? fmt(total) : t.estimate;
+  s('s4People').textContent        = makePeopleStr(true);
 }
 
-// ── ステップ遷移 ─────────────────────────────────────
+// ── ステップ遷移 ──────────────────────────────────────
 function goStep(n) {
-  if (n === 2 && !plan.name) { alert('プランを選択してください'); return; }
+  const t = tl();
+  if (n === 2 && !plan.name) { alert(t.alertSelectPlan); return; }
   if (n === 3) {
     const date = document.getElementById('visitDate').value;
     const time = document.getElementById('visitTime').value;
-    if (!date || !time) { alert('ご来店日時を入力してください'); return; }
-    if (new Date(date + 'T00:00:00').getDay() === 3) { alert('水曜日は定休日のため選択できません'); return; }
+    if (!date || !time) { alert(t.alertDateTime); return; }
+    if (new Date(date + 'T00:00:00').getDay() === 3) { alert(t.alertWednesday); return; }
     const d  = new Date(date + 'T00:00:00');
-    const ds = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+    const ds = t.formatDate(d.getFullYear(), d.getMonth()+1, d.getDate(), d.getDay());
     document.getElementById('s4Date').textContent = `${ds} ${time}`;
   }
   if (n === 4 && plan.name === '撮影付き') {
@@ -714,26 +1102,27 @@ function goStep(n) {
 
 // ── 送信 ─────────────────────────────────────────────
 async function submitForm() {
-  const ln  = document.getElementById('lastName').value.trim();
-  const fn  = document.getElementById('firstName').value.trim();
-  const em  = document.getElementById('email').value.trim();
-  const tel = document.getElementById('tel').value.trim();
-  if (!ln || !fn)  { alert('お名前を入力してください'); return; }
-  if (!em)         { alert('メールアドレスを入力してください'); return; }
-  if (!tel)        { alert('電話番号を入力してください'); return; }
+  const t  = tl();
+  const ln = document.getElementById('lastName').value.trim();
+  const fn = document.getElementById('firstName').value.trim();
+  const em = document.getElementById('email').value.trim();
+  const ph = document.getElementById('tel').value.trim();
+  if (!ln || !fn) { alert(t.alertName);  return; }
+  if (!em)        { alert(t.alertEmail); return; }
+  if (!ph)        { alert(t.alertTel);   return; }
 
   const date = document.getElementById('visitDate').value;
   const time = document.getElementById('visitTime').value;
   const d    = new Date(date + 'T00:00:00');
-  const ds   = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`;
+  const ds   = t.formatDate(d.getFullYear(), d.getMonth()+1, d.getDate(), d.getDay());
 
   const base     = calcBase();
   const optTotal = Object.values(options).reduce((a, b) => a + b, 0);
   const total    = base !== null ? base + optTotal : 0;
 
-  let peopleStr = `女性${people.female}名`;
-  if (people.male  > 0) peopleStr += `・男性${people.male}名`;
-  if (people.child > 0) peopleStr += `・小人${people.child}名`;
+  // 保存用人数は常に日本語形式
+  const peopleSaved = makePeopleStr(false);
+  const peopleDisp  = makePeopleStr(true);
 
   const selectedOpts = Object.entries(optQty)
     .filter(([k, v]) => v > 0 && options[k])
@@ -744,24 +1133,25 @@ async function submitForm() {
     id:            'HP-' + now.getTime(),
     reservationId: 'HP-' + now.getTime(),
     source:        'WEB',
-    channel:       'ウェブサイト',
+    channel:       currentLang === 'en' ? 'ウェブサイト(EN)' : currentLang === 'zh' ? 'ウェブサイト(繁中)' : 'ウェブサイト',
     date,
     time,
-    name:          `${ln} ${fn}`,
-    plan:          plan.name,
-    people:        peopleStr,
-    options:       selectedOpts,
+    name:     `${ln} ${fn}`,
+    plan:     plan.name,
+    people:   peopleSaved,
+    options:  selectedOpts,
     total,
-    payment:       '未定',
-    email:         em,
-    tel,
-    remarks:       document.getElementById('remarks').value.trim(),
-    createdAt:     now.toISOString(),
+    payment:  '未定',
+    email:    em,
+    tel:      ph,
+    remarks:  document.getElementById('remarks').value.trim(),
+    createdAt: now.toISOString(),
+    lang:     currentLang,   // ← 言語情報を保存
   };
 
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
-  btn.textContent = '送信中...';
+  btn.textContent = t.submitting;
   try {
     const params = new URLSearchParams({ key: ACCESS_KEY, action: 'save', booking: JSON.stringify(booking) });
     const res = await fetch(GAS_URL + '?' + params.toString());
@@ -769,44 +1159,45 @@ async function submitForm() {
     if (!json || json.success === false) {
       if (json && json.error === 'SLOT_FULL') {
         const rem = json.remaining || 0;
-        alert(
-          rem === 0
-            ? `選択された時間帯（${time}）は満員です。\n別の時間帯をお選びください。`
-            : `選択された時間帯（${time}）の空きが不足しています（残り${rem}名）。\n人数を減らすか、別の時間帯をお選びください。`
-        );
-        // 空き状況を更新してStep2に戻る
+        alert(rem === 0 ? t.alertSlotFull(time) : t.alertSlotInsuf(time, rem));
         await fetchSlotAvailability(date);
         goStep(2);
       } else {
-        alert('予約の送信に失敗しました。\nお手数ですが、お電話（076-201-8119）にてご連絡ください。');
+        alert(t.alertNetErr);
       }
       btn.disabled = false;
-      btn.textContent = '予約を確定する';
+      btn.textContent = t.submitBtn;
       return;
     }
   } catch(err) {
-    alert('予約の送信に失敗しました。\nお手数ですが、お電話（076-201-8119）にてご連絡ください。');
+    alert(t.alertNetErr);
     btn.disabled = false;
-    btn.textContent = '予約を確定する';
+    btn.textContent = t.submitBtn;
     return;
   }
   btn.disabled = false;
-  btn.textContent = '予約を確定する';
+  btn.textContent = t.submitBtn;
 
-  const optNames = selectedOpts.map(o => o.name).join('、');
+  const planDef = PLAN_DEFS.find(p => p.name === plan.name);
+  const planDisplay = planDef ? (planDef[currentLang] || planDef.ja).displayName : plan.name;
+  const optNamesDisp = selectedOpts
+    .map(o => getOptDisplayName(o.name.replace(/×\d+$/, '')) + (o.name.match(/×(\d+)$/) ? '×' + o.name.match(/×(\d+)$/)[1] : ''))
+    .join(t.joinSep);
+
   document.getElementById('modalDetail').innerHTML = `
-    <div><span>お名前</span><strong>${ln} ${fn} 様</strong></div>
-    <div><span>プラン</span><strong>${plan.name}</strong></div>
-    <div><span>来店日時</span><strong>${ds} ${time}</strong></div>
-    <div><span>人数</span><strong>${peopleStr}</strong></div>
-    ${optNames ? `<div><span>オプション</span><strong>${optNames}</strong></div>` : ''}
-    <div><span>合計</span><strong>${total > 0 ? fmt(total) : '来店時お見積もり'}</strong></div>
-    <div><span>ご連絡先</span><strong>${em}</strong></div>
+    <div><span>${t.modalName}</span><strong>${ln} ${fn}${t.modalSuffix ? ' ' + t.modalSuffix : ''}</strong></div>
+    <div><span>${t.modalPlan}</span><strong>${planDisplay}</strong></div>
+    <div><span>${t.modalDate}</span><strong>${ds} ${time}</strong></div>
+    <div><span>${t.modalPeople}</span><strong>${peopleDisp}</strong></div>
+    ${optNamesDisp ? `<div><span>${t.modalOpt}</span><strong>${optNamesDisp}</strong></div>` : ''}
+    <div><span>${t.modalTotal}</span><strong>${total > 0 ? fmt(total) : t.estimate}</strong></div>
+    <div><span>${t.modalContact}</span><strong>${em}</strong></div>
   `;
   document.getElementById('completeModal').classList.add('open');
 }
 
 // 初期化
+buildPlanCards();
 buildOptions();
 updateSummary();
 </script>

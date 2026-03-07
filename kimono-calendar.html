@@ -1908,6 +1908,151 @@ document.getElementById('detailModal').addEventListener('click', (e) => {
 // ── 印刷ユーティリティ ────────────────────────────
 const SHOP_NAME = 'きものレンタル あかり';
 
+// 受付票 多言語対応
+const RECEIPT_I18N = {
+  ja: {
+    slip:       '受付票',
+    guestLabel: 'お名前',
+    honorific:  ' 様',
+    resNo:      '予約番号',
+    source:     '受付',
+    visitDate:  '来店日時',
+    plan:       'プラン',
+    people:     '人数',
+    options:    'オプション',
+    payment:    '支払方法',
+    remarks:    '備考',
+    total:      '合計',
+    stamp:      '確認印',
+    none:       'なし',
+    estimate:   '来店時お見積もり',
+    srcWeb:     'ウェブ予約',
+    srcManual:  '手動入力',
+    terms: [
+      '当日返却の場合は17時半までにお戻りください。<br><span class="print-terms-indent">お戻りいただけない場合は延滞料金として1,100円/人（税込）、万一18時を過ぎた場合は3,300円/人を別途ご請求させていただきます。</span>',
+      'レンタル品の紛失、破損などがあったときはスタッフまで速やかにお申し出ください。<br><span class="print-terms-indent">お客様に過失のある場合は実費を請求させていただく場合がございます。</span>',
+      '母子ともへの配慮の観点より、妊娠中のお客様の着付けは行なっておりません。',
+    ],
+  },
+  en: {
+    slip:       'Reservation Slip',
+    guestLabel: 'Guest Name',
+    honorific:  '',
+    resNo:      'Reservation No.',
+    source:     'Source',
+    visitDate:  'Visit Date & Time',
+    plan:       'Plan',
+    people:     'Guests',
+    options:    'Options',
+    payment:    'Payment',
+    remarks:    'Remarks',
+    total:      'Total',
+    stamp:      'Verified',
+    none:       'None',
+    estimate:   'Quote at visit',
+    srcWeb:     'Website',
+    srcManual:  'Manual',
+    terms: [
+      'For same-day returns, please return by 5:30 PM.<br><span class="print-terms-indent">A late fee of ¥1,100/person (tax incl.) applies. If returned after 6:00 PM, ¥3,300/person will be charged.</span>',
+      'If any rental items are lost or damaged, please notify staff immediately.<br><span class="print-terms-indent">In cases of customer negligence, actual costs may be charged.</span>',
+      'Out of consideration for the safety of mothers and children, we are unable to dress pregnant customers.',
+    ],
+  },
+  zh: {
+    slip:       '預訂確認單',
+    guestLabel: '顧客姓名',
+    honorific:  ' 先生/小姐',
+    resNo:      '訂單號碼',
+    source:     '預訂來源',
+    visitDate:  '到店日期時間',
+    plan:       '方案',
+    people:     '人數',
+    options:    '加選項目',
+    payment:    '付款方式',
+    remarks:    '備注',
+    total:      '合計',
+    stamp:      '確認印章',
+    none:       '無',
+    estimate:   '到店報價',
+    srcWeb:     '網路預訂',
+    srcManual:  '手動輸入',
+    terms: [
+      '當日歸還請於17:30前返還。<br><span class="print-terms-indent">如無法準時歸還，將收取延遲費1,100日圓/人（含稅），若逾18:00則另收3,300日圓/人。</span>',
+      '如有租借物品遺失或損壞，請立即告知工作人員。<br><span class="print-terms-indent">若因顧客疏失造成，將酌情收取實際費用。</span>',
+      '基於母嬰安全考量，本店不提供孕婦著裝服務。',
+    ],
+  },
+};
+
+const PLAN_NAME_MAP = {
+  'ベーシック':   { en: 'Basic',                  zh: '基本方案' },
+  'スタンダード': { en: 'Standard',                zh: '標準方案' },
+  'プレミアム':   { en: 'Premium',                 zh: '優質方案' },
+  '撮影付き':    { en: 'With Photo',              zh: '含攝影方案' },
+  '加賀友禅':    { en: 'Kaga Yuzen',              zh: '加賀友禅' },
+  '成人式下見':  { en: 'Coming-of-Age Preview',   zh: '成人式試穿' },
+  '卒業式下見':  { en: 'Graduation Preview',      zh: '畢業式試穿' },
+  '期間限定':    { en: 'Limited Time',            zh: '限時方案' },
+};
+
+const OPT_NAME_MAP = {
+  'スタジオ撮影（データ渡し）':             { en: 'Studio Photo (Digital Data)',       zh: '攝影工作室（數位檔案）' },
+  'スタジオ撮影（データ＋2Lプリント2枚）':  { en: 'Studio Photo (Digital + 2 Prints)', zh: '攝影工作室（數位+2張相片）' },
+  'ロケーション撮影 ブロンズ（50カット）':  { en: 'Location Photo Bronze (50 shots)',  zh: '外景攝影 銅牌（50張）' },
+  'ロケーション撮影 シルバー（100カット）': { en: 'Location Photo Silver (100 shots)', zh: '外景攝影 銀牌（100張）' },
+  'ロケーション撮影 ゴールド（150カット）': { en: 'Location Photo Gold (150 shots)',   zh: '外景攝影 金牌（150張）' },
+  'ヘアセット':           { en: 'Hair Styling',        zh: '髮型設計' },
+  'フォーマルヘアセット': { en: 'Formal Hair Styling',  zh: '正式髮型設計' },
+  '髪飾り':               { en: 'Hair Accessories',    zh: '髮飾' },
+  'メンズヘアセット':     { en: "Men's Hair Styling",  zh: '男士髮型設計' },
+  'フルメイク':           { en: 'Full Makeup',         zh: '全臉彩妝' },
+  '名古屋帯':             { en: 'Nagoya-obi Upgrade',  zh: '升級名古屋帶' },
+  'ぬくぬく肌着':         { en: 'Winter Thermal Wear', zh: '冬季保暖內衣' },
+  'コート・ショール':     { en: 'Coat / Shawl',        zh: '外套・披肩' },
+  '翌日返却':             { en: 'Next-day Return',     zh: '隔日歸還' },
+  'ホテル返却':           { en: 'Hotel Return',        zh: '飯店歸還' },
+  '人力車':               { en: 'Rickshaw Ride',       zh: '人力車體驗' },
+  '観光タクシー':         { en: 'Sightseeing Taxi',    zh: '觀光計程車' },
+};
+
+function translateOptName(jaName, lang) {
+  if (lang === 'ja') return jaName;
+  const match  = jaName.match(/^(.+?)(×\d+)?$/);
+  const base   = match ? match[1].trim() : jaName;
+  const suffix = match && match[2] ? match[2] : '';
+  const map    = OPT_NAME_MAP[base];
+  return ((map && map[lang]) ? map[lang] : base) + suffix;
+}
+
+function translatePeople(peopleStr, lang) {
+  if (lang === 'ja' || !peopleStr) return peopleStr;
+  if (lang === 'en') {
+    return peopleStr
+      .replace(/女性(\d+)名/, (_, n) => `${n} ${n==='1'?'Female':'Females'}`)
+      .replace(/・?男性(\d+)名/, (_, n) => ` · ${n} ${n==='1'?'Male':'Males'}`)
+      .replace(/・?小人(\d+)名/, (_, n) => ` · ${n} ${n==='1'?'Child':'Children'}`)
+      .trim().replace(/^ · /, '');
+  }
+  if (lang === 'zh') {
+    return peopleStr.replace(/小人(\d+)名/, '兒童$1名');
+  }
+  return peopleStr;
+}
+
+function formatDateReceipt(dateStr, lang) {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (lang === 'en') {
+    const days   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} (${days[d.getDay()]})`;
+  }
+  if (lang === 'zh') {
+    const days = ['日','一','二','三','四','五','六'];
+    return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（週${days[d.getDay()]}）`;
+  }
+  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DAY_NAMES[d.getDay()]}）`;
+}
+
 function formatDate(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DAY_NAMES[d.getDay()]}）`;
@@ -1996,57 +2141,59 @@ function printReceipt() {
   const b = bookings.find(x => x.id === activeBookingId);
   if (!b) return;
 
+  const lang = b.lang || 'ja';
+  const t    = RECEIPT_I18N[lang] || RECEIPT_I18N.ja;
+
   const optRows = b.options && b.options.length > 0
     ? b.options.map(o => {
-        const n = typeof o === 'string' ? o : o.name;
+        const jaName = typeof o === 'string' ? o : o.name;
+        const n = translateOptName(jaName, lang);
         const p = typeof o === 'object' && o.price > 0 ? `¥${o.price.toLocaleString()}` : '';
         return `<div class="print-receipt-row"><span class="print-receipt-label"></span><span class="print-receipt-value">${n}${p ? '　' + p : ''}</span></div>`;
-      }).join('') : '<div class="print-receipt-row"><span class="print-receipt-label"></span><span class="print-receipt-value">なし</span></div>';
+      }).join('') : `<div class="print-receipt-row"><span class="print-receipt-label"></span><span class="print-receipt-value">${t.none}</span></div>`;
 
-  const totalStr = b.total > 0 ? `¥${b.total.toLocaleString()}` : '来店時お見積もり';
-  const src = b.source === 'AJ' ? 'ActivityJapan'
-    : b.source === 'WEB'    ? 'ウェブ予約'
-    : b.source === 'MANUAL' ? `手動入力（${b.channel || ''}）`
+  const totalStr = b.total > 0 ? `¥${b.total.toLocaleString()}` : t.estimate;
+  const src = b.source === 'AJ'     ? 'ActivityJapan'
+    : b.source === 'WEB'    ? t.srcWeb
+    : b.source === 'MANUAL' ? `${t.srcManual}（${b.channel || ''}）`
     : 'じゃらんnet';
+
+  const planMap  = PLAN_NAME_MAP[b.plan];
+  const planName = (planMap && planMap[lang]) ? planMap[lang] : b.plan;
+  const peopleStr  = translatePeople(b.people, lang);
+  const dateStr    = formatDateReceipt(b.date, lang);
+  const termsHtml  = t.terms.map(txt => `
+          <div class="print-terms-item">
+            <span class="print-terms-check">⬜</span>
+            <span class="print-terms-text">${txt}</span>
+          </div>`).join('');
 
   setPrintArea(`
     <div class="print-page print-receipt-page">
-      <div class="print-shop">${SHOP_NAME}　受付票</div>
+      <div class="print-shop">${SHOP_NAME}　${t.slip}</div>
       <div class="print-receipt">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div>
-            <div style="font-size:9pt;color:#888;margin-bottom:1mm;">お名前</div>
-            <div class="print-receipt-name">${b.name} 様</div>
+            <div style="font-size:9pt;color:#888;margin-bottom:1mm;">${t.guestLabel}</div>
+            <div class="print-receipt-name">${b.name}${t.honorific}</div>
           </div>
           <div style="text-align:right;font-size:9pt;color:#888;">
-            予約番号: ${b.reservationId}<br>
-            受付: ${src}
+            ${t.resNo}: ${b.reservationId}<br>
+            ${t.source}: ${src}
           </div>
         </div>
-        <div class="print-receipt-row"><span class="print-receipt-label">来店日時</span><span class="print-receipt-value">${formatDate(b.date)}　${b.time}</span></div>
-        <div class="print-receipt-row"><span class="print-receipt-label">プラン</span><span class="print-receipt-value">${b.plan}</span></div>
-        <div class="print-receipt-row"><span class="print-receipt-label">人数</span><span class="print-receipt-value">${b.people}</span></div>
-        <div class="print-receipt-row"><span class="print-receipt-label">オプション</span><span class="print-receipt-value"></span></div>
+        <div class="print-receipt-row"><span class="print-receipt-label">${t.visitDate}</span><span class="print-receipt-value">${dateStr}　${b.time}</span></div>
+        <div class="print-receipt-row"><span class="print-receipt-label">${t.plan}</span><span class="print-receipt-value">${planName}</span></div>
+        <div class="print-receipt-row"><span class="print-receipt-label">${t.people}</span><span class="print-receipt-value">${peopleStr}</span></div>
+        <div class="print-receipt-row"><span class="print-receipt-label">${t.options}</span><span class="print-receipt-value"></span></div>
         ${optRows}
-        ${b.payment ? `<div class="print-receipt-row"><span class="print-receipt-label">支払方法</span><span class="print-receipt-value">${b.payment}</span></div>` : ''}
-        <div class="print-receipt-row"><span class="print-receipt-label">備考</span><span class="print-receipt-value">${(b.remarks || '').replace(/アクティビティジャパン予約管理システムをご利用ください。?/g, '').trim()}</span></div>
+        ${b.payment ? `<div class="print-receipt-row"><span class="print-receipt-label">${t.payment}</span><span class="print-receipt-value">${b.payment}</span></div>` : ''}
+        <div class="print-receipt-row"><span class="print-receipt-label">${t.remarks}</span><span class="print-receipt-value">${(b.remarks || '').replace(/アクティビティジャパン予約管理システムをご利用ください。?/g, '').trim()}</span></div>
         <div class="print-receipt-total">
-          合計　${totalStr}
-          <span class="print-stamp">確認印</span>
+          ${t.total}　${totalStr}
+          <span class="print-stamp">${t.stamp}</span>
         </div>
-        <div class="print-terms">
-          <div class="print-terms-item">
-            <span class="print-terms-check">⬜</span>
-            <span class="print-terms-text">当日返却の場合は17時半までにお戻りください。<br><span class="print-terms-indent">お戻りいただけない場合は延滞料金として1,100円/人（税込）、万一18時を過ぎた場合は3,300円/人を別途ご請求させていただきます。</span></span>
-          </div>
-          <div class="print-terms-item">
-            <span class="print-terms-check">⬜</span>
-            <span class="print-terms-text">レンタル品の紛失、破損などがあったときはスタッフまで速やかにお申し出ください。<br><span class="print-terms-indent">お客様に過失のある場合は実費を請求させていただく場合がございます。</span></span>
-          </div>
-          <div class="print-terms-item">
-            <span class="print-terms-check">⬜</span>
-            <span class="print-terms-text">母子ともへの配慮の観点より、妊娠中のお客様の着付けは行なっておりません。</span>
-          </div>
+        <div class="print-terms">${termsHtml}
         </div>
       </div>
     </div>
