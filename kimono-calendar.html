@@ -493,7 +493,8 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   .print-summary { font-size: 9pt; color: #666; text-align: right; margin-top: 2mm; }
 
   /* ⑨ 受付表 */
-  .print-receipt { border: 2px solid #1c1a18; padding: 10mm; margin-bottom: 8mm; }
+  .print-receipt-page { page-break-inside: avoid; max-height: 257mm; box-sizing: border-box; padding: 20mm 15mm; }
+  .print-receipt { border: 2px solid #1c1a18; padding: 10mm; margin-bottom: 0; }
   .print-receipt-name { font-size: 22pt; font-weight: bold; margin: 4mm 0; letter-spacing: 0.05em; }
   .print-receipt-row { display: flex; gap: 6mm; padding: 3px 0; border-bottom: 1px dotted #ccc; font-size: 10pt; }
   .print-receipt-label { min-width: 24mm; color: #666; font-size: 9pt; }
@@ -2009,7 +2010,7 @@ function printReceipt() {
     : 'じゃらんnet';
 
   setPrintArea(`
-    <div class="print-page">
+    <div class="print-page print-receipt-page">
       <div class="print-shop">${SHOP_NAME}　受付票</div>
       <div class="print-receipt">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
@@ -2048,7 +2049,6 @@ function printReceipt() {
           </div>
         </div>
       </div>
-      <div class="print-summary">印刷日時: ${new Date().toLocaleString('ja-JP')}</div>
     </div>
   `);
   closeModal();
