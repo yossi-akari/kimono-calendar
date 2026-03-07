@@ -500,6 +500,11 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   .print-receipt-value { flex: 1; }
   .print-receipt-total { font-size: 14pt; font-weight: bold; text-align: right; margin-top: 4mm; color: #8b3a3a; }
   .print-stamp { border: 2px solid #ccc; width: 20mm; height: 20mm; display: inline-block; margin-left: 4mm; vertical-align: middle; text-align: center; font-size: 8pt; color: #ccc; line-height: 20mm; }
+  .print-terms { margin-top: 5mm; border-top: 1px solid #bbb; padding-top: 4mm; }
+  .print-terms-item { display: flex; gap: 2mm; margin-bottom: 3mm; line-height: 1.65; font-size: 8pt; }
+  .print-terms-check { flex-shrink: 0; font-size: 9pt; }
+  .print-terms-text { flex: 1; }
+  .print-terms-indent { padding-left: 3mm; }
 
   /* ⑩ 日報（売上報告書フォーマット・1ページ収納） */
   .rp-page { padding: 6mm 10mm; font-family: 'Noto Sans JP', sans-serif; }
@@ -2027,6 +2032,20 @@ function printReceipt() {
         <div class="print-receipt-total">
           合計　${totalStr}
           <span class="print-stamp">確認印</span>
+        </div>
+        <div class="print-terms">
+          <div class="print-terms-item">
+            <span class="print-terms-check">⬜</span>
+            <span class="print-terms-text">当日返却の場合は17時半までにお戻りください。<br><span class="print-terms-indent">お戻りいただけない場合は延滞料金として1,100円/人（税込）、万一18時を過ぎた場合は3,300円/人を別途ご請求させていただきます。</span></span>
+          </div>
+          <div class="print-terms-item">
+            <span class="print-terms-check">⬜</span>
+            <span class="print-terms-text">レンタル品の紛失、破損などがあったときはスタッフまで速やかにお申し出ください。<br><span class="print-terms-indent">お客様に過失のある場合は実費を請求させていただく場合がございます。</span></span>
+          </div>
+          <div class="print-terms-item">
+            <span class="print-terms-check">⬜</span>
+            <span class="print-terms-text">母子ともへの配慮の観点より、妊娠中のお客様の着付けは行なっておりません。</span>
+          </div>
         </div>
       </div>
       <div class="print-summary">印刷日時: ${new Date().toLocaleString('ja-JP')}</div>
