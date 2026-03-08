@@ -283,6 +283,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       ※ 選択されたプランは来店時お見積もりとなります。合計金額は当日ご確認いただきます。
     </div>
     <div id="paymentNotice" style="display:none;" class="notice"></div>
+    <div id="cancelPolicyNotice" style="display:none;" class="notice"></div>
     <div class="btn-row">
       <button class="submit-btn btn-ghost" id="step4BackBtn" onclick="goStep(3)" style="flex:1;">← 戻る</button>
       <button class="submit-btn" id="submitBtn" onclick="submitForm()" style="flex:2;">予約を確定する</button>
@@ -355,6 +356,7 @@ const I18N = {
     submitBtn: '予約を確定する', submitting: '送信中...',
     estimateNotice: '※ 選択されたプランは来店時お見積もりとなります。合計金額は当日ご確認いただきます。',
     paymentNotice: '',
+    cancelPolicyNotice: '',
     modalTitle: 'ご予約ありがとうございます',
     modalText: '内容をご確認ください。<br>当日のご来店をお待ちしております。',
     modalClose: '閉じる',
@@ -418,6 +420,7 @@ const I18N = {
     submitBtn: 'Confirm Booking', submitting: 'Submitting...',
     estimateNotice: '※ The selected plan will be quoted upon arrival. The total will be confirmed on the day of your visit.',
     paymentNotice: '💳 Payment is by credit card only. Pre-payment details will be sent after your booking is confirmed.',
+    cancelPolicyNotice: '📋 Cancellation Policy\n• A 100% cancellation fee applies for same-day cancellations.\n• If you do not arrive within 1 hour of your reserved time, your booking will be automatically cancelled.\n• No cancellation fee for changes or cancellations made in advance.',
     modalTitle: 'Thank you for your reservation!',
     modalText: 'Please review your booking details.<br>We look forward to welcoming you.',
     modalClose: 'Close',
@@ -482,6 +485,7 @@ const I18N = {
     submitBtn: '確認預約', submitting: '傳送中...',
     estimateNotice: '※ 所選方案將於來店時提供報價，總金額將於當天確認。',
     paymentNotice: '💳 僅接受信用卡預付款。預訂確認後將寄送付款詳情。',
+    cancelPolicyNotice: '📋 取消政策\n• 當日取消將收取100%的取消費用。\n• 如您未在預約時間1小時內到店，預約將自動取消。\n• 提前更改或取消預約不收取任何費用。',
     modalTitle: '感謝您的預約！',
     modalText: '請確認您的預約詳情。<br>期待您的光臨。',
     modalClose: '關閉',
@@ -714,6 +718,9 @@ function applyLang() {
   const pn = document.getElementById('paymentNotice');
   pn.textContent = t.paymentNotice || '';
   pn.style.display = t.paymentNotice ? '' : 'none';
+  const cp = document.getElementById('cancelPolicyNotice');
+  cp.innerHTML = t.cancelPolicyNotice ? t.cancelPolicyNotice.replace(/\n/g, '<br>') : '';
+  cp.style.display = t.cancelPolicyNotice ? '' : 'none';
   document.getElementById('modalTitle').textContent   = t.modalTitle;
   document.getElementById('modalText').innerHTML      = t.modalText;
   document.getElementById('modalCloseBtn').textContent = t.modalClose;
