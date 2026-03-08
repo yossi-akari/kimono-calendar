@@ -386,9 +386,10 @@ function getActivityJapanBookings() {
     }
 
     // ② 予約内容変更通知メール
-    // from フィルタを追加して無関係なメールを除外
+    // subject フィルタを除去: 日本語トークナイザの問題でマッチしない場合があるため
+    // parseAJChangeEmail() が予約番号+実施日を必須チェックするので無関係メールは自動除外される
     const changeThreads = GmailApp.search(
-      '(from:activity-japan@activityjapan.com OR from:reserve-system@activityjapan.com) subject:予約内容変更のお知らせ', 0, 100
+      '(from:activity-japan@activityjapan.com OR from:reserve-system@activityjapan.com)', 0, 200
     );
     for (const thread of changeThreads) {
       for (const message of thread.getMessages()) {
@@ -765,7 +766,17 @@ function getSettingsSheet() {
   if (!sheet) {
     sheet = ss.insertSheet('設定');
     sheet.appendRow(['date', 'limit', 'closed', 'note']);
-    sheet.appendRow(['DEFAULT', 2, 'FALSE', 'デフォルト上限']);
+    sheet.appendRow(['DEFAULT', ALL_TIMES.length, 'FALSE', 'デフォルト上限']);
+  } else {
+    // DEFAULT上限が旧バグ値(2)のままなら正しい値(11)に自動マイグレーション
+    const rows = sheet.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === 'DEFAULT' && (rows[i][1] === 2 || rows[i][1] === '2')) {
+        sheet.getRange(i + 1, 2).setValue(ALL_TIMES.length);
+        Logger.log('DEFAULT上限を旧バグ値2→' + ALL_TIMES.length + 'に自動修正しました');
+        break;
+      }
+    }
   }
   return sheet;
 }
@@ -868,6 +879,59 @@ function doPost(e) {
       return output;
     }
 
+    // ── 公開エンドポイント（ACCESS_KEY認証、POST対応） ────────────
+    // reserve.html / my-reservation.html がPOSTで呼び出す
+    if (data.key && data.key !== getAccessKey()) {
+      output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
+      return output;
+    }
+    if (data.action === 'checkSlot' && data.key) {
+      try {
+        const date = data.date;
+        if (!date) throw new Error('date required');
+        output.setContent(JSON.stringify({ success: true, slots: getSlotAvailability(date), capacity: SLOT_CAPACITY }));
+      } catch(err) {
+        output.setContent(JSON.stringify({ success: false, error: err.message }));
+      }
+      return output;
+    }
+    if (data.action === 'getBookingForCustomer' && data.key) {
+      try {
+        const id    = data.id;
+        const email = (data.email || '').toLowerCase().trim();
+        if (!id || !email) throw new Error('予約番号とメールアドレスを入力してください');
+        if (!id.startsWith('HP-')) throw new Error('このページではウェブ予約（HP-から始まる予約番号）のみ確認できます');
+        const booking = findCustomerBooking(id, email);
+        if (!booking) throw new Error('予約が見つかりません。予約番号またはメールアドレスをご確認ください。');
+        const pending = getPendingRequestForBooking(id);
+        output.setContent(JSON.stringify({ success: true, booking, pendingRequest: pending }));
+      } catch(err) {
+        output.setContent(JSON.stringify({ success: false, error: err.message }));
+      }
+      return output;
+    }
+    if (data.action === 'submitRequest' && data.key) {
+      try {
+        const id      = data.id;
+        const email   = (data.email || '').toLowerCase().trim();
+        const type    = data.type;
+        const newDate = data.newDate || '';
+        const newTime = data.newTime || '';
+        const message = data.message || '';
+        if (!id || !email || !type) throw new Error('パラメータが不足しています');
+        const booking = findCustomerBooking(id, email);
+        if (!booking) throw new Error('予約が見つかりません');
+        if (getPendingRequestForBooking(id)) throw new Error('この予約にはすでに申請中のリクエストがあります');
+        const requestId = 'REQ-' + new Date().getTime();
+        saveRequest({ requestId, bookingId: id, bookingName: booking.name, type, status: 'pending', newDate, newTime, message, submittedAt: new Date().toISOString() });
+        sendRequestNotification(booking, type, newDate, newTime, message, requestId);
+        output.setContent(JSON.stringify({ success: true, requestId }));
+      } catch(err) {
+        output.setContent(JSON.stringify({ success: false, error: err.message }));
+      }
+      return output;
+    }
+
     // ── WEB予約の保存（公開フォームから、ACCESS_KEY で認証）──────
     if (data.action === 'save' && data.key) {
       if (data.key !== getAccessKey()) {
@@ -876,16 +940,28 @@ function doPost(e) {
       }
       const booking = data.booking;
       if (booking.source === 'WEB') {
-        const peopleCount = parsePeopleCount(booking.people);
-        const slots = getSlotAvailability(booking.date);
-        const slot = slots[booking.time];
-        if (slot && slot.remaining < peopleCount) {
-          output.setContent(JSON.stringify({ success: false, error: 'SLOT_FULL', remaining: slot.remaining }));
+        // 同時リクエストによる二重予約を防ぐためロックを取得
+        const lock = LockService.getScriptLock();
+        try {
+          lock.waitLock(10000);
+        } catch(e) {
+          output.setContent(JSON.stringify({ success: false, error: 'RETRY', message: '一時的に混雑しています。もう一度お試しください。' }));
           return output;
         }
-        saveManualToSheet(booking);
-        sendConfirmationEmail(booking);
-        sendAdminNotification(booking);
+        try {
+          const peopleCount = parsePeopleCount(booking.people);
+          const slots = getSlotAvailability(booking.date);
+          const slot = slots[booking.time];
+          if (slot && slot.remaining < peopleCount) {
+            output.setContent(JSON.stringify({ success: false, error: 'SLOT_FULL', remaining: slot.remaining }));
+            return output;
+          }
+          saveManualToSheet(booking);
+          sendConfirmationEmail(booking);
+          sendAdminNotification(booking);
+        } finally {
+          lock.releaseLock();
+        }
       } else {
         saveManualToSheet(booking);
       }
@@ -997,9 +1073,37 @@ function doPost(e) {
 
     output.setContent(JSON.stringify({ success: false, error: 'Unknown action' }));
   } catch(err) {
+    notifyAdminError('doPost', err.message, JSON.stringify(data || {}).substring(0, 300));
     output.setContent(JSON.stringify({ success: false, error: err.message }));
   }
   return output;
+}
+
+// =============================================================
+// ── 監視・エラー通知 ────────────────────────────────────────────
+// 同一コンテキストのエラーは1時間に1回だけ管理者にメール送信
+// =============================================================
+function notifyAdminError(context, message, details) {
+  const cacheKey = 'err_' + context.replace(/\W/g, '_');
+  const cache = CacheService.getScriptCache();
+  if (cache.get(cacheKey)) return; // クールダウン中はスキップ
+  cache.put(cacheKey, '1', 3600);  // 1時間クールダウン
+  try {
+    const now = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+    const subject = `【システムエラー】きものレンタル あかり — ${context}`;
+    const body = `GASスクリプトでエラーが発生しました。
+
+発生日時 : ${now}
+発生箇所 : ${context}
+エラー   : ${message}${details ? '\n詳細     : ' + details : ''}
+
+GASエディタの実行ログで詳細を確認してください。
+https://script.google.com/home`;
+    GmailApp.sendEmail(getAdminEmail(), subject, body);
+    Logger.log('エラー通知送信: ' + context + ' — ' + message);
+  } catch(e) {
+    Logger.log('エラー通知送信失敗: ' + e.message);
+  }
 }
 
 // =============================================================
@@ -1012,13 +1116,22 @@ function getCachedBookings() {
 function setCachedBookings(b) {
   // 空配列はキャッシュしない（GMail API一時エラー時に空が永続化するのを防ぐ）
   if (!b || b.length === 0) return;
-  try { const s = JSON.stringify(b); if (s.length < 90000) CacheService.getScriptCache().put('bookings_v1', s, 3600); }
-  catch(e) {}
+  try {
+    const s = JSON.stringify(b);
+    if (s.length < 90000) {
+      CacheService.getScriptCache().put('bookings_v1', s, 1800); // 30分TTL（旧：1時間）
+    } else {
+      Logger.log('キャッシュサイズ超過: ' + s.length + ' bytes — キャッシュをスキップ');
+      notifyAdminError('setCachedBookings', 'キャッシュサイズ超過: ' + s.length + ' bytes（上限90KB）— 予約件数が増えすぎている可能性があります');
+    }
+  } catch(e) {}
 }
 function clearCache() { CacheService.getScriptCache().remove('bookings_v1'); Logger.log('キャッシュクリア'); }
 
 // =============================================================
-// ── 毎朝8時 自動同期トリガー ──────────────────────────────────
+// ── 自動同期トリガー ──────────────────────────────────────────
+// setupDailyTrigger()  → 毎朝8時にフル同期
+// setupHourlyTrigger() → 1時間ごとにキャッシュ更新（営業時間帯のキャッシュ鮮度確保）
 // =============================================================
 function setupDailyTrigger() {
   ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'dailySync') ScriptApp.deleteTrigger(t); });
@@ -1027,7 +1140,17 @@ function setupDailyTrigger() {
 }
 function dailySync() {
   try { clearCache(); const b = getAllBookings(); setCachedBookings(b); Logger.log('同期完了: ' + b.length + '件'); }
-  catch(e) { Logger.log('同期エラー: ' + e.message); }
+  catch(e) { Logger.log('同期エラー: ' + e.message); notifyAdminError('dailySync', e.message); }
+}
+
+function setupHourlyTrigger() {
+  ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'hourlySync') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('hourlySync').timeBased().everyHours(1).create();
+  Logger.log('1時間ごとのキャッシュ更新トリガーを設定しました');
+}
+function hourlySync() {
+  try { clearCache(); const b = getRawBookings(); setCachedBookings(b); Logger.log('キャッシュ更新完了: ' + b.length + '件'); }
+  catch(e) { Logger.log('キャッシュ更新エラー: ' + e.message); notifyAdminError('hourlySync', e.message); }
 }
 
 // =============================================================
@@ -1456,4 +1579,33 @@ function debugJaran() {
   Logger.log('件名: ' + msg.getSubject());
   Logger.log('送信元: ' + msg.getFrom());
   Logger.log('本文（先頭1500文字）:\n' + msg.getPlainBody().substring(0, 1500));
+}
+
+// AJ変更メールのデバッグ関数
+function debugAJChange() {
+  const threads = GmailApp.search(
+    '(from:activity-japan@activityjapan.com OR from:reserve-system@activityjapan.com)', 0, 50
+  );
+  Logger.log('検索ヒット: ' + threads.length + 'スレッド');
+  let changeCount = 0;
+  let parseOk = 0;
+  let parseFail = 0;
+  for (const thread of threads) {
+    for (const msg of thread.getMessages()) {
+      const subj = msg.getSubject();
+      if (!subj.includes('変更')) continue;
+      changeCount++;
+      const body = msg.getPlainBody();
+      const result = parseAJChangeEmail(body);
+      if (result) {
+        parseOk++;
+        Logger.log('✓ 解析OK: #' + result.reservationId + ' → ' + result.date + ' ' + result.time);
+      } else {
+        parseFail++;
+        Logger.log('✗ 解析失敗: 件名=[' + subj + '] 送信元=[' + msg.getFrom() + ']');
+        Logger.log('  本文先頭500文字: ' + body.substring(0, 500));
+      }
+    }
+  }
+  Logger.log('変更メール合計: ' + changeCount + '件 / 解析OK: ' + parseOk + ' / 失敗: ' + parseFail);
 }

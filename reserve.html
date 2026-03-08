@@ -282,6 +282,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
     <div id="estimateNotice" style="display:none;" class="notice">
       ※ 選択されたプランは来店時お見積もりとなります。合計金額は当日ご確認いただきます。
     </div>
+    <div id="paymentNotice" style="display:none;" class="notice"></div>
     <div class="btn-row">
       <button class="submit-btn btn-ghost" id="step4BackBtn" onclick="goStep(3)" style="flex:1;">← 戻る</button>
       <button class="submit-btn" id="submitBtn" onclick="submitForm()" style="flex:2;">予約を確定する</button>
@@ -353,6 +354,7 @@ const I18N = {
     step4Back: '← 戻る',
     submitBtn: '予約を確定する', submitting: '送信中...',
     estimateNotice: '※ 選択されたプランは来店時お見積もりとなります。合計金額は当日ご確認いただきます。',
+    paymentNotice: '',
     modalTitle: 'ご予約ありがとうございます',
     modalText: '内容をご確認ください。<br>当日のご来店をお待ちしております。',
     modalClose: '閉じる',
@@ -415,6 +417,7 @@ const I18N = {
     step4Back: '← Back',
     submitBtn: 'Confirm Booking', submitting: 'Submitting...',
     estimateNotice: '※ The selected plan will be quoted upon arrival. The total will be confirmed on the day of your visit.',
+    paymentNotice: '💳 Payment is by credit card only. Pre-payment details will be sent after your booking is confirmed.',
     modalTitle: 'Thank you for your reservation!',
     modalText: 'Please review your booking details.<br>We look forward to welcoming you.',
     modalClose: 'Close',
@@ -478,6 +481,7 @@ const I18N = {
     step4Back: '← 返回',
     submitBtn: '確認預約', submitting: '傳送中...',
     estimateNotice: '※ 所選方案將於來店時提供報價，總金額將於當天確認。',
+    paymentNotice: '💳 僅接受信用卡預付款。預訂確認後將寄送付款詳情。',
     modalTitle: '感謝您的預約！',
     modalText: '請確認您的預約詳情。<br>期待您的光臨。',
     modalClose: '關閉',
@@ -707,6 +711,9 @@ function applyLang() {
   document.getElementById('step4BackBtn').textContent = t.step4Back;
   document.getElementById('submitBtn').textContent    = t.submitBtn;
   document.getElementById('estimateNotice').textContent = t.estimateNotice;
+  const pn = document.getElementById('paymentNotice');
+  pn.textContent = t.paymentNotice || '';
+  pn.style.display = t.paymentNotice ? '' : 'none';
   document.getElementById('modalTitle').textContent   = t.modalTitle;
   document.getElementById('modalText').innerHTML      = t.modalText;
   document.getElementById('modalCloseBtn').textContent = t.modalClose;
@@ -1144,7 +1151,7 @@ async function submitForm() {
     people:   peopleSaved,
     options:  selectedOpts,
     total,
-    payment:  '未定',
+    payment:  currentLang !== 'ja' ? '事前決済（クレジットカード）' : '未定',
     email:    em,
     tel:      ph,
     remarks:  document.getElementById('remarks').value.trim(),
