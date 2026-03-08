@@ -213,19 +213,24 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 </div>
 <script>
 (function(){
-  const PIN='56785678';
+  const GAS='https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
   const screen=document.getElementById('pin-screen');
   const input=document.getElementById('pinInput');
   const err=document.getElementById('pin-error');
-  if(sessionStorage.getItem('auth')==='ok') screen.style.display='none';
-  else input.focus();
-  input.addEventListener('input',function(){
-    err.textContent='';
-    if(this.value.length===8){
-      if(this.value===PIN){ sessionStorage.setItem('auth','ok'); screen.style.display='none'; }
-      else{ err.textContent='PINが違います'; this.value=''; setTimeout(()=>err.textContent='',1500); }
-    }
-  });
+  if(sessionStorage.getItem('admin_token')){ screen.style.display='none'; return; }
+  input.focus();
+  async function tryLogin(pin){
+    input.disabled=true; err.textContent='';
+    try{
+      const res=await fetch(GAS,{method:'POST',body:JSON.stringify({action:'auth',pin})});
+      const data=await res.json();
+      if(data.success){ sessionStorage.setItem('admin_token',data.token); screen.style.display='none'; }
+      else{ err.textContent='PINが違います'; input.value=''; setTimeout(()=>err.textContent='',1500); }
+    }catch(e){ err.textContent='通信エラーが発生しました'; }
+    finally{ input.disabled=false; input.focus(); }
+  }
+  input.addEventListener('keydown',function(e){ if(e.key==='Enter'&&this.value) tryLogin(this.value); });
+  input.addEventListener('input',function(){ err.textContent=''; });
 })();
 </script>
 
@@ -440,7 +445,6 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
-const ACCESS_KEY = 'AkariKimono2026_mK9x';
 
 // ── 料金テーブル ──
 const PLAN_PRICES = {
@@ -599,14 +603,20 @@ function calcAutoTotal() {
   updateHairAccessoryVisibility();
 }
 
-// ── GAS送信ヘルパー ──
+// ── GAS送信ヘルパー（管理者トークン認証、POST）──
 async function postToGAS(action, payload) {
-  const params = new URLSearchParams({ key: ACCESS_KEY, action });
-  for (const [k, v] of Object.entries(payload)) {
-    params.set(k, typeof v === 'object' ? JSON.stringify(v) : v);
+  const token = sessionStorage.getItem('admin_token');
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+
+    body: JSON.stringify({ token, action, ...payload })
+  });
+  const data = await res.json();
+  if (!data.success && data.error === 'Unauthorized') {
+    sessionStorage.removeItem('admin_token');
+    location.reload();
   }
-  const res = await fetch(GAS_URL + '?' + params.toString());
-  return JSON.parse(await res.text());
+  return data;
 }
 
 // ── Enterキー無効化（textarea除く） ──
@@ -678,7 +688,7 @@ async function handleSubmit(e) {
   btn.disabled = true; btn.textContent = isEdit ? '更新中...' : '保存中...';
   try {
     if (isEdit) await postToGAS('delete', { id: editingBooking.id });
-    await postToGAS('save', { booking });
+    await postToGAS('saveManual', { booking });
   } catch(err) {
     console.warn('GAS失敗、localStorageに保存:', err);
     let manuals = JSON.parse(localStorage.getItem('kimono_manual_bookings') || '[]');
@@ -750,8 +760,7 @@ async function renderList() {
   const el = document.getElementById('manualList');
   el.innerHTML = '<p style="text-align:center;color:var(--muted);font-size:0.82rem;padding:20px;">読み込み中...</p>';
   try {
-    const res  = await fetch(GAS_URL + '?' + new URLSearchParams({ key: ACCESS_KEY }));
-    const data = JSON.parse(await res.text());
+    const data = await postToGAS('getBookings', {});
     if (data.success) {
       renderedBookings = data.bookings.filter(b => b.source === 'MANUAL');
     }

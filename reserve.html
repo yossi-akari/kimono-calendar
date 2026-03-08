@@ -303,7 +303,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 
 <script>
 const GAS_URL    = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
-const ACCESS_KEY = 'AkariKimono2026_mK9x';
+const ACCESS_KEY = '34563456';
 
 let plan   = { name: null, price: 0, isEstimate: false };
 let people = { female: 1, male: 0, child: 0 };
@@ -744,8 +744,11 @@ function buildPlanCards() {
 // ── 空き状況を取得して時間セレクトに反映 ─────────────
 async function fetchSlotAvailability(date) {
   try {
-    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'checkSlot', date });
-    const res  = await fetch(GAS_URL + '?' + params.toString());
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+
+      body: JSON.stringify({ key: ACCESS_KEY, action: 'checkSlot', date })
+    });
     const data = await res.json().catch(() => null);
     if (data && data.success) slotAvailability = data.slots || {};
   } catch(e) {
@@ -1155,7 +1158,7 @@ async function submitForm() {
   try {
     const res = await fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+
       body: JSON.stringify({ key: ACCESS_KEY, action: 'save', booking })
     });
     const json = await res.json().catch(() => null);
@@ -1165,6 +1168,8 @@ async function submitForm() {
         alert(rem === 0 ? t.alertSlotFull(time) : t.alertSlotInsuf(time, rem));
         await fetchSlotAvailability(date);
         goStep(2);
+      } else if (json && json.error === 'RETRY') {
+        alert('一時的に混雑しています。もう一度送信してください。');
       } else {
         alert(t.alertNetErr);
       }

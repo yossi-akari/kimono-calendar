@@ -210,7 +210,7 @@ select {
 
 <script>
 const GAS_URL    = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
-const ACCESS_KEY = 'AkariKimono2026_mK9x';
+const ACCESS_KEY = '34563456';
 const DAY_JA     = ['日','月','火','水','木','金','土'];
 
 let currentBooking = null;
@@ -249,8 +249,11 @@ async function lookupBooking() {
   const btn = document.getElementById('lookupBtn');
   btn.disabled = true; btn.textContent = '確認中...';
   try {
-    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'getBookingForCustomer', id, email });
-    const res  = await fetch(GAS_URL + '?' + params.toString());
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+
+      body: JSON.stringify({ key: ACCESS_KEY, action: 'getBookingForCustomer', id, email })
+    });
     const data = await res.json();
     if (!data.success) { errEl.textContent = data.error || '予約が見つかりません'; return; }
     currentBooking = data.booking;
@@ -345,8 +348,11 @@ async function submitChange() {
   const btn = document.getElementById('changeSubmitBtn');
   btn.disabled = true; btn.textContent = '送信中...';
   try {
-    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'submitRequest', id: b.id, email: b.email, type: 'change', newDate, newTime, message });
-    const res  = await fetch(GAS_URL + '?' + params.toString());
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+
+      body: JSON.stringify({ key: ACCESS_KEY, action: 'submitRequest', id: b.id, email: b.email, type: 'change', newDate, newTime, message })
+    });
     const data = await res.json();
     if (!data.success) { errEl.textContent = data.error || '送信に失敗しました'; return; }
     showDone('change');
@@ -383,8 +389,11 @@ async function submitCancel() {
   const btn = document.getElementById('cancelSubmitBtn');
   btn.disabled = true; btn.textContent = '送信中...';
   try {
-    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'submitRequest', id: b.id, email: b.email, type: 'cancel', message });
-    const res  = await fetch(GAS_URL + '?' + params.toString());
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+
+      body: JSON.stringify({ key: ACCESS_KEY, action: 'submitRequest', id: b.id, email: b.email, type: 'cancel', message })
+    });
     const data = await res.json();
     if (!data.success) { errEl.textContent = data.error || '送信に失敗しました'; return; }
     showDone('cancel');

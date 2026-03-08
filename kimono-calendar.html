@@ -1034,7 +1034,7 @@ async function verifyPin(pin) {
   try {
     const res  = await fetch(GAS_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+
       body: JSON.stringify({ action: 'auth', pin })
     });
     const data = await res.json();
@@ -1072,7 +1072,6 @@ function adminPost(params) {
   const token = sessionStorage.getItem('adminToken');
   return fetch(GAS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token, ...params })
   })
   .then(r => r.json())
