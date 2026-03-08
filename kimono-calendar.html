@@ -638,24 +638,16 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 <body>
 <div id="pin-screen">
   <h1>予約管理カレンダー</h1>
-  <input type="password" id="pinInput" placeholder="PINコードを入力" maxlength="8" autocomplete="off" inputmode="text">
+  <input type="password" id="pinInput" placeholder="PINコードを入力してEnter" autocomplete="off">
+  <div id="pin-hint" style="font-size:0.72rem;color:rgba(255,255,255,0.3);margin-top:-8px;">Enter キーで送信</div>
   <div id="pin-error"></div>
 </div>
 <script>
+// 既存トークンがあれば即座にPIN画面を非表示
 (function(){
-  const PIN='56785678';
-  const screen=document.getElementById('pin-screen');
-  const input=document.getElementById('pinInput');
-  const err=document.getElementById('pin-error');
-  if(sessionStorage.getItem('auth')==='ok') screen.style.display='none';
-  else input.focus();
-  input.addEventListener('input',function(){
-    err.textContent='';
-    if(this.value.length===8){
-      if(this.value===PIN){ sessionStorage.setItem('auth','ok'); screen.style.display='none'; }
-      else{ err.textContent='PINが違います'; this.value=''; setTimeout(()=>err.textContent='',1500); }
-    }
-  });
+  if(sessionStorage.getItem('adminToken')) {
+    document.getElementById('pin-screen').style.display='none';
+  }
 })();
 </script>
 
@@ -1029,9 +1021,72 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 </div>
 
 <script>
-// ★ Google Apps ScriptのデプロイURL（GAS側のACCESS_KEYと一致させてください）
+// ★ Google Apps ScriptのデプロイURL
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
-const ACCESS_KEY = 'AkariKimono2026_mK9x';
+
+// ── PIN認証（サーバー側検証） ─────────────────────────────
+async function verifyPin(pin) {
+  const screen = document.getElementById('pin-screen');
+  const input  = document.getElementById('pinInput');
+  const err    = document.getElementById('pin-error');
+  input.disabled = true;
+  err.textContent = '確認中...';
+  try {
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'auth', pin })
+    });
+    const data = await res.json();
+    if (data.success && data.token) {
+      sessionStorage.setItem('adminToken', data.token);
+      screen.style.display = 'none';
+      err.textContent = '';
+      refreshBookings();
+      startAutoRefresh();
+    } else {
+      err.textContent = data.error || 'PINが違います';
+      input.value = '';
+      setTimeout(() => { err.textContent = ''; input.disabled = false; input.focus(); }, 1500);
+    }
+  } catch(e) {
+    err.textContent = 'サーバーエラーが発生しました';
+    input.disabled = false;
+    input.focus();
+  }
+}
+(function setupPinInput(){
+  const screen = document.getElementById('pin-screen');
+  if (screen.style.display === 'none') return;
+  const input = document.getElementById('pinInput');
+  const err   = document.getElementById('pin-error');
+  input.focus();
+  input.addEventListener('input',  function() { err.textContent = ''; });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && this.value.length > 0) verifyPin(this.value);
+  });
+})();
+
+// ── 管理者POST ヘルパー（全admin APIコールに使用） ──────────
+function adminPost(params) {
+  const token = sessionStorage.getItem('adminToken');
+  return fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, ...params })
+  })
+  .then(r => r.json())
+  .catch(e => ({ success: false, error: e.message }));
+}
+// トークン期限切れ時は再ログイン促す
+function handleUnauthorized() {
+  sessionStorage.removeItem('adminToken');
+  document.getElementById('pin-screen').style.display = 'flex';
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinInput').disabled = false;
+  document.getElementById('pin-error').textContent = 'セッションが期限切れになりました。再度PINを入力してください。';
+  document.getElementById('pinInput').focus();
+}
 
 // スロットブロック管理
 let currentBlockedSlots = new Set(); // 選択中日付のブロック済み時間帯
@@ -1093,9 +1148,10 @@ function mergeBookings(gasBookings, manualBookings) {
 
 async function loadFromGAS() {
   if (!GAS_URL || GAS_URL === 'YOUR_GAS_DEPLOY_URL_HERE') return false;
+  if (!sessionStorage.getItem('adminToken')) return false;
   try {
-    const res = await fetch(GAS_URL + '?key=' + ACCESS_KEY);
-    const data = JSON.parse(await res.text());
+    const data = await adminPost({ action: 'getBookings' });
+    if (data.error === 'Unauthorized') { handleUnauthorized(); return false; }
     if (data.success && data.bookings) {
       const skipped = JSON.parse(localStorage.getItem('kimono_skipped') || '[]');
 
@@ -1137,8 +1193,8 @@ async function forceClearCache() {
   const statusEl = document.getElementById('syncStatus');
   if (statusEl) statusEl.textContent = 'キャッシュリセット中...';
   try {
-    const res = await fetch(GAS_URL + '?' + new URLSearchParams({ key: ACCESS_KEY, action: 'clearCache' }));
-    const data = JSON.parse(await res.text());
+    const data = await adminPost({ action: 'clearCache' });
+    if (data.error === 'Unauthorized') { handleUnauthorized(); return; }
     if (data.success) {
       if (statusEl) statusEl.textContent = `リセット完了 (${data.refreshed}件取得)`;
       await refreshBookings();
@@ -1602,9 +1658,8 @@ async function _loadSlotGridData() {
 
   // ブロック済みスロットをGASから取得
   try {
-    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'getBlockedSlots', date: selectedDate });
-    const res  = await fetch(GAS_URL + '?' + params);
-    const data = await res.json();
+    const data = await adminPost({ action: 'getBlockedSlots', date: selectedDate });
+    if (data.error === 'Unauthorized') { handleUnauthorized(); return; }
     if (data.success) {
       currentBlockedSlots = new Set((data.blocked || []).map(b => b.time));
     }
@@ -1685,12 +1740,8 @@ async function toggleSlotBlock(time) {
   if (!confirm(msg)) return;
 
   try {
-    const body = JSON.stringify({
-      key: ACCESS_KEY, action, date: selectedDate, time,
-      reason: isBlocked ? '' : '管理者ブロック'
-    });
-    const res  = await fetch(GAS_URL, { method: 'POST', body });
-    const data = await res.json();
+    const data = await adminPost({ action, date: selectedDate, time, reason: isBlocked ? '' : '管理者ブロック' });
+    if (data.error === 'Unauthorized') { handleUnauthorized(); return; }
     if (!data.success) throw new Error(data.error || '操作に失敗しました');
 
     if (isBlocked) {
@@ -1790,7 +1841,7 @@ async function deleteBooking() {
     // 手動・ウェブ予約：GASスプレッドシートから削除
     if (!confirm('この予約を削除しますか？\n（この操作は元に戻せません）')) return;
     try {
-      await fetch(GAS_URL + '?' + new URLSearchParams({ key: ACCESS_KEY, action: 'delete', id: activeBookingId }));
+      await adminPost({ action: 'delete', id: activeBookingId });
     } catch(e) { console.warn('GAS削除エラー:', e); }
   } else {
     // GAS予約：skippedに追加して非表示
@@ -1834,14 +1885,7 @@ async function saveSettingsForDate() {
   const limit    = limitVal !== '' ? parseInt(limitVal) : null;
   const note     = document.getElementById('settingsNote').value;
   try {
-    const params = new URLSearchParams({
-      key: ACCESS_KEY, action: 'saveSettings',
-      date: selectedDate,
-      limit: limit !== null ? limit : '',
-      closed: closed ? 'true' : 'false',
-      note
-    });
-    await fetch(GAS_URL + '?' + params);
+    await adminPost({ action: 'saveSettings', date: selectedDate, limit, closed, note });
     settings[selectedDate] = { limit, closed, note };
     closeSettingsModal();
     renderCalendar();
@@ -1852,8 +1896,7 @@ async function saveSettingsForDate() {
 async function deleteSettingsForDate() {
   if (!confirm('この日の設定を削除しますか？')) return;
   try {
-    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'deleteSettings', date: selectedDate });
-    await fetch(GAS_URL + '?' + params);
+    await adminPost({ action: 'deleteSettings', date: selectedDate });
     delete settings[selectedDate];
     closeSettingsModal();
     renderCalendar();
@@ -1865,11 +1908,7 @@ async function saveDefaultLimit() {
   const val = parseInt(document.getElementById('settingsDefaultLimit').value);
   if (isNaN(val) || val < 0) { alert('正しい値を入力してください'); return; }
   try {
-    const params = new URLSearchParams({
-      key: ACCESS_KEY, action: 'saveSettings',
-      date: 'DEFAULT', limit: val, closed: 'false', note: 'デフォルト上限'
-    });
-    await fetch(GAS_URL + '?' + params);
+    await adminPost({ action: 'saveSettings', date: 'DEFAULT', limit: val, closed: false, note: 'デフォルト上限' });
     settings['DEFAULT'] = { limit: val, closed: false, note: 'デフォルト上限' };
     defaultLimit = val;
     document.getElementById('settingsDefaultShow').textContent = val;
@@ -2554,8 +2593,8 @@ let allRequests     = [];
 async function loadRequests() {
   if (!GAS_URL || GAS_URL === 'YOUR_GAS_DEPLOY_URL_HERE') return;
   try {
-    const res = await fetch(GAS_URL + '?' + new URLSearchParams({ key: ACCESS_KEY, action: 'getRequests', status: 'all' }));
-    const data = JSON.parse(await res.text());
+    const data = await adminPost({ action: 'getRequests', status: 'all' });
+    if (data.error === 'Unauthorized') { handleUnauthorized(); return; }
     if (data.success) {
       allRequests     = data.requests || [];
       pendingRequests = allRequests.filter(r => r.status === 'pending');
@@ -2672,9 +2711,8 @@ async function rejectRequest(requestId) {
 
 async function doProcessRequest(requestId, decision, adminNote) {
   try {
-    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'processRequest', requestId, decision, adminNote });
-    const res  = await fetch(GAS_URL + '?' + params);
-    const data = JSON.parse(await res.text());
+    const data = await adminPost({ action: 'processRequest', requestId, decision, adminNote });
+    if (data.error === 'Unauthorized') { handleUnauthorized(); return; }
     if (data.success) {
       // Update local arrays
       const req = allRequests.find(r => r.requestId === requestId);
@@ -2697,8 +2735,11 @@ async function doProcessRequest(requestId, decision, adminNote) {
 loadBookings();
 renderCalendar();
 renderSidePanel();
-refreshBookings();
-startAutoRefresh();
+// GASへのアクセスは認証済みの場合のみ実行
+if (sessionStorage.getItem('adminToken')) {
+  refreshBookings();
+  startAutoRefresh();
+}
 </script>
 </body>
 </html>

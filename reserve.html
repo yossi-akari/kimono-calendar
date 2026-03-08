@@ -1153,8 +1153,11 @@ async function submitForm() {
   btn.disabled = true;
   btn.textContent = t.submitting;
   try {
-    const params = new URLSearchParams({ key: ACCESS_KEY, action: 'save', booking: JSON.stringify(booking) });
-    const res = await fetch(GAS_URL + '?' + params.toString());
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: ACCESS_KEY, action: 'save', booking })
+    });
     const json = await res.json().catch(() => null);
     if (!json || json.success === false) {
       if (json && json.error === 'SLOT_FULL') {

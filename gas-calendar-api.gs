@@ -4,9 +4,27 @@
 // =============================================================
 
 // =============================================================
-// ── アクセスキー（HTMLと同じ値に設定してください） ────────────
+// ── 認証設定（Script Properties で管理）────────────────────
+// GASエディタ → プロジェクトの設定 → スクリプトプロパティ に設定:
+//   ACCESS_KEY : 公開APIキー（reserve.html の公開リクエスト用）
+//   ADMIN_PIN  : 管理画面PINコード（kimono-calendar.html 用）
 // =============================================================
-const ACCESS_KEY = 'AkariKimono2026_mK9x';
+function getAccessKey() {
+  return PropertiesService.getScriptProperties().getProperty('ACCESS_KEY') || '';
+}
+function getAdminPin() {
+  return PropertiesService.getScriptProperties().getProperty('ADMIN_PIN') || '';
+}
+// 管理者セッショントークン（8時間有効）
+function generateAdminToken() {
+  const token = Utilities.getUuid();
+  CacheService.getScriptCache().put('session_' + token, 'admin', 28800);
+  return token;
+}
+function isValidAdminToken(token) {
+  if (!token) return false;
+  return CacheService.getScriptCache().get('session_' + token) === 'admin';
+}
 
 // =============================================================
 // ── 定員設定 ─────────────────────────────────────────────────
@@ -28,77 +46,15 @@ function doGet(e) {
   const output = ContentService.createTextOutput();
   output.setMimeType(ContentService.MimeType.JSON);
 
-  // キー認証
-  if (!e || e.parameter.key !== ACCESS_KEY) {
+  // キー認証（公開エンドポイントのみ）
+  if (!e || e.parameter.key !== getAccessKey()) {
     output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
     return output;
   }
 
-  // 手動予約の保存・削除・各種アクション
   const action = e.parameter.action;
-  if (action === 'save') {
-    try {
-      const booking = JSON.parse(e.parameter.booking);
-      // WEB予約のみ定員チェック（管理者手動入力はスキップ）
-      if (booking.source === 'WEB') {
-        const peopleCount = parsePeopleCount(booking.people);
-        const slots = getSlotAvailability(booking.date);
-        const slot = slots[booking.time];
-        if (slot && slot.remaining < peopleCount) {
-          output.setContent(JSON.stringify({ success: false, error: 'SLOT_FULL', remaining: slot.remaining }));
-          return output;
-        }
-      }
-      saveManualToSheet(booking);
-      if (booking.source === 'WEB') {
-        sendConfirmationEmail(booking);
-        sendAdminNotification(booking);
-      }
-      output.setContent(JSON.stringify({ success: true }));
-    } catch(err) {
-      output.setContent(JSON.stringify({ success: false, error: err.message }));
-    }
-    return output;
-  }
-  if (action === 'delete') {
-    try {
-      deleteManualFromSheet(e.parameter.id);
-      output.setContent(JSON.stringify({ success: true }));
-    } catch(err) {
-      output.setContent(JSON.stringify({ success: false, error: err.message }));
-    }
-    return output;
-  }
-  if (action === 'getSettings') {
-    try {
-      output.setContent(JSON.stringify({ success: true, settings: getAllSettings() }));
-    } catch(err) {
-      output.setContent(JSON.stringify({ success: false, error: err.message }));
-    }
-    return output;
-  }
-  if (action === 'saveSettings') {
-    try {
-      const date  = e.parameter.date;
-      const limit = (e.parameter.limit !== '' && e.parameter.limit !== undefined) ? parseInt(e.parameter.limit) : null;
-      const closed = e.parameter.closed === 'true';
-      const note  = e.parameter.note || '';
-      saveSettingsToSheet(date, limit, closed, note);
-      output.setContent(JSON.stringify({ success: true }));
-    } catch(err) {
-      output.setContent(JSON.stringify({ success: false, error: err.message }));
-    }
-    return output;
-  }
-  if (action === 'deleteSettings') {
-    try {
-      deleteSettingsFromSheet(e.parameter.date);
-      output.setContent(JSON.stringify({ success: true }));
-    } catch(err) {
-      output.setContent(JSON.stringify({ success: false, error: err.message }));
-    }
-    return output;
-  }
+
+  // ── 公開エンドポイント（顧客向け・ACCESS_KEY のみ） ──────────
   if (action === 'getAvailability') {
     try {
       const date = e.parameter.date;
@@ -117,19 +73,18 @@ function doGet(e) {
       if (!year || !month) throw new Error('year and month required');
       const daysInMonth  = new Date(year, month, 0).getDate();
       const allSettings  = getAllSettings();
-      const totalSlots   = ALL_TIMES.length; // 1日のタイムスロット総数（例:11）
+      const totalSlots   = ALL_TIMES.length;
       const _cachedM = getCachedBookings();
       let gasBookings = (_cachedM && _cachedM.length > 0) ? _cachedM : getRawBookings();
       const cancelled = getCancelledIds();
       const manualBookings = getManualSheetBookings();
-      const allBlocked = getAllBlockedSlotsMap(); // { date: Set<time> } ブロック済み一括取得
+      const allBlocked = getAllBlockedSlotsMap();
       const result = {};
       for (let d = 1; d <= daysInMonth; d++) {
         const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
         const ds = allSettings[dateStr] || {};
         const closed = ds.closed === true;
         const limit = ds.limit != null ? ds.limit : totalSlots;
-        // 予約済み時間帯 + ブロック済み時間帯 の合計占有スロット数
         const bookedForDate = [
           ...gasBookings.filter(b => b.date === dateStr && !cancelled.has(b.reservationId)),
           ...manualBookings.filter(b => b.date === dateStr)
@@ -139,8 +94,7 @@ function doGet(e) {
           ...bookedForDate.map(b => b.time),
           ...blockedForDate
         ]);
-        const occupiedSlots = occupiedSet.size;
-        result[dateStr] = { closed, limit, available: Math.max(0, limit - occupiedSlots) };
+        result[dateStr] = { closed, limit, available: Math.max(0, limit - occupiedSet.size) };
       }
       output.setContent(JSON.stringify({ success: true, availability: result }));
     } catch(err) {
@@ -148,30 +102,6 @@ function doGet(e) {
     }
     return output;
   }
-  // 管理者: キャッシュを強制クリア（予約が反映されない場合の緊急リセット用）
-  if (action === 'clearCache') {
-    try {
-      clearCache();
-      const fresh = getRawBookings();
-      setCachedBookings(fresh);
-      output.setContent(JSON.stringify({ success: true, refreshed: fresh.length }));
-    } catch(err) {
-      output.setContent(JSON.stringify({ success: false, error: err.message }));
-    }
-    return output;
-  }
-  // ブロック済みスロット一覧取得（管理者サイドパネル用）
-  if (action === 'getBlockedSlots') {
-    try {
-      const date = e.parameter.date;
-      if (!date) throw new Error('date required');
-      output.setContent(JSON.stringify({ success: true, blocked: getBlockedSlotsList(date) }));
-    } catch(err) {
-      output.setContent(JSON.stringify({ success: false, error: err.message }));
-    }
-    return output;
-  }
-  // 時間帯の空き状況を返す（reserve.html での事前チェック用）
   if (action === 'checkSlot') {
     try {
       const date = e.parameter.date;
@@ -182,7 +112,6 @@ function doGet(e) {
     }
     return output;
   }
-  // 顧客による予約照会（予約番号 + メールアドレスで認証）
   if (action === 'getBookingForCustomer') {
     try {
       const id    = e.parameter.id;
@@ -198,12 +127,11 @@ function doGet(e) {
     }
     return output;
   }
-  // 変更・キャンセル申請の送信
   if (action === 'submitRequest') {
     try {
       const id      = e.parameter.id;
       const email   = (e.parameter.email || '').toLowerCase().trim();
-      const type    = e.parameter.type; // 'change' | 'cancel'
+      const type    = e.parameter.type;
       const newDate = e.parameter.newDate || '';
       const newTime = e.parameter.newTime || '';
       const message = e.parameter.message || '';
@@ -220,58 +148,9 @@ function doGet(e) {
     }
     return output;
   }
-  // 管理者用：申請一覧取得
-  if (action === 'getRequests') {
-    try {
-      const statusFilter = e.parameter.status || 'pending';
-      output.setContent(JSON.stringify({ success: true, requests: getRequestsList(statusFilter) }));
-    } catch(err) {
-      output.setContent(JSON.stringify({ success: false, error: err.message }));
-    }
-    return output;
-  }
-  // 管理者用：申請を承認・却下
-  if (action === 'processRequest') {
-    try {
-      const requestId = e.parameter.requestId;
-      const decision  = e.parameter.decision; // 'approve' | 'reject'
-      const adminNote = e.parameter.adminNote || '';
-      if (!requestId || !decision) throw new Error('パラメータが不足しています');
-      processRequestById(requestId, decision, adminNote);
-      output.setContent(JSON.stringify({ success: true }));
-    } catch(err) {
-      output.setContent(JSON.stringify({ success: false, error: err.message }));
-    }
-    return output;
-  }
 
-  try {
-    // 確定予約はキャッシュ利用（重い処理）
-    // !bookings だけでは [] が truthy なので length も確認する
-    let bookings = getCachedBookings();
-    if (!bookings || bookings.length === 0) {
-      bookings = getRawBookings();
-      Logger.log('キャッシュミス → Gmail再取得: ' + bookings.length + '件');
-      setCachedBookings(bookings);
-    } else {
-      Logger.log('キャッシュヒット: ' + bookings.length + '件');
-    }
-    // キャンセルは毎回リアルタイムで取得・除外（キャッシュなし）
-    const cancelledIds = getCancelledIds();
-    const filtered = bookings.filter(b => !cancelledIds.has(b.reservationId));
-    // 手動予約をスプレッドシートから取得（毎回リアルタイム）
-    const manualBookings = getManualSheetBookings();
-    const allBookings = [...filtered, ...manualBookings].sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
-      return a.time.localeCompare(b.time);
-    });
-    output.setContent(JSON.stringify({
-      success: true, bookings: allBookings, count: allBookings.length,
-      lastUpdated: new Date().toISOString()
-    }));
-  } catch (err) {
-    output.setContent(JSON.stringify({ success: false, error: err.message }));
-  }
+  // 管理者アクションは doPost() + トークン認証に移行済み
+  output.setContent(JSON.stringify({ success: false, error: 'Use POST for admin actions' }));
   return output;
 }
 
@@ -976,27 +855,147 @@ function doPost(e) {
   output.setMimeType(ContentService.MimeType.JSON);
   try {
     const data = JSON.parse(e.postData.contents);
-    if (data.key !== ACCESS_KEY) {
+
+    // ── auth: PINを検証してセッショントークンを発行 ──────────────
+    // キー不要（PINが秘密）
+    if (data.action === 'auth') {
+      const pin = data.pin || '';
+      if (!pin || pin !== getAdminPin()) {
+        output.setContent(JSON.stringify({ success: false, error: 'PINが違います' }));
+        return output;
+      }
+      output.setContent(JSON.stringify({ success: true, token: generateAdminToken() }));
+      return output;
+    }
+
+    // ── WEB予約の保存（公開フォームから、ACCESS_KEY で認証）──────
+    if (data.action === 'save' && data.key) {
+      if (data.key !== getAccessKey()) {
+        output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
+        return output;
+      }
+      const booking = data.booking;
+      if (booking.source === 'WEB') {
+        const peopleCount = parsePeopleCount(booking.people);
+        const slots = getSlotAvailability(booking.date);
+        const slot = slots[booking.time];
+        if (slot && slot.remaining < peopleCount) {
+          output.setContent(JSON.stringify({ success: false, error: 'SLOT_FULL', remaining: slot.remaining }));
+          return output;
+        }
+        saveManualToSheet(booking);
+        sendConfirmationEmail(booking);
+        sendAdminNotification(booking);
+      } else {
+        saveManualToSheet(booking);
+      }
+      output.setContent(JSON.stringify({ success: true }));
+      return output;
+    }
+
+    // ── 以下はすべて管理者トークン認証が必要 ─────────────────────
+    if (!isValidAdminToken(data.token)) {
       output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
       return output;
     }
-    if (data.action === 'save') {
+
+    // 全予約一覧取得
+    if (data.action === 'getBookings') {
+      let bookings = getCachedBookings();
+      if (!bookings || bookings.length === 0) {
+        bookings = getRawBookings();
+        Logger.log('キャッシュミス → Gmail再取得: ' + bookings.length + '件');
+        setCachedBookings(bookings);
+      } else {
+        Logger.log('キャッシュヒット: ' + bookings.length + '件');
+      }
+      const cancelledIds = getCancelledIds();
+      const filtered = bookings.filter(b => !cancelledIds.has(b.reservationId));
+      const manualBookings = getManualSheetBookings();
+      const allBookings = [...filtered, ...manualBookings].sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return a.time.localeCompare(b.time);
+      });
+      output.setContent(JSON.stringify({
+        success: true, bookings: allBookings, count: allBookings.length,
+        settings: getAllSettings(),
+        lastUpdated: new Date().toISOString()
+      }));
+      return output;
+    }
+    // 手動予約の保存（管理者）
+    if (data.action === 'saveManual') {
       saveManualToSheet(data.booking);
       output.setContent(JSON.stringify({ success: true }));
-    } else if (data.action === 'delete') {
+      return output;
+    }
+    // 予約の非表示（削除）
+    if (data.action === 'delete') {
       deleteManualFromSheet(data.id);
       output.setContent(JSON.stringify({ success: true }));
-    } else if (data.action === 'blockSlot') {
+      return output;
+    }
+    // 日付設定の取得
+    if (data.action === 'getSettings') {
+      output.setContent(JSON.stringify({ success: true, settings: getAllSettings() }));
+      return output;
+    }
+    // 日付設定の保存
+    if (data.action === 'saveSettings') {
+      const limit = (data.limit !== '' && data.limit !== undefined && data.limit !== null) ? parseInt(data.limit) : null;
+      saveSettingsToSheet(data.date, limit, data.closed === true || data.closed === 'true', data.note || '');
+      output.setContent(JSON.stringify({ success: true }));
+      return output;
+    }
+    // 日付設定の削除
+    if (data.action === 'deleteSettings') {
+      deleteSettingsFromSheet(data.date);
+      output.setContent(JSON.stringify({ success: true }));
+      return output;
+    }
+    // キャッシュ強制クリア
+    if (data.action === 'clearCache') {
+      clearCache();
+      const fresh = getRawBookings();
+      setCachedBookings(fresh);
+      output.setContent(JSON.stringify({ success: true, refreshed: fresh.length }));
+      return output;
+    }
+    // ブロック済みスロット一覧取得
+    if (data.action === 'getBlockedSlots') {
+      if (!data.date) throw new Error('date が必要です');
+      output.setContent(JSON.stringify({ success: true, blocked: getBlockedSlotsList(data.date) }));
+      return output;
+    }
+    // スロットブロック
+    if (data.action === 'blockSlot') {
       if (!data.date || !data.time) throw new Error('date と time が必要です');
       blockSlotInSheet(data.date, data.time, data.reason || '管理者ブロック');
       output.setContent(JSON.stringify({ success: true }));
-    } else if (data.action === 'unblockSlot') {
+      return output;
+    }
+    // スロットブロック解除
+    if (data.action === 'unblockSlot') {
       if (!data.date || !data.time) throw new Error('date と time が必要です');
       unblockSlotInSheet(data.date, data.time);
       output.setContent(JSON.stringify({ success: true }));
-    } else {
-      output.setContent(JSON.stringify({ success: false, error: 'Unknown action' }));
+      return output;
     }
+    // 申請一覧取得
+    if (data.action === 'getRequests') {
+      const statusFilter = data.status || 'pending';
+      output.setContent(JSON.stringify({ success: true, requests: getRequestsList(statusFilter) }));
+      return output;
+    }
+    // 申請を承認・却下
+    if (data.action === 'processRequest') {
+      if (!data.requestId || !data.decision) throw new Error('パラメータが不足しています');
+      processRequestById(data.requestId, data.decision, data.adminNote || '');
+      output.setContent(JSON.stringify({ success: true }));
+      return output;
+    }
+
+    output.setContent(JSON.stringify({ success: false, error: 'Unknown action' }));
   } catch(err) {
     output.setContent(JSON.stringify({ success: false, error: err.message }));
   }
