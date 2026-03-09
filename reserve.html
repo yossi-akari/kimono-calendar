@@ -288,6 +288,11 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       <button class="submit-btn btn-ghost" id="step4BackBtn" onclick="goStep(3)" style="flex:1;">← 戻る</button>
       <button class="submit-btn" id="submitBtn" onclick="submitForm()" style="flex:2;">予約を確定する</button>
     </div>
+    <div class="legal-links" style="text-align:center;margin-top:20px;font-size:0.72rem;">
+      <a href="privacy.html" id="privacyLink" target="_blank" style="color:var(--muted);text-decoration:none;margin:0 8px;">プライバシーポリシー</a>
+      <span style="color:var(--line);">|</span>
+      <a href="tokushoho.html" id="tokushohoLink" target="_blank" style="color:var(--muted);text-decoration:none;margin:0 8px;">特定商取引法に基づく表記</a>
+    </div>
   </div>
 
 </div>
@@ -443,6 +448,8 @@ const I18N = {
     alertRetry: 'The system is temporarily busy. Please try again.',
     alertRateLimit: 'Submission limit reached. Please wait a few minutes.',
     alertEmailFail: 'Your booking is confirmed, but the confirmation email failed to send.\nPlease save your reservation number.\nContact: 076-201-8119',
+    privacyLink: 'Privacy Policy',
+    tokushohoLink: 'Legal Notice',
     estimate: 'Estimate on visit',
     formatDate: (y, m, d, dow) => {
       const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -511,6 +518,8 @@ const I18N = {
     alertRetry: '系統暫時繁忙，請稍後再試。',
     alertRateLimit: '已達傳送上限，請稍候幾分鐘後再試。',
     alertEmailFail: '預約已完成，但確認郵件傳送失敗。\n請記下您的預約編號。\n聯絡電話：076-201-8119',
+    privacyLink: '隱私權政策',
+    tokushohoLink: '商業交易法表示',
     estimate: '來店時報價',
     formatDate: (y, m, d, dow) => {
       const days = ['日','一','二','三','四','五','六'];
@@ -724,6 +733,8 @@ function applyLang() {
   document.getElementById('step4BackBtn').textContent = t.step4Back;
   document.getElementById('submitBtn').textContent    = t.submitBtn;
   document.getElementById('estimateNotice').textContent = t.estimateNotice;
+  document.getElementById('privacyLink').textContent = t.privacyLink || 'プライバシーポリシー';
+  document.getElementById('tokushohoLink').textContent = t.tokushohoLink || '特定商取引法に基づく表記';
   const pn = document.getElementById('paymentNotice');
   pn.textContent = t.paymentNotice || '';
   pn.style.display = t.paymentNotice ? '' : 'none';
