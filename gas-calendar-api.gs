@@ -865,7 +865,13 @@ function doPost(e) {
   const output = ContentService.createTextOutput();
   output.setMimeType(ContentService.MimeType.JSON);
   try {
-    const data = JSON.parse(e.postData.contents);
+    let data;
+    try {
+      data = JSON.parse(e.postData.contents);
+    } catch(parseErr) {
+      output.setContent(JSON.stringify({ success: false, error: 'Invalid request' }));
+      return output;
+    }
 
     // ── auth: PINを検証してセッショントークンを発行 ──────────────
     // キー不要（PINが秘密）
@@ -939,16 +945,62 @@ function doPost(e) {
         return output;
       }
       const booking = data.booking;
+
+      // ── サーバー側入力バリデーション ─────────────────────
+      if (!booking || !booking.date || !booking.time || !booking.name || !booking.email) {
+        output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: '必須項目が不足しています' }));
+        return output;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(booking.date)) {
+        output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: '日付形式が不正です' }));
+        return output;
+      }
+      if (ALL_TIMES.indexOf(booking.time) === -1) {
+        output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: '時間が不正です' }));
+        return output;
+      }
+      const bookingDate = new Date(booking.date + 'T00:00:00+09:00');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (bookingDate < today) {
+        output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: '過去の日付は指定できません' }));
+        return output;
+      }
+      if (booking.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(booking.email)) {
+        output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: 'メールアドレスが不正です' }));
+        return output;
+      }
+
       if (booking.source === 'WEB') {
-        // 同時リクエストによる二重予約を防ぐためロックを取得
+        // ── レート制限（同一メール: 5分間に3件まで）──────────
+        const rlKey = 'rl_' + (booking.email || '').replace(/\W/g, '_');
+        const rlCache = CacheService.getScriptCache();
+        const rlCount = parseInt(rlCache.get(rlKey) || '0');
+        if (rlCount >= 3) {
+          output.setContent(JSON.stringify({ success: false, error: 'RATE_LIMIT', message: '送信回数の上限に達しました。5分後にお試しください。' }));
+          return output;
+        }
+        rlCache.put(rlKey, String(rlCount + 1), 300); // 5分間
+
+        // ── ロック取得（同時予約を防止）──────────────────────
         const lock = LockService.getScriptLock();
         try {
-          lock.waitLock(10000);
+          lock.waitLock(15000);
         } catch(e) {
           output.setContent(JSON.stringify({ success: false, error: 'RETRY', message: '一時的に混雑しています。もう一度お試しください。' }));
           return output;
         }
         try {
+          // ── 冪等性チェック（同一IDの二重保存を防止）─────────
+          if (booking.reservationId) {
+            const existing = findBookingByIdFromSheet(booking.reservationId);
+            if (existing) {
+              output.setContent(JSON.stringify({ success: true, duplicate: true }));
+              return output;
+            }
+          }
+
+          // ── 空き確認（ロック内で実行 → 競合防止）───────────
           const peopleCount = parsePeopleCount(booking.people);
           const slots = getSlotAvailability(booking.date);
           const slot = slots[booking.time];
@@ -956,16 +1008,38 @@ function doPost(e) {
             output.setContent(JSON.stringify({ success: false, error: 'SLOT_FULL', remaining: slot.remaining }));
             return output;
           }
+
+          // ── 保存 ────────────────────────────────────────────
           saveManualToSheet(booking);
-          sendConfirmationEmail(booking);
-          sendAdminNotification(booking);
+
+          // ── メール送信（失敗しても予約は有効）───────────────
+          let emailOk = true;
+          try {
+            sendConfirmationEmail(booking);
+          } catch(mailErr) {
+            emailOk = false;
+            Logger.log('確認メール送信失敗: ' + mailErr.message);
+            notifyAdminError('sendConfirmationEmail', mailErr.message,
+              booking.reservationId + ' / ' + booking.email);
+          }
+          try {
+            sendAdminNotification(booking);
+          } catch(adminMailErr) {
+            Logger.log('管理者通知送信失敗: ' + adminMailErr.message);
+          }
+
+          output.setContent(JSON.stringify({
+            success: true,
+            reservationId: booking.reservationId,
+            emailSent: emailOk
+          }));
         } finally {
           lock.releaseLock();
         }
       } else {
         saveManualToSheet(booking);
+        output.setContent(JSON.stringify({ success: true }));
       }
-      output.setContent(JSON.stringify({ success: true }));
       return output;
     }
 

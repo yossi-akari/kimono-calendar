@@ -373,6 +373,9 @@ const I18N = {
     alertSlotFull: (time) => `選択された時間帯（${time}）は満員です。\n別の時間帯をお選びください。`,
     alertSlotInsuf: (time, rem) => `選択された時間帯（${time}）の空きが不足しています（残り${rem}名）。\n人数を減らすか、別の時間帯をお選びください。`,
     alertNetErr: '予約の送信に失敗しました。\nお手数ですが、お電話（076-201-8119）にてご連絡ください。',
+    alertRetry: '一時的に混雑しています。もう一度送信してください。',
+    alertRateLimit: '送信回数の上限に達しました。少し時間をおいてお試しください。',
+    alertEmailFail: '予約は完了しましたが、確認メールの送信に失敗しました。\n予約番号を控えておいてください。\n問い合わせ: 076-201-8119',
     estimate: '来店時お見積もり',
     formatDate: (y, m, d, dow) => {
       const days = ['日','月','火','水','木','金','土'];
@@ -437,6 +440,9 @@ const I18N = {
     alertSlotFull: (time) => `The ${time} slot is fully booked.\nPlease choose another time.`,
     alertSlotInsuf: (time, rem) => `Not enough availability at ${time} (${rem} remaining).\nPlease reduce guests or choose another time.`,
     alertNetErr: 'Failed to submit your reservation.\nPlease contact us by phone: 076-201-8119.',
+    alertRetry: 'The system is temporarily busy. Please try again.',
+    alertRateLimit: 'Submission limit reached. Please wait a few minutes.',
+    alertEmailFail: 'Your booking is confirmed, but the confirmation email failed to send.\nPlease save your reservation number.\nContact: 076-201-8119',
     estimate: 'Estimate on visit',
     formatDate: (y, m, d, dow) => {
       const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -502,6 +508,9 @@ const I18N = {
     alertSlotFull: (time) => `${time} 時段已額滿。\n請選擇其他時段。`,
     alertSlotInsuf: (time, rem) => `${time} 時段空位不足（剩餘 ${rem} 名）。\n請減少人數或選擇其他時段。`,
     alertNetErr: '預約傳送失敗。\n請撥打電話聯絡我們：076-201-8119。',
+    alertRetry: '系統暫時繁忙，請稍後再試。',
+    alertRateLimit: '已達傳送上限，請稍候幾分鐘後再試。',
+    alertEmailFail: '預約已完成，但確認郵件傳送失敗。\n請記下您的預約編號。\n聯絡電話：076-201-8119',
     estimate: '來店時報價',
     formatDate: (y, m, d, dow) => {
       const days = ['日','一','二','三','四','五','六'];
@@ -1146,9 +1155,10 @@ async function submitForm() {
     .map(([k, v]) => ({ name: v > 1 ? `${k}×${v}` : k, price: options[k] }));
 
   const now = new Date();
+  const uid = 'HP-' + now.getTime() + '-' + Math.random().toString(36).substring(2, 8);
   const booking = {
-    id:            'HP-' + now.getTime(),
-    reservationId: 'HP-' + now.getTime(),
+    id:            uid,
+    reservationId: uid,
     source:        'WEB',
     channel:       currentLang === 'en' ? 'ウェブサイト(EN)' : currentLang === 'zh' ? 'ウェブサイト(繁中)' : 'ウェブサイト',
     date,
@@ -1183,13 +1193,21 @@ async function submitForm() {
         await fetchSlotAvailability(date);
         goStep(2);
       } else if (json && json.error === 'RETRY') {
-        alert('一時的に混雑しています。もう一度送信してください。');
+        alert(t.alertRetry);
+      } else if (json && json.error === 'RATE_LIMIT') {
+        alert(t.alertRateLimit);
+      } else if (json && json.error === 'VALIDATION') {
+        alert(json.message || t.alertNetErr);
       } else {
         alert(t.alertNetErr);
       }
       btn.disabled = false;
       btn.textContent = t.submitBtn;
       return;
+    }
+    // メール送信失敗の警告（予約自体は成功）
+    if (json.emailSent === false) {
+      alert(t.alertEmailFail);
     }
   } catch(err) {
     alert(t.alertNetErr);
