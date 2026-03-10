@@ -1507,7 +1507,7 @@ async function confirmWithOtp() {
       } else if (json && json.error === 'CHARGE_FAILED') {
         document.getElementById('otpConfirmModal').style.display = 'none';
         pendingBooking = null;
-        alert(t.alertChargeFail);
+        alert(t.alertChargeFail + (json.message ? '\n\n(' + json.message + ')' : ''));
       } else {
         err.textContent = json?.message || t.alertNetErr;
         inp.disabled = false; btn.disabled = false;
