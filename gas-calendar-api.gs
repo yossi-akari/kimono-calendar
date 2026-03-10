@@ -19,12 +19,20 @@ function getAdminPin() {
 // 管理者セッショントークン（8時間有効）
 function generateAdminToken() {
   const token = Utilities.getUuid();
-  CacheService.getScriptCache().put('session_' + token, 'admin', 28800);
+  const expires = new Date().getTime() + 8 * 60 * 60 * 1000; // 8時間
+  PropertiesService.getScriptProperties().setProperty(
+    'admin_session', JSON.stringify({ token, expires })
+  );
   return token;
 }
 function isValidAdminToken(token) {
   if (!token) return false;
-  return CacheService.getScriptCache().get('session_' + token) === 'admin';
+  try {
+    const session = JSON.parse(
+      PropertiesService.getScriptProperties().getProperty('admin_session') || '{}'
+    );
+    return session.token === token && new Date().getTime() < session.expires;
+  } catch(e) { return false; }
 }
 
 // =============================================================
