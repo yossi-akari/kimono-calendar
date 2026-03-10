@@ -4,7 +4,6 @@
 // =============================================================
 
 
-
 // =============================================================
 // ── 認証設定（Script Properties で管理）────────────────────
 // GASエディタ → プロジェクトの設定 → スクリプトプロパティ に設定:
@@ -1261,8 +1260,14 @@ function doPost(e) {
             }
           }
 
-          // ── 保存 ────────────────────────────────────────────
+          // ── 保存（flush + 検証付き）────────────────────────
           saveManualToSheet(booking);
+          SpreadsheetApp.flush();
+          const savedCheck = findBookingByIdFromSheet(booking.reservationId || booking.id);
+          if (!savedCheck) {
+            Logger.log('CRITICAL: 保存失敗 - flush後にデータが見つからない id=' + booking.id);
+            throw new Error('SAVE_FAILED');
+          }
 
           // ── メール送信（失敗しても予約は有効）───────────────
           let emailOk = true;
