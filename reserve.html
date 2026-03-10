@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>着物レンタル ご予約</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200;300;400&family=Noto+Sans+JP:wght@300;400&family=DM+Mono:wght@300&display=swap" rel="stylesheet">
+<script src="https://js.pay.jp/v2/pay.js"></script>
 <style>
 :root {
   --ink:    #1c1a18;
@@ -120,6 +121,31 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 .modal-detail span { color: var(--muted); margin-right: 8px; }
 .modal-close { background: var(--ink); color: white; border: none; padding: 14px 32px; font-family: 'Noto Sans JP', sans-serif; font-size: 0.85rem; letter-spacing: 0.1em; cursor: pointer; border-radius: 1px; }
 .modal-close:hover { opacity: 0.8; }
+
+/* ── 支払い方法選択 ─────────────────────────────────── */
+.payment-options { display: flex; flex-direction: column; gap: 8px; }
+.payment-option {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 16px; border: 1px solid var(--line); border-radius: 2px;
+  cursor: pointer; font-size: 0.88rem; transition: border-color 0.2s, background 0.2s;
+}
+.payment-option:hover { border-color: var(--muted); }
+.payment-option.pm-selected { border-color: var(--accent); background: rgba(200,53,53,0.03); }
+.payment-option input[type="radio"] { accent-color: var(--accent); width: 15px; height: 15px; flex-shrink: 0; cursor: pointer; }
+.pm-icon { font-size: 1rem; flex-shrink: 0; }
+.pm-text { display: flex; flex-direction: column; gap: 2px; }
+.pm-label { font-weight: 400; }
+.pm-sub { font-size: 0.72rem; color: var(--muted); }
+/* ── payjp.js カード入力 ─────────────────────────────── */
+.payjp-element {
+  background: var(--white); border: 1px solid var(--line); border-radius: 2px;
+  padding: 12px 14px; transition: border-color 0.2s; min-height: 44px;
+}
+.payjp-element.is-focused { border-color: var(--accent); }
+.payjp-element.is-invalid  { border-color: var(--accent); }
+#card-errors { color: var(--accent); font-size: 0.8rem; min-height: 1.2em; margin-top: 6px; }
+.card-badge { display: flex; gap: 6px; margin-top: 10px; opacity: 0.5; }
+.card-badge span { font-size: 0.7rem; background: var(--cream); padding: 2px 8px; border-radius: 2px; }
 
 /* 言語切替ボタン */
 .lang-switcher { position: fixed; top: 12px; right: 16px; z-index: 300; display: flex; gap: 4px; }
@@ -272,6 +298,56 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       <div class="section-label" id="remarksSectionLabel">ご要望・備考</div>
       <textarea id="remarks" placeholder="ご質問・ご要望などがあればご記入ください"></textarea>
     </div>
+    <!-- 支払い方法 -->
+    <div class="form-block" id="paymentBlock">
+      <div class="section-label" id="paymentSectionLabel">お支払い方法</div>
+      <div class="payment-options" id="paymentOptions">
+        <label class="payment-option pm-selected" id="pm-card" onclick="onPaymentMethodChange('card')">
+          <input type="radio" name="paymentMethod" value="card" checked>
+          <span class="pm-icon">💳</span>
+          <span class="pm-text">
+            <span class="pm-label" id="pmCardLabel">クレジットカード</span>
+            <span class="pm-sub" id="pmCardSub">Visa / Mastercard / JCB / Amex</span>
+          </span>
+        </label>
+        <label class="payment-option" id="pm-paypay" onclick="onPaymentMethodChange('paypay')">
+          <input type="radio" name="paymentMethod" value="paypay">
+          <span class="pm-icon">📱</span>
+          <span class="pm-text">
+            <span class="pm-label" id="pmPaypayLabel">PayPay決済</span>
+            <span class="pm-sub" id="pmPaypaySub">来店時にPayPayでお支払い</span>
+          </span>
+        </label>
+        <label class="payment-option" id="pm-onsite" onclick="onPaymentMethodChange('onsite')">
+          <input type="radio" name="paymentMethod" value="onsite">
+          <span class="pm-icon">🏪</span>
+          <span class="pm-text">
+            <span class="pm-label" id="pmOnsiteLabel">現地決済</span>
+            <span class="pm-sub" id="pmOnsiteSub">来店時に現金でお支払い</span>
+          </span>
+        </label>
+      </div>
+      <div id="cardSection" style="margin-top:16px;">
+        <div class="field">
+          <label id="cardNumberLabel">カード番号</label>
+          <div id="card-number" class="payjp-element"></div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label id="cardExpiryLabel">有効期限</label>
+            <div id="card-expiry" class="payjp-element"></div>
+          </div>
+          <div class="field">
+            <label id="cardCvcLabel">セキュリティコード</label>
+            <div id="card-cvc" class="payjp-element"></div>
+          </div>
+        </div>
+        <div id="card-errors"></div>
+        <div class="card-badge">
+          <span>Visa</span><span>Mastercard</span><span>JCB</span><span>Amex</span>
+        </div>
+      </div>
+    </div>
     <div class="summary-box">
       <div class="summary-row"><span class="summary-label" id="s4PlanLbl">プラン</span><span id="s4Plan">—</span></div>
       <div class="summary-row"><span class="summary-label" id="s4DateLbl">来店日時</span><span id="s4Date">—</span></div>
@@ -295,6 +371,26 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
     </div>
   </div>
 
+</div>
+
+<!-- OTP確認モーダル（予約メール認証）-->
+<div id="otpConfirmModal" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(28,26,24,0.82); align-items:center; justify-content:center;">
+  <div style="background:var(--white); border-radius:4px; padding:40px 28px; max-width:380px; width:92%; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.3);">
+    <div id="otpModalTitle" style="font-family:'Noto Serif JP',serif; font-weight:300; font-size:1.15rem; letter-spacing:0.1em; margin-bottom:10px;"></div>
+    <div id="otpModalDesc" style="font-size:0.82rem; color:var(--muted); margin-bottom:24px; line-height:1.7; word-break:break-all;"></div>
+    <input type="text" id="otpModalInput" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"
+      style="width:190px; text-align:center; font-size:1.8rem; letter-spacing:0.35em; font-family:'DM Mono',monospace;
+             border:1px solid var(--line); border-radius:2px; padding:12px 16px; outline:none; background:#faf8f4; transition:border-color 0.2s;">
+    <div id="otpModalError" style="color:var(--accent); font-size:0.8rem; min-height:1.4em; margin:10px 0;"></div>
+    <button id="otpModalBtn" onclick="confirmWithOtp()"
+      style="width:100%; padding:14px; background:var(--accent); color:white; border:none; border-radius:2px; font-size:0.88rem; cursor:pointer; letter-spacing:0.05em; margin-bottom:14px;">
+      <span id="otpModalBtnText"></span>
+    </button>
+    <button id="otpResendBtn" onclick="resendOtp()"
+      style="background:none; border:none; font-size:0.78rem; color:var(--muted); cursor:pointer; text-decoration:underline; display:block; margin:0 auto;">
+      <span id="otpResendText"></span>
+    </button>
+  </div>
 </div>
 
 <!-- 完了モーダル -->
@@ -381,6 +477,23 @@ const I18N = {
     alertRetry: '一時的に混雑しています。もう一度送信してください。',
     alertRateLimit: '送信回数の上限に達しました。少し時間をおいてお試しください。',
     alertEmailFail: '予約は完了しましたが、確認メールの送信に失敗しました。\n予約番号を控えておいてください。\n問い合わせ: 076-201-8119',
+    otpTitle: 'メールアドレスの確認',
+    otpDesc: (email) => `${email} に6桁の確認コードを送信しました。`,
+    otpConfirmBtn: '確認して予約を確定する',
+    otpResend: 'コードを再送する',
+    otpSending: 'コードを送信中...',
+    otpVerifying: '確認中...',
+    alertOtpExpired: '確認コードの有効期限が切れました。再度「予約を確定する」からお試しください。',
+    alertOtpInvalid: 'コードが違います。もう一度お試しください。',
+    alertOtpSendFail: '確認コードの送信に失敗しました。\nお手数ですが、お電話（076-201-8119）にてご連絡ください。',
+    alertOtpRateLimit: 'コード送信回数の上限に達しました。10分後にお試しください。',
+    paymentSectionLabel: 'お支払い方法',
+    pmCard: 'クレジットカード', pmCardSub: 'Visa / Mastercard / JCB / Amex',
+    pmPaypay: 'PayPay決済', pmPaypaySub: '来店時にPayPayでお支払い',
+    pmOnsite: '現地決済', pmOnsiteSub: '来店時に現金でお支払い',
+    cardNumberLabel: 'カード番号', cardExpiryLabel: '有効期限', cardCvcLabel: 'セキュリティコード',
+    alertCardError: 'カード情報を正しく入力してください。',
+    alertChargeFail: 'カード決済に失敗しました。\n別のカードをお試しいただくか、お電話（076-201-8119）にてご連絡ください。',
     estimate: '来店時お見積もり',
     formatDate: (y, m, d, dow) => {
       const days = ['日','月','火','水','木','金','土'];
@@ -427,7 +540,7 @@ const I18N = {
     step4Back: '← Back',
     submitBtn: 'Confirm Booking', submitting: 'Submitting...',
     estimateNotice: '※ The selected plan will be quoted upon arrival. The total will be confirmed on the day of your visit.',
-    paymentNotice: '💳 Payment is by credit card only. Pre-payment details will be sent after your booking is confirmed.',
+    paymentNotice: '',
     cancelPolicyNotice: '📋 Cancellation Policy\n• A 100% cancellation fee applies for same-day cancellations.\n• If you do not arrive within 1 hour of your reserved time, your booking will be automatically cancelled.\n• Date and time changes are possible if requested before your reserved time.\n• No cancellation fee for date/time changes made in advance.',
     modalTitle: 'Thank you for your reservation!',
     modalText: 'Please review your booking details.<br>We look forward to welcoming you.',
@@ -448,6 +561,23 @@ const I18N = {
     alertRetry: 'The system is temporarily busy. Please try again.',
     alertRateLimit: 'Submission limit reached. Please wait a few minutes.',
     alertEmailFail: 'Your booking is confirmed, but the confirmation email failed to send.\nPlease save your reservation number.\nContact: 076-201-8119',
+    otpTitle: 'Email Verification',
+    otpDesc: (email) => `We sent a 6-digit code to ${email}.`,
+    otpConfirmBtn: 'Verify & Confirm Booking',
+    otpResend: 'Resend code',
+    otpSending: 'Sending code...',
+    otpVerifying: 'Verifying...',
+    alertOtpExpired: 'The verification code has expired. Please click "Confirm Booking" again.',
+    alertOtpInvalid: 'Incorrect code. Please try again.',
+    alertOtpSendFail: 'Failed to send verification code.\nPlease call us: 076-201-8119.',
+    alertOtpRateLimit: 'Too many code requests. Please try again in 10 minutes.',
+    paymentSectionLabel: 'Payment Method',
+    pmCard: 'Credit Card', pmCardSub: 'Visa / Mastercard / JCB / Amex',
+    pmPaypay: 'PayPay', pmPaypaySub: 'Pay with PayPay on arrival',
+    pmOnsite: 'Pay on Site', pmOnsiteSub: 'Cash payment on arrival',
+    cardNumberLabel: 'Card Number', cardExpiryLabel: 'Expiry Date', cardCvcLabel: 'Security Code',
+    alertCardError: 'Please enter valid card details.',
+    alertChargeFail: 'Card payment failed.\nPlease try another card or call us: 076-201-8119.',
     privacyLink: 'Privacy Policy',
     tokushohoLink: 'Legal Notice',
     estimate: 'Estimate on visit',
@@ -497,7 +627,7 @@ const I18N = {
     step4Back: '← 返回',
     submitBtn: '確認預約', submitting: '傳送中...',
     estimateNotice: '※ 所選方案將於來店時提供報價，總金額將於當天確認。',
-    paymentNotice: '💳 僅接受信用卡預付款。預訂確認後將寄送付款詳情。',
+    paymentNotice: '',
     cancelPolicyNotice: '📋 取消政策\n• 當日取消將收取100%的取消費用。\n• 如您未在預約時間1小時內到店，預約將自動取消。\n• 在預約時間之前可申請更改日期及時間。\n• 提前更改日期或時間不收取任何費用。',
     modalTitle: '感謝您的預約！',
     modalText: '請確認您的預約詳情。<br>期待您的光臨。',
@@ -518,6 +648,23 @@ const I18N = {
     alertRetry: '系統暫時繁忙，請稍後再試。',
     alertRateLimit: '已達傳送上限，請稍候幾分鐘後再試。',
     alertEmailFail: '預約已完成，但確認郵件傳送失敗。\n請記下您的預約編號。\n聯絡電話：076-201-8119',
+    otpTitle: '電子郵件驗證',
+    otpDesc: (email) => `已傳送6位數驗證碼至 ${email}。`,
+    otpConfirmBtn: '驗證並確認預約',
+    otpResend: '重新傳送驗證碼',
+    otpSending: '傳送驗證碼中...',
+    otpVerifying: '驗證中...',
+    alertOtpExpired: '驗證碼已過期，請重新點擊「確認預約」。',
+    alertOtpInvalid: '驗證碼錯誤，請再試一次。',
+    alertOtpSendFail: '驗證碼傳送失敗。\n請撥打電話：076-201-8119。',
+    alertOtpRateLimit: '驗證碼傳送次數已達上限，請10分鐘後再試。',
+    paymentSectionLabel: '付款方式',
+    pmCard: '信用卡', pmCardSub: 'Visa / Mastercard / JCB / Amex',
+    pmPaypay: 'PayPay付款', pmPaypaySub: '來店時以PayPay付款',
+    pmOnsite: '現場付款', pmOnsiteSub: '來店時以現金付款',
+    cardNumberLabel: '卡號', cardExpiryLabel: '有效期限', cardCvcLabel: '安全碼',
+    alertCardError: '請正確輸入信用卡資訊。',
+    alertChargeFail: '信用卡付款失敗。\n請嘗試其他卡片或撥打電話：076-201-8119。',
     privacyLink: '隱私權政策',
     tokushohoLink: '商業交易法表示',
     estimate: '來店時報價',
@@ -676,6 +823,7 @@ function setLang(lang) {
   buildPlanCards();
   buildOptions();
   updateSummary();
+  if (document.getElementById('sc4').style.display !== 'none') updatePaymentUI();
 }
 
 function applyLang() {
@@ -744,6 +892,17 @@ function applyLang() {
   document.getElementById('modalTitle').textContent   = t.modalTitle;
   document.getElementById('modalText').innerHTML      = t.modalText;
   document.getElementById('modalCloseBtn').textContent = t.modalClose;
+  // 支払いUIラベル
+  document.getElementById('paymentSectionLabel').textContent = t.paymentSectionLabel || '';
+  document.getElementById('pmCardLabel').textContent   = t.pmCard || '';
+  document.getElementById('pmCardSub').textContent     = t.pmCardSub || '';
+  document.getElementById('pmPaypayLabel').textContent = t.pmPaypay || '';
+  document.getElementById('pmPaypaySub').textContent   = t.pmPaypaySub || '';
+  document.getElementById('pmOnsiteLabel').textContent = t.pmOnsite || '';
+  document.getElementById('pmOnsiteSub').textContent   = t.pmOnsiteSub || '';
+  document.getElementById('cardNumberLabel').textContent = t.cardNumberLabel || '';
+  document.getElementById('cardExpiryLabel').textContent = t.cardExpiryLabel || '';
+  document.getElementById('cardCvcLabel').textContent    = t.cardCvcLabel || '';
   updateTimeOptions();
 }
 
@@ -1134,10 +1293,64 @@ function goStep(n) {
   document.getElementById('estimateNotice').style.display =
     (n === 4 && plan.isEstimate) ? 'block' : 'none';
   updateSummary();
+  if (n === 4) updatePaymentUI();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// ── 送信 ─────────────────────────────────────────────
+// ── Pay.jp 支払い ──────────────────────────────────────────────
+const PAYJP_PUBLIC_KEY = 'pk_test_d698de20bf0960996d6b8f91';
+let payjp = null, cardNumberEl = null, cardExpiryEl = null, cardCvcEl = null, payjpMounted = false;
+let selectedPaymentMethod = 'card';
+
+function initPayjp() {
+  if (payjpMounted) return;
+  try {
+    payjp = Payjp(PAYJP_PUBLIC_KEY);
+    const elements = payjp.elements();
+    const style = {
+      base: { color: '#1c1a18', fontFamily: "'DM Mono', monospace", fontSize: '15px', '::placeholder': { color: '#9a9080' } }
+    };
+    cardNumberEl = elements.create('cardNumber', { style });
+    cardExpiryEl = elements.create('cardExpiry', { style });
+    cardCvcEl    = elements.create('cardCvc',    { style });
+    cardNumberEl.mount('#card-number');
+    cardExpiryEl.mount('#card-expiry');
+    cardCvcEl.mount('#card-cvc');
+    cardNumberEl.on('change', ev => {
+      document.getElementById('card-errors').textContent = ev.error ? ev.error.message : '';
+    });
+    payjpMounted = true;
+  } catch(e) { console.error('payjp init error:', e); }
+}
+
+function onPaymentMethodChange(method) {
+  selectedPaymentMethod = method;
+  document.querySelectorAll('.payment-option').forEach(el => {
+    el.classList.toggle('pm-selected', el.id === 'pm-' + method);
+  });
+  const radio = document.querySelector(`input[name="paymentMethod"][value="${method}"]`);
+  if (radio) radio.checked = true;
+  document.getElementById('cardSection').style.display = method === 'card' ? '' : 'none';
+  if (method === 'card') initPayjp();
+}
+
+function updatePaymentUI() {
+  const isJa = currentLang === 'ja';
+  const isEst = plan.isEstimate;
+  document.getElementById('paymentBlock').style.display = isEst ? 'none' : '';
+  if (isEst) { selectedPaymentMethod = 'onsite'; return; }
+  document.getElementById('pm-paypay').style.display = isJa ? '' : 'none';
+  document.getElementById('pm-onsite').style.display = isJa ? '' : 'none';
+  if (!isJa) {
+    onPaymentMethodChange('card');
+  } else {
+    onPaymentMethodChange(selectedPaymentMethod);
+  }
+}
+
+// ── 送信（Step1: バリデーション → OTP送信）────────────────────
+let pendingBooking = null; // OTP確認待ちの予約データ
+
 async function submitForm() {
   const t  = tl();
   const ln = document.getElementById('lastName').value.trim();
@@ -1157,7 +1370,6 @@ async function submitForm() {
   const optTotal = Object.values(options).reduce((a, b) => a + b, 0);
   const total    = base !== null ? base + optTotal : 0;
 
-  // 保存用人数は常に日本語形式
   const peopleSaved = makePeopleStr(false);
   const peopleDisp  = makePeopleStr(true);
 
@@ -1165,87 +1377,207 @@ async function submitForm() {
     .filter(([k, v]) => v > 0 && options[k])
     .map(([k, v]) => ({ name: v > 1 ? `${k}×${v}` : k, price: options[k] }));
 
-  const now = new Date();
-  const uid = 'HP-' + now.getTime() + '-' + Math.random().toString(36).substring(2, 8);
-  const booking = {
-    id:            uid,
-    reservationId: uid,
-    source:        'WEB',
-    channel:       currentLang === 'en' ? 'ウェブサイト(EN)' : currentLang === 'zh' ? 'ウェブサイト(繁中)' : 'ウェブサイト',
-    date,
-    time,
-    name:     `${ln} ${fn}`,
-    plan:     plan.name,
-    people:   peopleSaved,
-    options:  selectedOpts,
-    total,
-    payment:  currentLang !== 'ja' ? '事前決済（クレジットカード）' : '未定',
-    email:    em,
-    tel:      ph,
-    remarks:  document.getElementById('remarks').value.trim(),
-    createdAt: now.toISOString(),
-    lang:     currentLang,   // ← 言語情報を保存
-  };
-
-  const btn = document.getElementById('submitBtn');
-  btn.disabled = true;
-  btn.textContent = t.submitting;
-  try {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-
-      body: JSON.stringify({ key: ACCESS_KEY, action: 'save', booking })
-    });
-    const json = await res.json().catch(() => null);
-    if (!json || json.success === false) {
-      if (json && json.error === 'SLOT_FULL') {
-        const rem = json.remaining || 0;
-        alert(rem === 0 ? t.alertSlotFull(time) : t.alertSlotInsuf(time, rem));
-        await fetchSlotAvailability(date);
-        goStep(2);
-      } else if (json && json.error === 'RETRY') {
-        alert(t.alertRetry);
-      } else if (json && json.error === 'RATE_LIMIT') {
-        alert(t.alertRateLimit);
-      } else if (json && json.error === 'VALIDATION') {
-        alert(json.message || t.alertNetErr);
-      } else {
-        alert(t.alertNetErr);
-      }
-      btn.disabled = false;
-      btn.textContent = t.submitBtn;
-      return;
-    }
-    // メール送信失敗の警告（予約自体は成功）
-    if (json.emailSent === false) {
-      alert(t.alertEmailFail);
-    }
-  } catch(err) {
-    alert(t.alertNetErr);
-    btn.disabled = false;
-    btn.textContent = t.submitBtn;
-    return;
-  }
-  btn.disabled = false;
-  btn.textContent = t.submitBtn;
-
   const planDef = PLAN_DEFS.find(p => p.name === plan.name);
   const planDisplay = planDef ? (planDef[currentLang] || planDef.ja).displayName : plan.name;
   const optNamesDisp = selectedOpts
     .map(o => getOptDisplayName(o.name.replace(/×\d+$/, '')) + (o.name.match(/×(\d+)$/) ? '×' + o.name.match(/×(\d+)$/)[1] : ''))
     .join(t.joinSep);
 
-  document.getElementById('modalDetail').innerHTML = `
-    <div><span>${t.modalName}</span><strong>${ln} ${fn}${t.modalSuffix ? ' ' + t.modalSuffix : ''}</strong></div>
-    <div><span>${t.modalPlan}</span><strong>${planDisplay}</strong></div>
-    <div><span>${t.modalDate}</span><strong>${ds} ${time}</strong></div>
-    <div><span>${t.modalPeople}</span><strong>${peopleDisp}</strong></div>
-    ${optNamesDisp ? `<div><span>${t.modalOpt}</span><strong>${optNamesDisp}</strong></div>` : ''}
-    <div><span>${t.modalTotal}</span><strong>${total > 0 ? fmt(total) : t.estimate}</strong></div>
-    <div><span>${t.modalContact}</span><strong>${em}</strong></div>
-  `;
-  document.getElementById('completeModal').classList.add('open');
+  const now = new Date();
+  const uid = 'HP-' + now.getTime() + '-' + Math.random().toString(36).substring(2, 8);
+  pendingBooking = {
+    booking: {
+      id: uid, reservationId: uid, source: 'WEB',
+      channel: currentLang === 'en' ? 'ウェブサイト(EN)' : currentLang === 'zh' ? 'ウェブサイト(繁中)' : 'ウェブサイト',
+      date, time, name: `${ln} ${fn}`, plan: plan.name, people: peopleSaved,
+      options: selectedOpts, total,
+      payment: plan.isEstimate ? '未定' :
+               selectedPaymentMethod === 'card'   ? '事前決済（クレジットカード）' :
+               selectedPaymentMethod === 'paypay' ? '現地決済（PayPay）' : '現地決済（現金）',
+      paymentMethod: selectedPaymentMethod,
+      email: em, tel: ph,
+      remarks: document.getElementById('remarks').value.trim(),
+      createdAt: now.toISOString(), lang: currentLang,
+    },
+    display: { ln, fn, ds, time, total, planDisplay, optNamesDisp, peopleDisp, em },
+    cardToken: null,
+  };
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+
+  // ── カード決済トークン生成 ─────────────────────────────────
+  if (selectedPaymentMethod === 'card' && total > 0 && payjp) {
+    btn.textContent = t.submitting;
+    const tokenResult = await payjp.createToken(cardNumberEl);
+    if (tokenResult.error) {
+      alert(t.alertCardError + '\n' + (tokenResult.error.message || ''));
+      btn.disabled = false;
+      btn.textContent = t.submitBtn;
+      pendingBooking = null;
+      return;
+    }
+    pendingBooking.cardToken = tokenResult.id;
+  }
+
+  btn.textContent = t.otpSending;
+  try {
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ key: ACCESS_KEY, action: 'sendBookingOtp', email: em })
+    });
+    const json = await res.json().catch(() => null);
+    if (!json || !json.success) {
+      if (json && json.error === 'OTP_RATE_LIMIT') {
+        alert(t.alertOtpRateLimit);
+      } else {
+        alert(t.alertOtpSendFail);
+      }
+      btn.disabled = false;
+      btn.textContent = t.submitBtn;
+      pendingBooking = null;
+      return;
+    }
+    showOtpModal(em);
+  } catch(err) {
+    alert(t.alertOtpSendFail);
+    pendingBooking = null;
+  }
+  btn.disabled = false;
+  btn.textContent = t.submitBtn;
 }
+
+// ── OTPモーダルを表示 ────────────────────────────────────────
+function showOtpModal(email) {
+  const t = tl();
+  document.getElementById('otpModalTitle').textContent   = t.otpTitle;
+  document.getElementById('otpModalDesc').textContent    = t.otpDesc(email);
+  document.getElementById('otpModalBtnText').textContent = t.otpConfirmBtn;
+  document.getElementById('otpResendText').textContent   = t.otpResend;
+  document.getElementById('otpModalError').textContent   = '';
+  const inp = document.getElementById('otpModalInput');
+  inp.value    = '';
+  inp.disabled = false;
+  document.getElementById('otpModalBtn').disabled    = false;
+  document.getElementById('otpResendBtn').disabled   = false;
+  const modal = document.getElementById('otpConfirmModal');
+  modal.style.display = 'flex';
+  setTimeout(() => inp.focus(), 100);
+}
+
+// ── Step2: OTP検証 → 予約保存 ───────────────────────────────
+async function confirmWithOtp() {
+  if (!pendingBooking) return;
+  const t   = tl();
+  const otp = document.getElementById('otpModalInput').value.trim();
+  if (!otp) return;
+  const inp = document.getElementById('otpModalInput');
+  const err = document.getElementById('otpModalError');
+  const btn = document.getElementById('otpModalBtn');
+  inp.disabled = true;
+  btn.disabled = true;
+  err.textContent = t.otpVerifying;
+  try {
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ key: ACCESS_KEY, action: 'save', booking: pendingBooking.booking, otp, cardToken: pendingBooking.cardToken || null })
+    });
+    const json = await res.json().catch(() => null);
+    if (!json || json.success === false) {
+      if (json && json.error === 'OTP_EXPIRED') {
+        err.textContent = t.alertOtpExpired;
+        setTimeout(() => {
+          document.getElementById('otpConfirmModal').style.display = 'none';
+          pendingBooking = null;
+        }, 2500);
+      } else if (json && json.error === 'OTP_INVALID') {
+        err.textContent = t.alertOtpInvalid;
+        inp.value = ''; inp.disabled = false; btn.disabled = false; inp.focus();
+      } else if (json && json.error === 'SLOT_FULL') {
+        document.getElementById('otpConfirmModal').style.display = 'none';
+        const rem = json.remaining || 0;
+        const pb  = pendingBooking;
+        pendingBooking = null;
+        alert(rem === 0 ? t.alertSlotFull(pb.booking.time) : t.alertSlotInsuf(pb.booking.time, rem));
+        await fetchSlotAvailability(pb.booking.date);
+        goStep(2);
+      } else if (json && json.error === 'RATE_LIMIT') {
+        err.textContent = t.alertRateLimit;
+        inp.disabled = false; btn.disabled = false;
+      } else if (json && json.error === 'CHARGE_FAILED') {
+        document.getElementById('otpConfirmModal').style.display = 'none';
+        pendingBooking = null;
+        alert(t.alertChargeFail);
+      } else {
+        err.textContent = json?.message || t.alertNetErr;
+        inp.disabled = false; btn.disabled = false;
+      }
+      return;
+    }
+    // 予約成功
+    document.getElementById('otpConfirmModal').style.display = 'none';
+    if (json.emailSent === false) alert(t.alertEmailFail);
+    const d = pendingBooking.display;
+    document.getElementById('modalDetail').innerHTML = `
+      <div><span>${t.modalName}</span><strong>${d.ln} ${d.fn}${t.modalSuffix ? ' ' + t.modalSuffix : ''}</strong></div>
+      <div><span>${t.modalPlan}</span><strong>${d.planDisplay}</strong></div>
+      <div><span>${t.modalDate}</span><strong>${d.ds} ${d.time}</strong></div>
+      <div><span>${t.modalPeople}</span><strong>${d.peopleDisp}</strong></div>
+      ${d.optNamesDisp ? `<div><span>${t.modalOpt}</span><strong>${d.optNamesDisp}</strong></div>` : ''}
+      <div><span>${t.modalTotal}</span><strong>${d.total > 0 ? fmt(d.total) : t.estimate}</strong></div>
+      <div><span>${t.modalContact}</span><strong>${d.em}</strong></div>
+    `;
+    document.getElementById('completeModal').classList.add('open');
+    pendingBooking = null;
+  } catch(e) {
+    err.textContent = t.alertNetErr;
+    inp.disabled = false; btn.disabled = false;
+  }
+}
+
+// ── OTPを再送する ───────────────────────────────────────────
+async function resendOtp() {
+  if (!pendingBooking) return;
+  const t    = tl();
+  const email = pendingBooking.booking.email;
+  const btn  = document.getElementById('otpResendBtn');
+  const err  = document.getElementById('otpModalError');
+  btn.disabled = true;
+  err.textContent = t.otpSending;
+  try {
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ key: ACCESS_KEY, action: 'sendBookingOtp', email })
+    });
+    const json = await res.json().catch(() => null);
+    if (!json || !json.success) {
+      err.textContent = json?.error === 'OTP_RATE_LIMIT' ? t.alertOtpRateLimit : t.alertOtpSendFail;
+    } else {
+      err.textContent = '';
+      document.getElementById('otpModalInput').value = '';
+      document.getElementById('otpModalInput').focus();
+    }
+  } catch(e) {
+    err.textContent = t.alertOtpSendFail;
+  }
+  // 30秒後に再送ボタンを再有効化
+  setTimeout(() => { btn.disabled = false; }, 30000);
+}
+
+// OTP入力: 6桁で自動送信 / Enter送信
+(function() {
+  const inp = document.getElementById('otpModalInput');
+  inp.addEventListener('input', function() {
+    document.getElementById('otpModalError').textContent = '';
+    if (this.value.length === 6) confirmWithOtp();
+  });
+  inp.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && this.value.length > 0) confirmWithOtp();
+  });
+  // OTP入力フォーカス時のスタイル
+  inp.addEventListener('focus', function() { this.style.borderColor = 'var(--accent)'; });
+  inp.addEventListener('blur',  function() { this.style.borderColor = 'var(--line)'; });
+})();
 
 // 初期化
 buildPlanCards();

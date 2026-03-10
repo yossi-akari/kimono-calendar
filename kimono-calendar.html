@@ -16,15 +16,19 @@
   color: #faf8f4; font-family: serif;
   font-weight: 200; font-size: 1.4rem; letter-spacing: 0.15em; margin: 0;
 }
-#pinInput {
+#pinInput, #otpInput {
   background: #2a2520; border: 1px solid #3a3530; color: #faf8f4;
   padding: 14px 20px; border-radius: 2px; font-size: 1.1rem;
-  width: 260px; outline: none; text-align: center; letter-spacing: 0.25em;
+  width: 260px; outline: none; text-align: center;
   transition: border-color 0.2s; font-family: 'DM Mono', monospace;
 }
-#pinInput:focus { border-color: #8b3a3a; }
-#pinInput::placeholder { color: #5a5048; letter-spacing: 0.08em; font-size: 0.85rem; font-family: serif; }
-#pin-error { color: #8b3a3a; font-size: 0.85rem; min-height: 1.2em; }
+#pinInput  { letter-spacing: 0.25em; }
+#otpInput  { letter-spacing: 0.4em; font-size: 1.3rem; }
+#pinInput:focus, #otpInput:focus { border-color: #8b3a3a; }
+#pinInput::placeholder  { color: #5a5048; letter-spacing: 0.08em; font-size: 0.85rem; font-family: serif; }
+#otpInput::placeholder  { color: #5a5048; letter-spacing: 0.06em; font-size: 0.82rem; font-family: serif; }
+#pin-error { color: #8b3a3a; font-size: 0.85rem; min-height: 1.2em; text-align: center; max-width: 280px; }
+#otp-step  { flex-direction: column; align-items: center; gap: 12px; }
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@200;300;400&family=Noto+Sans+JP:wght@300;400&family=DM+Mono:wght@300&display=swap" rel="stylesheet">
 <style>
@@ -638,14 +642,30 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 <body>
 <div id="pin-screen">
   <h1>予約管理カレンダー</h1>
-  <input type="password" id="pinInput" placeholder="PINコードを入力してEnter" autocomplete="off">
-  <div id="pin-hint" style="font-size:0.72rem;color:rgba(255,255,255,0.3);margin-top:-8px;">Enter キーで送信</div>
+
+  <!-- Step 1: PIN -->
+  <div id="pin-step" style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+    <input type="password" id="pinInput" placeholder="PINコードを入力してEnter" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="text">
+    <div style="font-size:0.72rem;color:rgba(255,255,255,0.3);margin-top:-8px;">Enter キーで送信</div>
+  </div>
+
+  <!-- Step 2: OTP -->
+  <div id="otp-step" style="display:none;">
+    <div style="font-size:0.8rem;color:rgba(255,255,255,0.45);text-align:center;max-width:260px;line-height:1.7;margin-bottom:4px;">
+      登録メールアドレスに6桁の認証コードを送信しました
+    </div>
+    <input type="text" id="otpInput" placeholder="認証コード（6桁）" autocomplete="off" maxlength="6" inputmode="numeric">
+    <div style="font-size:0.72rem;color:rgba(255,255,255,0.3);margin-top:4px;text-align:center;">
+      6桁入力で自動送信 ／ <span id="otp-back" style="cursor:pointer;color:#8b3a3a;">← 戻る</span>
+    </div>
+  </div>
+
   <div id="pin-error"></div>
 </div>
 <script>
 // 既存トークンがあれば即座にPIN画面を非表示
 (function(){
-  if(sessionStorage.getItem('adminToken')) {
+  if(localStorage.getItem('akariAdminToken')) {
     document.getElementById('pin-screen').style.display='none';
   }
 })();
@@ -1024,30 +1044,115 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 // ★ Google Apps ScriptのデプロイURL
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx347zA3An_FRMxeBLEQVLCbGRgLBiUinEt8OL2I-H91ixNlqwT6lXb-9-_rP_ZowrbKw/exec';
 
-// ── PIN認証（サーバー側検証） ─────────────────────────────
+// 全角→半角変換（iPad対策）
+function toHalf(str) {
+  return (str || '').trim()
+    .replace(/[！-～]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+    .replace(/　/g, ' ');
+}
+
+// ── ログイン画面 ステップ切り替え ──────────────────────────
+function showOtpStep() {
+  document.getElementById('pin-step').style.display  = 'none';
+  const otpStep = document.getElementById('otp-step');
+  otpStep.style.display = 'flex';
+  const otpInput = document.getElementById('otpInput');
+  otpInput.value    = '';
+  otpInput.disabled = false;
+  document.getElementById('pin-error').textContent = '';
+  otpInput.focus();
+}
+function showPinStep() {
+  document.getElementById('otp-step').style.display = 'none';
+  const pinStep = document.getElementById('pin-step');
+  pinStep.style.display = 'flex';
+  const pinInput = document.getElementById('pinInput');
+  pinInput.value    = '';
+  pinInput.disabled = false;
+  document.getElementById('pin-error').textContent = '';
+  pinInput.focus();
+}
+
+// ── Step 1: PIN認証（サーバー側検証 + アカウントロック対応）──
 async function verifyPin(pin) {
-  const screen = document.getElementById('pin-screen');
-  const input  = document.getElementById('pinInput');
-  const err    = document.getElementById('pin-error');
+  const input = document.getElementById('pinInput');
+  const err   = document.getElementById('pin-error');
   input.disabled = true;
   err.textContent = '確認中...';
   try {
     const res  = await fetch(GAS_URL, {
       method: 'POST',
-
       body: JSON.stringify({ action: 'auth', pin })
     });
     const data = await res.json();
+    if (data.success && data.step === 'otp') {
+      // PIN OK → OTPステップへ
+      showOtpStep();
+    } else if (data.error === 'ACCOUNT_LOCKED') {
+      // アカウントロック（PCI DSS準拠）
+      let msg = 'ログイン試行回数が上限を超えたため、アカウントがロックされました。';
+      let waitMs = 0;
+      if (data.lockedUntil) {
+        const until = new Date(data.lockedUntil);
+        msg += until.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) + ' 以降に再試行してください。';
+        waitMs = until - new Date();
+      } else {
+        msg += '30分後に再試行してください。';
+        waitMs = 30 * 60 * 1000;
+      }
+      err.textContent = msg;
+      input.value = '';
+      input.disabled = true;
+      if (waitMs > 0 && waitMs < 3600000) {
+        setTimeout(() => {
+          err.textContent = 'ロックが解除されました。PINを入力してください。';
+          input.disabled = false;
+          input.focus();
+        }, waitMs);
+      }
+    } else {
+      let msg = 'PINが違います';
+      if (data.attemptsLeft !== undefined) {
+        msg += '（あと' + data.attemptsLeft + '回失敗するとロックされます）';
+      }
+      err.textContent = msg;
+      input.value = '';
+      setTimeout(() => { err.textContent = ''; input.disabled = false; input.focus(); }, 1500);
+    }
+  } catch(e) {
+    err.textContent = 'サーバーエラーが発生しました';
+    input.disabled = false;
+    input.focus();
+  }
+}
+
+// ── Step 2: OTP認証 ─────────────────────────────────────────
+async function verifyOtp(otp) {
+  const input = document.getElementById('otpInput');
+  const err   = document.getElementById('pin-error');
+  input.disabled = true;
+  err.textContent = '確認中...';
+  try {
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'auth', step: 'otp', otp })
+    });
+    const data = await res.json();
     if (data.success && data.token) {
-      sessionStorage.setItem('adminToken', data.token);
-      screen.style.display = 'none';
+      localStorage.setItem('akariAdminToken', data.token);
+      document.getElementById('pin-screen').style.display = 'none';
       err.textContent = '';
       refreshBookings();
       startAutoRefresh();
     } else {
-      err.textContent = data.error || 'PINが違います';
+      err.textContent = data.error || '認証コードが違います';
       input.value = '';
-      setTimeout(() => { err.textContent = ''; input.disabled = false; input.focus(); }, 1500);
+      if (data.expired) {
+        // 期限切れ → PINステップに戻す
+        setTimeout(showPinStep, 2000);
+      } else {
+        setTimeout(() => { err.textContent = ''; input.disabled = false; input.focus(); }, 1500);
+      }
     }
   } catch(e) {
     err.textContent = 'サーバーエラーが発生しました';
@@ -1058,18 +1163,33 @@ async function verifyPin(pin) {
 (function setupPinInput(){
   const screen = document.getElementById('pin-screen');
   if (screen.style.display === 'none') return;
+  const err = document.getElementById('pin-error');
+
+  // PIN入力
   const input = document.getElementById('pinInput');
-  const err   = document.getElementById('pin-error');
   input.focus();
-  input.addEventListener('input',  function() { err.textContent = ''; });
+  input.addEventListener('input',   function() { err.textContent = ''; });
   input.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && this.value.length > 0) verifyPin(this.value);
+    if (e.key === 'Enter' && this.value.length > 0) verifyPin(toHalf(this.value));
   });
+
+  // OTP入力（6桁で自動送信 or Enter）
+  const otpInput = document.getElementById('otpInput');
+  otpInput.addEventListener('input', function() {
+    err.textContent = '';
+    if (this.value.length === 6) verifyOtp(this.value);
+  });
+  otpInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && this.value.length > 0) verifyOtp(this.value);
+  });
+
+  // 「戻る」ボタン
+  document.getElementById('otp-back').addEventListener('click', showPinStep);
 })();
 
 // ── 管理者POST ヘルパー（全admin APIコールに使用） ──────────
 function adminPost(params) {
-  const token = sessionStorage.getItem('adminToken');
+  const token = localStorage.getItem('akariAdminToken');
   return fetch(GAS_URL, {
     method: 'POST',
     body: JSON.stringify({ token, ...params })
@@ -1079,12 +1199,10 @@ function adminPost(params) {
 }
 // トークン期限切れ時は再ログイン促す
 function handleUnauthorized() {
-  sessionStorage.removeItem('adminToken');
+  localStorage.removeItem('akariAdminToken');
   document.getElementById('pin-screen').style.display = 'flex';
-  document.getElementById('pinInput').value = '';
-  document.getElementById('pinInput').disabled = false;
+  showPinStep();
   document.getElementById('pin-error').textContent = 'セッションが期限切れになりました。再度PINを入力してください。';
-  document.getElementById('pinInput').focus();
 }
 
 // スロットブロック管理
@@ -1155,7 +1273,7 @@ function mergeBookings(gasBookings, manualBookings) {
 
 async function loadFromGAS() {
   if (!GAS_URL || GAS_URL === 'YOUR_GAS_DEPLOY_URL_HERE') return false;
-  if (!sessionStorage.getItem('adminToken')) return false;
+  if (!localStorage.getItem('akariAdminToken')) return false;
   try {
     const data = await adminPost({ action: 'getBookings' });
     if (data.error === 'Unauthorized') { handleUnauthorized(); return false; }
@@ -2743,7 +2861,7 @@ loadBookings();
 renderCalendar();
 renderSidePanel();
 // GASへのアクセスは認証済みの場合のみ実行
-if (sessionStorage.getItem('adminToken')) {
+if (localStorage.getItem('akariAdminToken')) {
   refreshBookings();
   startAutoRefresh();
 }

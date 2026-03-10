@@ -3,6 +3,7 @@
 // rentalakari@gmail.com アカウントで作成・デプロイしてください
 // =============================================================
 
+
 // =============================================================
 // ── 認証設定（Script Properties で管理）────────────────────
 // GASエディタ → プロジェクトの設定 → スクリプトプロパティ に設定:
@@ -24,6 +25,165 @@ function generateAdminToken() {
 function isValidAdminToken(token) {
   if (!token) return false;
   return CacheService.getScriptCache().get('session_' + token) === 'admin';
+}
+
+// =============================================================
+// ── PINロック管理（PCI DSS v4.0準拠：10回失敗でロック）───────
+// =============================================================
+const PIN_LOCK_THRESHOLD = 10;   // PCI DSS v4.0: 10回以下でロック
+const PIN_LOCK_DURATION  = 1800; // ロック時間: 30分（秒）
+
+/** ロック状態を返す。ロック中なら { locked: true, lockedUntil: ISOString } */
+function getPinLockState() {
+  const cache = CacheService.getScriptCache();
+  const lockedUntilStr = cache.get('pin_locked_until');
+  if (lockedUntilStr) {
+    if (new Date() < new Date(lockedUntilStr)) {
+      return { locked: true, lockedUntil: lockedUntilStr };
+    }
+    // ロック期限切れ → リセット
+    cache.remove('pin_locked_until');
+    cache.remove('pin_fail_count');
+  }
+  return { locked: false, lockedUntil: null };
+}
+
+/** 失敗を記録し、閾値到達でロック。{ locked, lockedUntil, attemptsLeft } を返す */
+function recordPinFailure() {
+  const cache = CacheService.getScriptCache();
+  const count = parseInt(cache.get('pin_fail_count') || '0') + 1;
+  if (count >= PIN_LOCK_THRESHOLD) {
+    const lockedUntil = new Date(Date.now() + PIN_LOCK_DURATION * 1000).toISOString();
+    cache.put('pin_locked_until', lockedUntil, PIN_LOCK_DURATION + 60);
+    cache.put('pin_fail_count',   String(count), PIN_LOCK_DURATION + 60);
+    notifyAdminError(
+      'PIN_LOCKOUT',
+      'PINログインが ' + count + ' 回失敗し、管理画面がロックされました',
+      'ロック解除予定: ' + new Date(lockedUntil).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })
+    );
+    return { locked: true, lockedUntil: lockedUntil, attemptsLeft: 0 };
+  }
+  cache.put('pin_fail_count', String(count), PIN_LOCK_DURATION);
+  return { locked: false, lockedUntil: null, attemptsLeft: PIN_LOCK_THRESHOLD - count };
+}
+
+/** ログイン成功時に失敗カウントをリセット */
+function clearPinAttempts() {
+  const cache = CacheService.getScriptCache();
+  cache.remove('pin_fail_count');
+  cache.remove('pin_locked_until');
+}
+
+// =============================================================
+// ── メールOTP（二段階認証）────────────────────────────────────
+// =============================================================
+const OTP_DIGITS   = 6;
+const OTP_TTL_SEC  = 600; // 10分
+const OTP_MAX_FAIL = 5;   // OTP失敗上限
+
+/** 6桁ランダム数値コードを生成 */
+function generateOtp() {
+  const min = Math.pow(10, OTP_DIGITS - 1);
+  const max = Math.pow(10, OTP_DIGITS) - 1;
+  return String(Math.floor(Math.random() * (max - min + 1)) + min);
+}
+
+/** OTPをキャッシュに保存してメール送信 */
+function issueOtp() {
+  const cache = CacheService.getScriptCache();
+  const otp = generateOtp();
+  cache.put('admin_otp', otp, OTP_TTL_SEC);
+  cache.remove('otp_fail_count');
+  const now = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+  const subject = '【きものレンタル あかり】管理画面 認証コード';
+  const body = [
+    '管理画面へのログイン認証コードをお送りします。',
+    '',
+    '認証コード：' + otp,
+    '',
+    '有効時間：10分',
+    '送信時刻：' + now,
+    '',
+    '身に覚えのない場合は、不正アクセスの可能性があります。',
+    'ご注意ください。'
+  ].join('\n');
+  GmailApp.sendEmail(getAdminEmail(), subject, body);
+}
+
+// =============================================================
+// ── 予約フォームOTP（顧客メール確認）───────────────────────────
+// =============================================================
+function getBookingOtpCacheKey(email) {
+  return 'botp_' + email.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 40);
+}
+
+/** 予約OTPを生成してキャッシュ保存→顧客メール送信 */
+function issueBookingOtp(email) {
+  const cache = CacheService.getScriptCache();
+  const otp   = generateOtp();
+  const key   = getBookingOtpCacheKey(email);
+  cache.put(key, otp, OTP_TTL_SEC);
+  cache.remove(key + '_fail');
+  const subject = '【きものレンタル あかり】予約確認コード / Booking Verification Code';
+  const body = [
+    '以下の確認コードを予約フォームにご入力ください。',
+    'Please enter the following code in the booking form.',
+    '',
+    '確認コード / Code：' + otp,
+    '',
+    '有効時間 / Valid for：10分 / 10 minutes',
+    '※このコードを第三者に教えないでください。',
+    '※ Do not share this code with anyone.',
+    '',
+    '身に覚えのない場合は、このメールを無視してください。',
+    'If you did not request this, please ignore this email.'
+  ].join('\n');
+  GmailApp.sendEmail(email, subject, body);
+}
+
+/** 予約OTP検証。{ valid, expired } を返す */
+function verifyBookingOtpCode(email, inputOtp) {
+  const cache = CacheService.getScriptCache();
+  const key   = getBookingOtpCacheKey(email);
+  const stored = cache.get(key);
+  if (!stored) return { valid: false, expired: true };
+  const failKey = key + '_fail';
+  const fails   = parseInt(cache.get(failKey) || '0');
+  if (fails >= OTP_MAX_FAIL) {
+    cache.remove(key);
+    cache.remove(failKey);
+    return { valid: false, expired: true };
+  }
+  if (inputOtp !== stored) {
+    cache.put(failKey, String(fails + 1), OTP_TTL_SEC);
+    return { valid: false, expired: false };
+  }
+  cache.remove(key);
+  cache.remove(failKey);
+  return { valid: true };
+}
+
+/** 管理者OTP検証。{ valid, error, expired } を返す */
+function verifyOtpCode(inputOtp) {
+  const cache     = CacheService.getScriptCache();
+  const storedOtp = cache.get('admin_otp');
+  if (!storedOtp) {
+    return { valid: false, error: '認証コードが期限切れです。最初からやり直してください。', expired: true };
+  }
+  const fails = parseInt(cache.get('otp_fail_count') || '0');
+  if (fails >= OTP_MAX_FAIL) {
+    cache.remove('admin_otp');
+    cache.remove('otp_fail_count');
+    return { valid: false, error: 'コード入力回数の上限を超えました。最初からやり直してください。', expired: true };
+  }
+  if (inputOtp !== storedOtp) {
+    cache.put('otp_fail_count', String(fails + 1), OTP_TTL_SEC);
+    return { valid: false, error: 'コードが違います（残り' + (OTP_MAX_FAIL - fails - 1) + '回）', expired: false };
+  }
+  // 成功 → OTP無効化
+  cache.remove('admin_otp');
+  cache.remove('otp_fail_count');
+  return { valid: true };
 }
 
 // =============================================================
@@ -873,15 +1033,47 @@ function doPost(e) {
       return output;
     }
 
-    // ── auth: PINを検証してセッショントークンを発行 ──────────────
+    // ── auth: 二段階認証（PIN → メールOTP → トークン発行）────────
     // キー不要（PINが秘密）
     if (data.action === 'auth') {
-      const pin = data.pin || '';
-      if (!pin || pin !== getAdminPin()) {
-        output.setContent(JSON.stringify({ success: false, error: 'PINが違います' }));
+
+      // ── ステップ2: OTP検証 ──────────────────────────────────
+      if (data.step === 'otp') {
+        const result = verifyOtpCode(data.otp || '');
+        if (result.valid) {
+          clearPinAttempts();
+          output.setContent(JSON.stringify({ success: true, token: generateAdminToken() }));
+        } else {
+          output.setContent(JSON.stringify({ success: false, error: result.error, expired: result.expired || false }));
+        }
         return output;
       }
-      output.setContent(JSON.stringify({ success: true, token: generateAdminToken() }));
+
+      // ── ステップ1: PIN検証 ──────────────────────────────────
+      // ① ロック確認（PCI DSS v4.0: 10回失敗でロック）
+      const lockState = getPinLockState();
+      if (lockState.locked) {
+        output.setContent(JSON.stringify({ success: false, error: 'ACCOUNT_LOCKED', lockedUntil: lockState.lockedUntil }));
+        return output;
+      }
+      // ② PIN検証
+      const pin = data.pin || '';
+      if (!pin || pin !== getAdminPin()) {
+        const result = recordPinFailure();
+        if (result.locked) {
+          output.setContent(JSON.stringify({ success: false, error: 'ACCOUNT_LOCKED', lockedUntil: result.lockedUntil }));
+        } else {
+          output.setContent(JSON.stringify({ success: false, error: 'PINが違います', attemptsLeft: result.attemptsLeft }));
+        }
+        return output;
+      }
+      // ③ PIN正しい → OTP発行・メール送信
+      try {
+        issueOtp();
+        output.setContent(JSON.stringify({ success: true, step: 'otp' }));
+      } catch(e) {
+        output.setContent(JSON.stringify({ success: false, error: 'メール送信に失敗しました: ' + e.message }));
+      }
       return output;
     }
 
@@ -938,6 +1130,30 @@ function doPost(e) {
       return output;
     }
 
+    // ── 予約OTP送信（顧客メール確認・二要素認証）──────────────────
+    if (data.action === 'sendBookingOtp' && data.key) {
+      try {
+        const email = (data.email || '').toLowerCase().trim();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          throw new Error('無効なメールアドレスです');
+        }
+        // OTP送信レート制限（同一メール: 3回/10分）
+        const cache  = CacheService.getScriptCache();
+        const rlKey  = 'botprl_' + email.replace(/[^a-z0-9]/g, '_').substring(0, 40);
+        const rlCount = parseInt(cache.get(rlKey) || '0');
+        if (rlCount >= 3) {
+          output.setContent(JSON.stringify({ success: false, error: 'OTP_RATE_LIMIT' }));
+          return output;
+        }
+        cache.put(rlKey, String(rlCount + 1), OTP_TTL_SEC);
+        issueBookingOtp(email);
+        output.setContent(JSON.stringify({ success: true }));
+      } catch(err) {
+        output.setContent(JSON.stringify({ success: false, error: err.message }));
+      }
+      return output;
+    }
+
     // ── WEB予約の保存（公開フォームから、ACCESS_KEY で認証）──────
     if (data.action === 'save' && data.key) {
       if (data.key !== getAccessKey()) {
@@ -971,6 +1187,15 @@ function doPost(e) {
         return output;
       }
 
+      // ── メールOTP検証（二要素認証）─────────────────────────
+      if (booking.source === 'WEB') {
+        const otpResult = verifyBookingOtpCode(booking.email, data.otp || '');
+        if (!otpResult.valid) {
+          output.setContent(JSON.stringify({ success: false, error: otpResult.expired ? 'OTP_EXPIRED' : 'OTP_INVALID' }));
+          return output;
+        }
+      }
+
       if (booking.source === 'WEB') {
         // ── レート制限（同一メール: 5分間に3件まで）──────────
         const rlKey = 'rl_' + (booking.email || '').replace(/\W/g, '_');
@@ -1000,13 +1225,31 @@ function doPost(e) {
             }
           }
 
-          // ── 空き確認（ロック内で実行 → 競合防止）───────────
-          const peopleCount = parsePeopleCount(booking.people);
+          // ── 空き確認（1時間帯1組：人数は問わない）────────────────
           const slots = getSlotAvailability(booking.date);
           const slot = slots[booking.time];
-          if (slot && slot.remaining < peopleCount) {
-            output.setContent(JSON.stringify({ success: false, error: 'SLOT_FULL', remaining: slot.remaining }));
+          if (slot && slot.remaining <= 0) {
+            output.setContent(JSON.stringify({ success: false, error: 'SLOT_FULL', remaining: 0 }));
             return output;
+          }
+
+          // ── Pay.jp カード決済 ────────────────────────────────
+          // paymentMethod === 'card' かつ cardToken あり かつ金額確定の場合のみ課金
+          if (booking.paymentMethod === 'card' && data.cardToken && booking.total > 0) {
+            try {
+              const charge = createChargePayjp(
+                data.cardToken,
+                booking.total,
+                'きものレンタル あかり / ' + booking.plan + ' / ' + booking.name
+              );
+              booking.chargeId      = charge.id;
+              booking.paymentStatus = 'paid';
+              Logger.log('Pay.jp 課金成功: ' + charge.id + ' ¥' + charge.amount);
+            } catch(chargeErr) {
+              notifyAdminError('CHARGE_FAILED', chargeErr.message, booking.reservationId + ' / ' + booking.email);
+              output.setContent(JSON.stringify({ success: false, error: 'CHARGE_FAILED', message: chargeErr.message }));
+              return output;
+            }
           }
 
           // ── 保存 ────────────────────────────────────────────
@@ -1155,6 +1398,45 @@ function doPost(e) {
 
 // =============================================================
 // ── 監視・エラー通知 ────────────────────────────────────────────
+// =============================================================
+// ── Pay.jp 課金処理 ──────────────────────────────────────────
+// =============================================================
+function getPayjpSecretKey() {
+  return PropertiesService.getScriptProperties().getProperty('PAYJP_SECRET_KEY') || '';
+}
+
+/**
+ * Pay.jp でカード課金を実行
+ * @param {string} cardToken  - payjp.js で生成したトークン (tok_xxx)
+ * @param {number} amount     - 課金金額（円、最低50円）
+ * @param {string} desc       - 説明文（管理画面に表示）
+ * @returns {object} Pay.jp charge オブジェクト
+ */
+function createChargePayjp(cardToken, amount, desc) {
+  const secretKey = getPayjpSecretKey();
+  if (!secretKey) throw new Error('PAYJP_SECRET_KEY が設定されていません。Script Properties を確認してください。');
+  const resp = UrlFetchApp.fetch('https://api.pay.jp/v1/charges', {
+    method: 'post',
+    headers: {
+      'Authorization': 'Basic ' + Utilities.base64Encode(secretKey + ':')
+    },
+    payload: {
+      amount:      String(amount),
+      currency:    'jpy',
+      card:        cardToken,
+      description: desc,
+      capture:     'true'
+    },
+    muteHttpExceptions: true
+  });
+  const result = JSON.parse(resp.getContentText());
+  if (result.error) {
+    Logger.log('Pay.jp charge error: ' + JSON.stringify(result.error));
+    throw new Error(result.error.message || '決済処理中にエラーが発生しました');
+  }
+  return result;
+}
+
 // 同一コンテキストのエラーは1時間に1回だけ管理者にメール送信
 // =============================================================
 function notifyAdminError(context, message, details) {
