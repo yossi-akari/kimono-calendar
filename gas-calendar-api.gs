@@ -1195,11 +1195,31 @@ function doPost(e) {
         return output;
       }
 
-      // ── メールOTP検証（二要素認証）─────────────────────────
-      if (booking.source === 'WEB') {
-        const otpResult = verifyBookingOtpCode(booking.email, data.otp || '');
-        if (!otpResult.valid) {
-          output.setContent(JSON.stringify({ success: false, error: otpResult.expired ? 'OTP_EXPIRED' : 'OTP_INVALID' }));
+      // ── サーバーサイド入力サニタイズ ─────────────────────
+      booking.name    = String(booking.name || '').trim().substring(0, 100);
+      booking.remarks = String(booking.remarks || '').trim().substring(0, 500);
+      booking.tel     = String(booking.tel || '').replace(/[^\d\-+() ]/g, '').substring(0, 20);
+
+      // ── 定休日チェック（水曜日 + 設定日）──────────────────
+      const bookingDow = new Date(booking.date + 'T00:00:00+09:00').getDay();
+      if (bookingDow === 3) {
+        output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: '水曜日は定休日のため予約できません' }));
+        return output;
+      }
+      const dateSettings = getAllSettings();
+      if (dateSettings[booking.date] && dateSettings[booking.date].closed) {
+        output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: 'この日は休業日のため予約できません' }));
+        return output;
+      }
+
+      // ── カード決済の整合性チェック ─────────────────────────
+      if (booking.paymentMethod === 'card') {
+        if (!booking.total || booking.total <= 0) {
+          output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: '金額が0円の場合はカード決済できません' }));
+          return output;
+        }
+        if (!data.cardToken) {
+          output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: 'カードトークンが不足しています' }));
           return output;
         }
       }
@@ -1224,6 +1244,13 @@ function doPost(e) {
           return output;
         }
         try {
+          // ── OTP検証（ロック内で実行 → 再利用防止）──────────
+          const otpResult = verifyBookingOtpCode(booking.email, data.otp || '');
+          if (!otpResult.valid) {
+            output.setContent(JSON.stringify({ success: false, error: otpResult.expired ? 'OTP_EXPIRED' : 'OTP_INVALID' }));
+            return output;
+          }
+
           // ── 冪等性チェック（同一IDの二重保存を防止）─────────
           if (booking.reservationId) {
             const existing = findBookingByIdFromSheet(booking.reservationId);
@@ -1242,7 +1269,6 @@ function doPost(e) {
           }
 
           // ── Pay.jp カード決済 ────────────────────────────────
-          // paymentMethod === 'card' かつ cardToken あり かつ金額確定の場合のみ課金
           if (booking.paymentMethod === 'card' && data.cardToken && booking.total > 0) {
             try {
               const charge = createChargePayjp(
@@ -1260,12 +1286,18 @@ function doPost(e) {
             }
           }
 
-          // ── 保存（flush + 検証付き）────────────────────────
+          // ── 保存（flush + 検証 + 決済ロールバック付き）──────
           saveManualToSheet(booking);
           SpreadsheetApp.flush();
           const savedCheck = findBookingByIdFromSheet(booking.reservationId || booking.id);
           if (!savedCheck) {
-            Logger.log('CRITICAL: 保存失敗 - flush後にデータが見つからない id=' + booking.id);
+            Logger.log('CRITICAL: 保存失敗 id=' + booking.id);
+            // 決済済みの場合は返金
+            if (booking.chargeId) {
+              Logger.log('保存失敗のため返金実行: ' + booking.chargeId);
+              refundChargePayjp(booking.chargeId);
+              notifyAdminError('SAVE_FAILED_REFUND', '保存失敗→自動返金', booking.id + ' / charge=' + booking.chargeId);
+            }
             throw new Error('SAVE_FAILED');
           }
 
@@ -1449,6 +1481,31 @@ function createChargePayjp(cardToken, amount, desc) {
     throw new Error(result.error.message || '決済処理中にエラーが発生しました');
   }
   return result;
+}
+
+/**
+ * Pay.jp の課金を返金（保存失敗時のロールバック用）
+ * @param {string} chargeId - Pay.jp charge ID (ch_xxx)
+ */
+function refundChargePayjp(chargeId) {
+  const secretKey = getPayjpSecretKey();
+  if (!secretKey || !chargeId) return;
+  try {
+    const resp = UrlFetchApp.fetch('https://api.pay.jp/v1/charges/' + chargeId + '/refund', {
+      method: 'post',
+      headers: { 'Authorization': 'Basic ' + Utilities.base64Encode(secretKey + ':') },
+      muteHttpExceptions: true
+    });
+    const result = JSON.parse(resp.getContentText());
+    if (result.error) {
+      Logger.log('Pay.jp refund error: ' + JSON.stringify(result.error));
+    } else {
+      Logger.log('Pay.jp refund OK: ' + chargeId);
+    }
+  } catch(e) {
+    Logger.log('Pay.jp refund exception: ' + e.message);
+    notifyAdminError('REFUND_FAILED', e.message, chargeId);
+  }
 }
 
 // 同一コンテキストのエラーは1時間に1回だけ管理者にメール送信
