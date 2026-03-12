@@ -329,12 +329,42 @@ function getRawBookings() {
   const jaran = getJaranBookings();
   const aj    = getActivityJapanBookings();
   const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
-  return [...jaran, ...aj]
-    .filter(b => b.date >= today)
-    .sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
-      return a.time.localeCompare(b.time);
+  const gmailBookings = [...jaran, ...aj].filter(b => b.date >= today);
+
+  // ── Gmail解析結果をスプレッドシートに永続保存 ──
+  try {
+    const syncResult = syncExternalBookingsToSheet(gmailBookings);
+    if (syncResult.added > 0 || syncResult.updated > 0) {
+      Logger.log('外部予約永続化: +' + syncResult.added + ' / ↻' + syncResult.updated);
+    }
+  } catch(e) {
+    Logger.log('外部予約永続化エラー: ' + e.message);
+  }
+
+  // ── 外部予約シートから読み込み、Gmailで取得できなかった予約を補完 ──
+  const sheetBookings = getExternalSheetBookings();
+  const gmailIds = new Set(gmailBookings.map(b => b.reservationId));
+  const recovered = sheetBookings.filter(b => !gmailIds.has(b.reservationId));
+  if (recovered.length > 0) {
+    Logger.log('外部予約シートから補完: ' + recovered.length + '件（Gmailで取得できなかった予約）');
+    logAudit('RECOVER_FROM_SHEET', {
+      count: recovered.length,
+      ids: recovered.map(b => b.reservationId).join(', ')
     });
+  }
+
+  const merged = [...gmailBookings, ...recovered];
+  logAudit('SYNC', {
+    gmail: gmailBookings.length,
+    recovered: recovered.length,
+    total: merged.length,
+    count: merged.length
+  });
+
+  return merged.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return a.time.localeCompare(b.time);
+  });
 }
 
 // テスト・dailySync用（キャンセル除外済み）
@@ -853,6 +883,166 @@ function deleteManualFromSheet(id) {
 }
 
 // =============================================================
+// ── 外部予約（AJ/じゃらん）永続ストレージ ─────────────────────
+// Gmail検索ウィンドウ外の予約が消失するのを防ぐため、
+// AJ/じゃらんの予約をスプレッドシートに永続保存する
+// =============================================================
+function getExternalBookingsSheet() {
+  const ss = getManualSheet().getParent();
+  let sheet = ss.getSheetByName('外部予約');
+  if (!sheet) {
+    sheet = ss.insertSheet('外部予約');
+    sheet.appendRow([
+      'reservationId', 'source', 'id', 'date', 'time', 'name',
+      'plan', 'people', 'options', 'total', 'payment',
+      'email', 'tel', 'remarks', 'bookingStatus', 'createdAt', 'savedAt'
+    ]);
+    Logger.log('外部予約シートを作成しました');
+  }
+  return sheet;
+}
+
+/**
+ * 外部予約シートから予約を読み込む（今日以降のみ）
+ */
+function getExternalSheetBookings() {
+  try {
+    const sheet = getExternalBookingsSheet();
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+    return data.slice(1)
+      .filter(row => {
+        if (!row[0]) return false;
+        const d = row[3] instanceof Date
+          ? Utilities.formatDate(row[3], 'Asia/Tokyo', 'yyyy-MM-dd')
+          : String(row[3]);
+        return d >= today;
+      })
+      .map(row => ({
+        reservationId: String(row[0]),
+        source:        String(row[1]),
+        id:            String(row[2]),
+        date:          row[3] instanceof Date ? Utilities.formatDate(row[3], 'Asia/Tokyo', 'yyyy-MM-dd') : String(row[3]),
+        time:          row[4] instanceof Date ? Utilities.formatDate(row[4], 'Asia/Tokyo', 'HH:mm') : String(row[4]),
+        name:          String(row[5]),
+        plan:          String(row[6]),
+        people:        String(row[7]),
+        options:       JSON.parse(row[8] || '[]'),
+        total:         parseInt(row[9]) || 0,
+        payment:       String(row[10]),
+        email:         String(row[11]),
+        tel:           String(row[12]),
+        remarks:       String(row[13]),
+        bookingStatus: String(row[14]),
+        createdAt:     String(row[15])
+      }));
+  } catch(e) {
+    Logger.log('外部予約取得エラー: ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * Gmail から解析した AJ/じゃらん予約をスプレッドシートに同期
+ * - 新規予約 → 追加
+ * - 既存予約の変更（bookingStatus='変更済' or 内容差分あり） → 行を更新
+ * - 戻り値: { added: N, updated: N }
+ */
+function syncExternalBookingsToSheet(gmailBookings) {
+  if (!gmailBookings || gmailBookings.length === 0) return { added: 0, updated: 0 };
+
+  const sheet = getExternalBookingsSheet();
+  const data = sheet.getDataRange().getValues();
+  const now = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+
+  // 既存の reservationId → 行番号（1-indexed）のマップ
+  const existingMap = {};
+  for (let i = 1; i < data.length; i++) {
+    const rid = String(data[i][0]);
+    if (rid) existingMap[rid] = i + 1; // シート行番号（1-indexed）
+  }
+
+  let added = 0;
+  let updated = 0;
+
+  for (const b of gmailBookings) {
+    if (!b.reservationId) continue;
+    const rowData = [
+      b.reservationId, b.source || '', b.id || '',
+      b.date || '', b.time || '', b.name || '',
+      b.plan || '', b.people || '',
+      JSON.stringify(b.options || []),
+      b.total || 0, b.payment || '',
+      b.email || '', b.tel || '', b.remarks || '',
+      b.bookingStatus || '', b.createdAt || '', now
+    ];
+
+    const existingRow = existingMap[b.reservationId];
+    if (existingRow) {
+      // 既存の行と比較し、変更があれば更新
+      const oldRow = data[existingRow - 1]; // 0-indexed
+      const oldDate = String(oldRow[3]);
+      const oldTime = String(oldRow[4]);
+      const oldStatus = String(oldRow[14]);
+      const oldTotal = parseInt(oldRow[9]) || 0;
+      if (b.date !== oldDate || b.time !== oldTime || b.bookingStatus !== oldStatus || b.total !== oldTotal) {
+        sheet.getRange(existingRow, 1, 1, rowData.length).setValues([rowData]);
+        updated++;
+        logAudit('UPDATE_EXTERNAL', {
+          reservationId: b.reservationId, source: b.source,
+          changes: `date:${oldDate}→${b.date}, time:${oldTime}→${b.time}, status:${oldStatus}→${b.bookingStatus}`
+        });
+      }
+    } else {
+      // 新規追加
+      sheet.appendRow(rowData);
+      added++;
+      logAudit('ADD_EXTERNAL', {
+        reservationId: b.reservationId, source: b.source,
+        date: b.date, time: b.time, name: b.name
+      });
+    }
+  }
+
+  if (added > 0 || updated > 0) {
+    Logger.log('外部予約同期: 追加=' + added + ', 更新=' + updated);
+  }
+  return { added, updated };
+}
+
+// =============================================================
+// ── 監査ログ（変更ログ） ──────────────────────────────────────
+// =============================================================
+function getAuditLogSheet() {
+  const ss = getManualSheet().getParent();
+  let sheet = ss.getSheetByName('変更ログ');
+  if (!sheet) {
+    sheet = ss.insertSheet('変更ログ');
+    sheet.appendRow(['timestamp', 'action', 'details', 'bookingCount']);
+    Logger.log('変更ログシートを作成しました');
+  }
+  return sheet;
+}
+
+/**
+ * 監査ログに1行追加
+ * @param {string} action - アクション種別 (ADD_EXTERNAL, UPDATE_EXTERNAL, SYNC, CACHE_REFRESH, etc.)
+ * @param {object} data   - 詳細データ
+ */
+function logAudit(action, data) {
+  try {
+    const sheet = getAuditLogSheet();
+    const now = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+    const details = typeof data === 'string' ? data : JSON.stringify(data);
+    const count = (data && data.count !== undefined) ? data.count : '';
+    sheet.appendRow([now, action, details, count]);
+  } catch(e) {
+    Logger.log('監査ログ書き込みエラー: ' + e.message);
+  }
+}
+
+// =============================================================
 // ── スロットブロック管理 ───────────────────────────────────────
 // =============================================================
 function getBlockedSlotsSheet() {
@@ -1342,11 +1532,20 @@ function doPost(e) {
     if (data.action === 'getBookings') {
       let bookings = getCachedBookings();
       if (!bookings || bookings.length === 0) {
-        bookings = getRawBookings();
+        bookings = getRawBookings(); // ← 内部で syncExternalBookingsToSheet() が呼ばれ永続化
         Logger.log('キャッシュミス → Gmail再取得: ' + bookings.length + '件');
         setCachedBookings(bookings);
       } else {
-        Logger.log('キャッシュヒット: ' + bookings.length + '件');
+        // キャッシュヒット時も外部予約シートから補完
+        const externalSheet = getExternalSheetBookings();
+        const cachedIds = new Set(bookings.map(b => b.reservationId));
+        const recovered = externalSheet.filter(b => !cachedIds.has(b.reservationId));
+        if (recovered.length > 0) {
+          bookings = [...bookings, ...recovered];
+          Logger.log('キャッシュヒット: ' + (bookings.length - recovered.length) + '件 + 外部シート補完: ' + recovered.length + '件');
+        } else {
+          Logger.log('キャッシュヒット: ' + bookings.length + '件');
+        }
       }
       const cancelledIds = getCancelledIds();
       const filtered = bookings.filter(b => !cancelledIds.has(b.reservationId));
@@ -1395,8 +1594,9 @@ function doPost(e) {
     // キャッシュ強制クリア
     if (data.action === 'clearCache') {
       clearCache();
-      const fresh = getRawBookings();
+      const fresh = getRawBookings(); // ← 内部で syncExternalBookingsToSheet() が呼ばれ永続化
       setCachedBookings(fresh);
+      logAudit('MANUAL_CACHE_CLEAR', { count: fresh.length, message: '管理者による手動キャッシュクリア' });
       output.setContent(JSON.stringify({ success: true, refreshed: fresh.length }));
       return output;
     }
@@ -1566,8 +1766,19 @@ function setupDailyTrigger() {
   Logger.log('毎朝8時（JST）のトリガーを設定しました');
 }
 function dailySync() {
-  try { clearCache(); const b = getAllBookings(); setCachedBookings(b); Logger.log('同期完了: ' + b.length + '件'); }
-  catch(e) { Logger.log('同期エラー: ' + e.message); notifyAdminError('dailySync', e.message); }
+  try {
+    clearCache();
+    const b = getAllBookings(); // ← getRawBookings() 内で syncExternalBookingsToSheet() が呼ばれ永続化
+    setCachedBookings(b);
+    logAudit('DAILY_SYNC', { count: b.length, message: '毎朝同期完了' });
+    Logger.log('同期完了: ' + b.length + '件');
+    // 毎朝バックアップも実行
+    backupBookings();
+  } catch(e) {
+    Logger.log('同期エラー: ' + e.message);
+    logAudit('DAILY_SYNC_ERROR', { error: e.message });
+    notifyAdminError('dailySync', e.message);
+  }
 }
 
 function setupHourlyTrigger() {
@@ -1576,8 +1787,17 @@ function setupHourlyTrigger() {
   Logger.log('1時間ごとのキャッシュ更新トリガーを設定しました');
 }
 function hourlySync() {
-  try { clearCache(); const b = getRawBookings(); setCachedBookings(b); Logger.log('キャッシュ更新完了: ' + b.length + '件'); }
-  catch(e) { Logger.log('キャッシュ更新エラー: ' + e.message); notifyAdminError('hourlySync', e.message); }
+  try {
+    clearCache();
+    const b = getRawBookings(); // ← 内部で syncExternalBookingsToSheet() が呼ばれ永続化される
+    setCachedBookings(b);
+    logAudit('HOURLY_SYNC', { count: b.length, message: '毎時キャッシュ更新完了' });
+    Logger.log('キャッシュ更新完了: ' + b.length + '件');
+  } catch(e) {
+    Logger.log('キャッシュ更新エラー: ' + e.message);
+    logAudit('HOURLY_SYNC_ERROR', { error: e.message });
+    notifyAdminError('hourlySync', e.message);
+  }
 }
 
 // =============================================================
@@ -1697,8 +1917,12 @@ function parsePeopleCount(peopleStr) {
 function getSlotAvailability(date) {
   const cached    = getCachedBookings() || [];
   const manual    = getManualSheetBookings();
+  const external  = getExternalSheetBookings();
   const cancelled = getCancelledIds();
-  const allForDate = [...cached, ...manual].filter(b =>
+  // キャッシュ + 外部予約シート を重複排除してマージ
+  const externalIds = new Set(cached.map(b => b.reservationId));
+  const recoveredExternal = external.filter(b => !externalIds.has(b.reservationId));
+  const allForDate = [...cached, ...recoveredExternal, ...manual].filter(b =>
     b.date === date && !cancelled.has(b.reservationId)
   );
   // ブロック済み時間帯を取得
@@ -1991,6 +2215,83 @@ function debugPeopleSection() {
     Logger.log('マッチ' + count + ': name=[' + m[1] + '] count=' + m[2] + ' unit=' + m[3] + ' price=' + (m[4]||m[5]||'なし'));
   }
   if (count === 0) Logger.log('★ マッチなし — 正規表現がセクションにヒットしていません');
+}
+
+// =============================================================
+// ── 初回マイグレーション ───────────────────────────────────────
+// GASエディタで1回だけ実行: 既存のGmail予約を外部予約シートに保存
+// =============================================================
+function migrateExternalBookings() {
+  Logger.log('=== 外部予約マイグレーション開始 ===');
+  const jaran = getJaranBookings();
+  const aj    = getActivityJapanBookings();
+  const all   = [...jaran, ...aj];
+  Logger.log('Gmail解析: じゃらん=' + jaran.length + ', AJ=' + aj.length + ', 合計=' + all.length);
+
+  const result = syncExternalBookingsToSheet(all);
+  logAudit('MIGRATION', {
+    jaran: jaran.length, aj: aj.length,
+    added: result.added, updated: result.updated
+  });
+  Logger.log('マイグレーション完了: 追加=' + result.added + ', 更新=' + result.updated);
+}
+
+// =============================================================
+// ── 予約データバックアップ ─────────────────────────────────────
+// 全予約のスナップショットをバックアップシートに保存
+// dailySyncから自動実行 or 手動実行
+// =============================================================
+function backupBookings() {
+  try {
+    const ss = getManualSheet().getParent();
+    let sheet = ss.getSheetByName('バックアップ');
+    if (!sheet) {
+      sheet = ss.insertSheet('バックアップ');
+      sheet.appendRow(['snapshotAt', 'type', 'count', 'data']);
+      Logger.log('バックアップシートを作成しました');
+    }
+
+    const now = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+
+    // 外部予約のバックアップ
+    const external = getExternalSheetBookings();
+    if (external.length > 0) {
+      const extJson = JSON.stringify(external);
+      if (extJson.length < 45000) {
+        sheet.appendRow([now, '外部予約', external.length, extJson]);
+      } else {
+        sheet.appendRow([now, '外部予約', external.length, '(データサイズ超過: ' + extJson.length + 'bytes)']);
+      }
+    }
+
+    // 手動予約のバックアップ
+    const manual = getManualSheetBookings();
+    if (manual.length > 0) {
+      const manJson = JSON.stringify(manual);
+      if (manJson.length < 45000) {
+        sheet.appendRow([now, '手動予約', manual.length, manJson]);
+      } else {
+        sheet.appendRow([now, '手動予約', manual.length, '(データサイズ超過: ' + manJson.length + 'bytes)']);
+      }
+    }
+
+    // 古い行（30日以上前）を削除
+    const data = sheet.getDataRange().getValues();
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffStr = Utilities.formatDate(cutoff, 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][0]) < cutoffStr) {
+        sheet.deleteRow(i + 1);
+      }
+    }
+
+    logAudit('BACKUP', { external: external.length, manual: manual.length });
+    Logger.log('バックアップ完了: 外部=' + external.length + ', 手動=' + manual.length);
+  } catch(e) {
+    Logger.log('バックアップエラー: ' + e.message);
+    logAudit('BACKUP_ERROR', { error: e.message });
+  }
 }
 
 // じゃらんメールの生テキストを確認するデバッグ関数
