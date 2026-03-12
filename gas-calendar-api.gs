@@ -1770,6 +1770,8 @@ function dailySync() {
     clearCache();
     const b = getAllBookings(); // ← getRawBookings() 内で syncExternalBookingsToSheet() が呼ばれ永続化
     setCachedBookings(b);
+    // dailySync でのGmail同期タイムスタンプを更新（直後のhourlySync でGmailを2重呼び出ししない）
+    PropertiesService.getScriptProperties().setProperty('last_gmail_sync_ts', String(new Date().getTime()));
     logAudit('DAILY_SYNC', { count: b.length, message: '毎朝同期完了' });
     Logger.log('同期完了: ' + b.length + '件');
     // 毎朝バックアップも実行
@@ -1789,10 +1791,30 @@ function setupHourlyTrigger() {
 function hourlySync() {
   try {
     clearCache();
-    const b = getRawBookings(); // ← 内部で syncExternalBookingsToSheet() が呼ばれ永続化される
+    // ── Gmail クォータ節約 ─────────────────────────────────────
+    // 外部予約シートに2時間以内のGmail同期データがあればGmailを呼ばない
+    // → 1日24回→最大12回のGmail呼び出しに削減
+    const props = PropertiesService.getScriptProperties();
+    const lastSyncTs = props.getProperty('last_gmail_sync_ts');
+    const now = new Date().getTime();
+    const twoHours = 2 * 60 * 60 * 1000;
+    let b;
+    if (lastSyncTs && (now - parseInt(lastSyncTs)) < twoHours) {
+      // Gmailスキップ: 外部予約シートからキャッシュ再構築
+      const sheetBookings = getExternalSheetBookings();
+      const cancelledIds  = getCancelledIds();
+      b = sheetBookings.filter(bk => !cancelledIds.has(bk.reservationId));
+      const elapsed = Math.round((now - parseInt(lastSyncTs)) / 60000);
+      Logger.log('hourlySync: Gmailスキップ（前回Gmail同期から' + elapsed + '分）, シートから' + b.length + '件');
+      logAudit('HOURLY_SYNC_SHEET_ONLY', { count: b.length, minutesSinceGmail: elapsed });
+    } else {
+      // Gmail呼び出し + シート永続化
+      b = getRawBookings();
+      props.setProperty('last_gmail_sync_ts', String(now));
+      logAudit('HOURLY_SYNC', { count: b.length, message: 'Gmail同期完了' });
+      Logger.log('キャッシュ更新完了(Gmail): ' + b.length + '件');
+    }
     setCachedBookings(b);
-    logAudit('HOURLY_SYNC', { count: b.length, message: '毎時キャッシュ更新完了' });
-    Logger.log('キャッシュ更新完了: ' + b.length + '件');
   } catch(e) {
     Logger.log('キャッシュ更新エラー: ' + e.message);
     logAudit('HOURLY_SYNC_ERROR', { error: e.message });
