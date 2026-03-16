@@ -822,12 +822,12 @@ function getManualSheet() {
   let sheet = ss.getSheetByName('手動予約');
   if (!sheet) {
     sheet = ss.insertSheet('手動予約');
-    sheet.appendRow(['id','date','time','name','plan','channel','people','options','total','payment','tel','email','remarks','createdAt']);
+    sheet.appendRow(['id','date','time','name','plan','channel','people','options','total','payment','tel','email','remarks','createdAt','visitStatus','visitChargeId','statusUpdatedAt']);
   }
   return sheet;
 }
 
-function getManualSheetBookings() {
+function getManualSheetBookings(includePast) {
   try {
     const sheet = getManualSheet();
     const data = sheet.getDataRange().getValues();
@@ -836,6 +836,7 @@ function getManualSheetBookings() {
     return data.slice(1)
       .filter(row => {
         if (!row[0]) return false;
+        if (includePast) return true;
         const d = row[1] instanceof Date
           ? Utilities.formatDate(row[1], 'Asia/Tokyo', 'yyyy-MM-dd')
           : String(row[1]);
@@ -843,6 +844,7 @@ function getManualSheetBookings() {
       })
       .map(row => {
         const src = String(row[5]) === 'ウェブサイト' && String(row[0]).startsWith('HP-') ? 'WEB' : 'MANUAL';
+        const vs = String(row[14] || 'confirmed');
         return {
           id: String(row[0]), source: src,
           date: row[1] instanceof Date ? Utilities.formatDate(row[1], 'Asia/Tokyo', 'yyyy-MM-dd') : String(row[1]),
@@ -853,7 +855,10 @@ function getManualSheetBookings() {
           total: parseInt(row[8]) || 0,
           payment: String(row[9]), tel: String(row[10]), email: String(row[11]),
           remarks: String(row[12]), createdAt: String(row[13]),
-          reservationId: String(row[0]), bookingStatus: src === 'WEB' ? 'ウェブ予約' : '手動入力'
+          reservationId: String(row[0]), bookingStatus: src === 'WEB' ? 'ウェブ予約' : '手動入力',
+          visitStatus: vs === '' ? 'confirmed' : vs,
+          visitChargeId: String(row[15] || ''),
+          statusUpdatedAt: String(row[16] || '')
         };
       });
   } catch(e) { Logger.log('手動予約取得エラー: ' + e.message); return []; }
@@ -867,7 +872,10 @@ function saveManualToSheet(booking) {
     JSON.stringify(booking.options || []),
     booking.total || 0, booking.payment || '',
     booking.tel || '', booking.email || '',
-    booking.remarks || '', booking.createdAt
+    booking.remarks || '', booking.createdAt,
+    booking.visitStatus || 'confirmed',
+    booking.chargeId || '',
+    ''
   ]);
 }
 
@@ -1549,7 +1557,7 @@ function doPost(e) {
       }
       const cancelledIds = getCancelledIds();
       const filtered = bookings.filter(b => !cancelledIds.has(b.reservationId));
-      const manualBookings = getManualSheetBookings();
+      const manualBookings = getManualSheetBookings(true);
       const allBookings = [...filtered, ...manualBookings].sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
         return a.time.localeCompare(b.time);
@@ -1634,6 +1642,16 @@ function doPost(e) {
       return output;
     }
 
+    // ステータス更新（来店済み / 有料キャンセル / 無料キャンセル）
+    if (data.action === 'updateBookingStatus') {
+      if (!data.bookingId || !data.newStatus) throw new Error('bookingId と newStatus が必要です');
+      const allowed = ['visited', 'paid-cancel', 'free-cancel'];
+      if (allowed.indexOf(data.newStatus) === -1) throw new Error('無効なステータス: ' + data.newStatus);
+      const result = processBookingStatusUpdate(data.bookingId, data.newStatus);
+      output.setContent(JSON.stringify({ success: true, ...result }));
+      return output;
+    }
+
     output.setContent(JSON.stringify({ success: false, error: 'Unknown action' }));
   } catch(err) {
     notifyAdminError('doPost', err.message, JSON.stringify(data || {}).substring(0, 300));
@@ -1706,6 +1724,94 @@ function refundChargePayjp(chargeId) {
     Logger.log('Pay.jp refund exception: ' + e.message);
     notifyAdminError('REFUND_FAILED', e.message, chargeId);
   }
+}
+
+// =============================================================
+// ── 来店ステータス更新処理 ──────────────────────────────────────
+// =============================================================
+
+/**
+ * 予約ステータスを更新（手動予約シート）
+ * @param {string} bookingId - 予約ID
+ * @param {string} newStatus - visited | paid-cancel | free-cancel
+ * @returns {{ status, charged, chargeId, refunded }}
+ */
+function processBookingStatusUpdate(bookingId, newStatus) {
+  const sheet = getManualSheet();
+  const data = sheet.getDataRange().getValues();
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(bookingId)) {
+      rowIndex = i;
+      break;
+    }
+  }
+  if (rowIndex === -1) throw new Error('予約が見つかりません: ' + bookingId);
+
+  const row = data[rowIndex];
+  const payment = String(row[9]);
+  const existingChargeId = String(row[15] || '');
+  const now = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss');
+  const total = parseInt(row[8]) || 0;
+  const bookingName = String(row[3]);
+  const bookingEmail = String(row[11]);
+  const bookingDate = row[1] instanceof Date ? Utilities.formatDate(row[1], 'Asia/Tokyo', 'yyyy-MM-dd') : String(row[1]);
+  const bookingTime = row[2] instanceof Date ? Utilities.formatDate(row[2], 'Asia/Tokyo', 'HH:mm') : String(row[2]);
+  const bookingPlan = String(row[4]);
+  const bookingPeople = String(row[6]);
+
+  let charged = false;
+  let newChargeId = existingChargeId;
+  let refunded = false;
+
+  // 来店済み → カード払い客のみ決済不要（予約時に決済済み）
+  // 有料キャンセル → カード払い客はすでに決済済みなので追加決済不要
+  // 無料キャンセル → カード払い客は返金
+
+  if (newStatus === 'free-cancel' && payment === 'card' && existingChargeId) {
+    // 無料キャンセル + カード決済済み → 返金
+    try {
+      refundChargePayjp(existingChargeId);
+      refunded = true;
+      Logger.log('無料キャンセル返金: ' + existingChargeId);
+    } catch(e) {
+      Logger.log('返金エラー: ' + e.message);
+      notifyAdminError('FREE_CANCEL_REFUND', e.message, bookingId + ' / charge=' + existingChargeId);
+    }
+  }
+
+  // シート更新: visitStatus (col 15), visitChargeId (col 16), statusUpdatedAt (col 17)
+  sheet.getRange(rowIndex + 1, 15).setValue(newStatus);
+  sheet.getRange(rowIndex + 1, 16).setValue(newChargeId);
+  sheet.getRange(rowIndex + 1, 17).setValue(now);
+
+  // 監査ログ
+  logAudit('STATUS_UPDATE', {
+    bookingId: bookingId,
+    newStatus: newStatus,
+    payment: payment,
+    charged: charged,
+    refunded: refunded
+  });
+
+  // 来店済みの場合、感謝メール送信
+  if (newStatus === 'visited' && bookingEmail) {
+    try {
+      sendThankYouEmail({
+        name: bookingName,
+        email: bookingEmail,
+        date: bookingDate,
+        time: bookingTime,
+        plan: bookingPlan,
+        people: bookingPeople
+      });
+    } catch(e) {
+      Logger.log('感謝メール送信エラー: ' + e.message);
+      notifyAdminError('THANK_YOU_EMAIL', e.message, bookingId);
+    }
+  }
+
+  return { status: newStatus, charged, chargeId: newChargeId, refunded };
 }
 
 // 同一コンテキストのエラーは1時間に1回だけ管理者にメール送信
@@ -1920,6 +2026,49 @@ function sendAdminNotification(booking) {
     GmailApp.sendEmail(adminEmail, subject, body);
   } catch(e) {
     Logger.log('管理者通知メール送信エラー: ' + e.message);
+  }
+}
+
+// =============================================================
+// ── 来店感謝メール + Google口コミ誘導 ─────────────────────────
+// =============================================================
+function sendThankYouEmail(booking) {
+  if (!booking.email) return;
+  try {
+    const reviewUrl = PropertiesService.getScriptProperties().getProperty('GOOGLE_REVIEW_URL') || '';
+    const dateStr = formatBookingDate(booking.date);
+    const subject = '【きものレンタル あかり】ご来店ありがとうございました';
+    const body = `${booking.name} 様
+
+この度はきものレンタル あかりにご来店いただき、誠にありがとうございました。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+　ご利用内容
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+来店日時　：${dateStr} ${booking.time}
+プラン　　：${booking.plan}
+人数　　　：${booking.people}
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+金沢での着物体験はいかがでしたでしょうか？
+お客様のお声が、私たちの励みになります。${reviewUrl ? `
+
+よろしければ、Googleでの口コミをお願いいたします：
+${reviewUrl}` : ''}
+
+またのお越しを心よりお待ちしております。
+
+──────────────────────────────
+きものレンタル あかり
+TEL：076-201-8119
+定休日：水曜日
+※ このメールは自動送信です。ご返信はお受けできません。`;
+
+    GmailApp.sendEmail(booking.email, subject, body);
+    Logger.log('感謝メール送信: ' + booking.email);
+  } catch(e) {
+    Logger.log('感謝メール送信エラー: ' + e.message);
+    throw e;
   }
 }
 
