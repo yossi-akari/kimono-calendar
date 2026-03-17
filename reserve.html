@@ -456,6 +456,12 @@ let optQty   = {};
 let slotAvailability = {};
 let currentLang = 'ja';
 
+// ── 店舗設定（GASから動的取得、フォールバック用デフォルト） ──
+let SHOP_CONFIG = null;
+let MALE_PRICE  = 4400;
+let CHILD_PRICE = 3300;
+let CLOSED_DAY  = 3; // 0=日,...,3=水
+
 // ── 翻訳データ ────────────────────────────────────────
 const I18N = {
   ja: {
@@ -720,8 +726,8 @@ const I18N = {
   },
 };
 
-// ── プラン定義 ────────────────────────────────────────
-const PLAN_DEFS = [
+// ── プラン定義（GASから動的に上書きされる） ──────────────
+let PLAN_DEFS = [
   { name: 'ベーシック',   price: 2970,  isEstimate: false, badge: 'BASIC',          badgeClass: '',
     ja: { displayName: 'ベーシック',   note: 'お得に着物街歩き。あらかじめ帯もコーディネートしてあるプラン' },
     en: { displayName: 'Basic',        note: 'Best value for a kimono city stroll. Obi is pre-coordinated.' },
@@ -756,8 +762,8 @@ const PLAN_DEFS = [
     zh: { displayName: '限時方案',    note: '限時優惠，超值和服租借活動。' } },
 ];
 
-// ── オプション定義 ────────────────────────────────────
-const OPT_DEFS = [
+// ── オプション定義（GASから動的に上書きされる） ──────────
+let OPT_DEFS = [
   { name: 'スタジオ撮影（データ渡し）',             price: 4950,  qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
     en: { name: 'Studio Photo (Digital Data)',           qtyUnit: 'session' },
     zh: { name: '攝影工作室（數位檔案）',                 qtyUnit: '次' } },
@@ -810,6 +816,36 @@ const OPT_DEFS = [
     en: { name: 'Sightseeing Taxi',      note: '2-hour unlimited ride. Ask the driver for course options.', unit: '/vehicle (4 persons)', qtyUnit: 'vehicle' },
     zh: { name: '觀光計程車',            note: '2小時暢遊，路線請告知司機。',           unit: '/台（4名）', qtyUnit: '台' } },
 ];
+
+// ── 店舗設定をGASから取得 ─────────────────────────────
+async function loadShopConfig() {
+  try {
+    const res = await fetch(`${GAS_URL}?key=${ACCESS_KEY}&action=getConfig`);
+    const data = await res.json();
+    if (data.success && data.config) {
+      SHOP_CONFIG = data.config;
+      if (data.config.plans)   PLAN_DEFS  = data.config.plans;
+      if (data.config.options) OPT_DEFS   = data.config.options;
+      if (data.config.malePrice != null)  MALE_PRICE  = data.config.malePrice;
+      if (data.config.childPrice != null) CHILD_PRICE = data.config.childPrice;
+      if (data.config.closedDayOfWeek != null) CLOSED_DAY = data.config.closedDayOfWeek;
+      // 時間枠selectを動的生成
+      if (data.config.timeSlots) {
+        const sel = document.getElementById('visitTime');
+        const placeholder = sel.querySelector('option[value=""]');
+        sel.innerHTML = '';
+        if (placeholder) sel.appendChild(placeholder);
+        data.config.timeSlots.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t; opt.textContent = t;
+          sel.appendChild(opt);
+        });
+      }
+    }
+  } catch(e) {
+    console.warn('店舗設定の取得に失敗（デフォルト値を使用）:', e);
+  }
+}
 
 // ── 翻訳ヘルパー ─────────────────────────────────────
 const tl = () => I18N[currentLang];
@@ -1037,7 +1073,7 @@ function onDateChange() {
   const errEl = document.getElementById('dateError');
   if (val) {
     const day = new Date(val + 'T00:00:00').getDay();
-    if (day === 3) {
+    if (day === CLOSED_DAY) {
       errEl.style.display = 'block';
       document.getElementById('visitDate').value = '';
       slotAvailability = {};
@@ -1252,7 +1288,7 @@ function changeQty(name, price, dir) {
 // ── 金額計算・サマリー更新 ────────────────────────────
 function calcBase() {
   if (plan.isEstimate) return null;
-  return plan.price * people.female + 4400 * people.male + 3300 * people.child;
+  return plan.price * people.female + MALE_PRICE * people.male + CHILD_PRICE * people.child;
 }
 
 function fmt(n) { return `¥${n.toLocaleString()}`; }
@@ -1658,10 +1694,13 @@ function showToast(message, type) {
   inp.addEventListener('blur',  function() { this.style.borderColor = 'var(--line)'; });
 })();
 
-// 初期化
-buildPlanCards();
-buildOptions();
-updateSummary();
+// 初期化（GASからconfig取得後にUI構築）
+(async () => {
+  await loadShopConfig();
+  buildPlanCards();
+  buildOptions();
+  updateSummary();
+})();
 </script>
 </body>
 </html>

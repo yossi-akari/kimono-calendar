@@ -201,6 +201,139 @@ function verifyOtpCode(inputOtp) {
 const SLOT_CAPACITY = 1;
 const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
 
+// =============================================================
+// ── 店舗設定マスター（料金・プラン・オプション等）───────────────
+// HTML側はこのデータをAPIで取得し動的に描画する。
+// 変更時はここを編集して clasp push → clasp deploy のみでOK。
+// =============================================================
+function getShopConfig() {
+  return {
+    // ── 営業情報 ──
+    timeSlots: ALL_TIMES,
+    closedDayOfWeek: 3,  // 0=日,1=月,...,3=水
+    shopPhone: '076-201-8119',
+
+    // ── 料金体系 ──
+    malePrice: 4400,
+    childPrice: 3300,
+
+    // ── プラン定義 ──
+    plans: [
+      { name: 'ベーシック',   price: 2970,  isEstimate: false, badge: 'BASIC',          badgeClass: '',
+        ja: { displayName: 'ベーシック',   note: 'お得に着物街歩き。あらかじめ帯もコーディネートしてあるプラン' },
+        en: { displayName: 'Basic',        note: 'Best value for a kimono city stroll. Obi is pre-coordinated.' },
+        zh: { displayName: '基本方案',     note: '超值和服街道漫步，腰帶已預先搭配完成。' } },
+      { name: 'スタンダード', price: 3960,  isEstimate: false, badge: 'STANDARD',       badgeClass: '',
+        ja: { displayName: 'スタンダード', note: '豊富なラインナップから<br>お好みの一着を' },
+        en: { displayName: 'Standard',     note: 'Choose your favorite from our wide selection.' },
+        zh: { displayName: '標準方案',     note: '從豐富的款式中，挑選您心儀的一套。' } },
+      { name: 'プレミアム',   price: 4950,  isEstimate: false, badge: 'PREMIUM',        badgeClass: 'badge-gold',
+        ja: { displayName: 'プレミアム',   note: '上質な着物・帯で<br>特別感ある装いを' },
+        en: { displayName: 'Premium',      note: 'Dress in premium kimono & obi for a truly special look.' },
+        zh: { displayName: '優質方案',     note: '穿上高品質和服與腰帶，感受特別的優雅。' } },
+      { name: '撮影付き',    price: 2970,  isEstimate: false, badge: 'PHOTO',          badgeClass: 'badge-gold',
+        ja: { displayName: '撮影付き',    note: 'スタジオやロケーション撮影希望の方向けのプラン' },
+        en: { displayName: 'With Photo',  note: 'Designed for customers who want studio or location photography.' },
+        zh: { displayName: '含攝影方案',  note: '適合希望進行攝影工作室或外景拍攝的顧客。' } },
+      { name: '加賀友禅',    price: 41800, isEstimate: false, badge: 'KAGA YUZEN',     badgeClass: 'badge-kaga',
+        ja: { displayName: '加賀友禅',    note: '伝統工芸・加賀友禅の<br>本物の美しさを体感' },
+        en: { displayName: 'Kaga Yuzen',  note: 'Experience the authentic beauty of Kaga Yuzen traditional craft.' },
+        zh: { displayName: '加賀友禅',   note: '親身體驗加賀友禅這項傳統工藝之美。' } },
+      { name: '成人式下見',  price: 0,     isEstimate: true,  badge: 'SEIJIN-SHIKI',  badgeClass: 'badge-green',
+        ja: { displayName: '成人式下見',  note: '振袖をじっくり<br>ご試着いただけます' },
+        en: { displayName: 'Coming-of-Age Preview', note: 'Try on furisode at your leisure to find your perfect style.' },
+        zh: { displayName: '成人式試穿',  note: '請從容地試穿振袖，找到您最喜歡的款式。' } },
+      { name: '卒業式下見',  price: 0,     isEstimate: true,  badge: 'SOTSUGYOU-SHIKI', badgeClass: 'badge-green',
+        ja: { displayName: '卒業式下見',  note: '袴・着物コーディネートを<br>ご提案いたします' },
+        en: { displayName: 'Graduation Preview', note: "We'll help coordinate your hakama or kimono ensemble." },
+        zh: { displayName: '畢業式試穿',  note: '我們將為您提供袴・和服的搭配建議。' } },
+      { name: '期間限定',    price: 2970,  isEstimate: false, badge: 'LIMITED',        badgeClass: 'badge-red',
+        ja: { displayName: '期間限定プラン', note: '期間限定キャンペーンでお得に着物レンタル' },
+        en: { displayName: 'Limited Time', note: 'A special limited-time campaign for budget-friendly kimono rental.' },
+        zh: { displayName: '限時方案',    note: '限時優惠，超值和服租借活動。' } },
+    ],
+
+    // ── オプション定義 ──
+    options: [
+      { name: 'スタジオ撮影（データ渡し）',             price: 4950,  qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+        en: { name: 'Studio Photo (Digital Data)',           qtyUnit: 'session' },
+        zh: { name: '攝影工作室（數位檔案）',                 qtyUnit: '次' } },
+      { name: 'スタジオ撮影（データ＋2Lプリント2枚）',  price: 7700,  qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+        en: { name: 'Studio Photo (Digital + 2 Prints)',     qtyUnit: 'session' },
+        zh: { name: '攝影工作室（數位+2張相片）',              qtyUnit: '次' } },
+      { name: 'ロケーション撮影 ブロンズ（50カット）',  price: 22000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+        en: { name: 'Location Photo Bronze (50 shots)',      qtyUnit: 'session' },
+        zh: { name: '外景攝影 銅牌（50張）',                  qtyUnit: '次' } },
+      { name: 'ロケーション撮影 シルバー（100カット）', price: 33000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+        en: { name: 'Location Photo Silver (100 shots)',     qtyUnit: 'session' },
+        zh: { name: '外景攝影 銀牌（100張）',                 qtyUnit: '次' } },
+      { name: 'ロケーション撮影 ゴールド（150カット）', price: 55000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
+        en: { name: 'Location Photo Gold (150 shots)',       qtyUnit: 'session' },
+        zh: { name: '外景攝影 金牌（150張）',                 qtyUnit: '次' } },
+      { name: 'ヘアセット',           note: '髪飾りも料金に含まれます',   price: 1650, unit: '/名', qtyUnit: '名',
+        en: { name: 'Hair Styling',          note: 'Hair accessories included',         unit: '/person', qtyUnit: 'person' },
+        zh: { name: '髮型設計',              note: '含髮飾',                             unit: '/名', qtyUnit: '名' } },
+      { name: 'フォーマルヘアセット', note: '髪飾りも料金に含まれます',   price: 4400, unit: '/名', qtyUnit: '名', kagaOnly: true,
+        en: { name: 'Formal Hair Styling',   note: 'Hair accessories included',         unit: '/person', qtyUnit: 'person' },
+        zh: { name: '正式髮型設計',          note: '含髮飾',                             unit: '/名', qtyUnit: '名' } },
+      { name: '髪飾り',               note: '',                            price: 550,  unit: '/個', qtyUnit: '個',
+        en: { name: 'Hair Accessories',      note: '',                                  unit: '/piece', qtyUnit: 'piece' },
+        zh: { name: '髮飾',                  note: '',                                  unit: '/個', qtyUnit: '個' } },
+      { name: 'メンズヘアセット',     note: '美容師によるヘアセット',     price: 880,  unit: '/名', qtyUnit: '名', maleOnly: true,
+        en: { name: "Men's Hair Styling",    note: 'Hair set by a professional stylist', unit: '/person', qtyUnit: 'person' },
+        zh: { name: '男士髮型設計',          note: '由專業美容師提供',                    unit: '/名', qtyUnit: '名' } },
+      { name: 'フルメイク',           note: '',                            price: 4400, unit: '/名', qtyUnit: '名',
+        en: { name: 'Full Makeup',           note: '',                                  unit: '/person', qtyUnit: 'person' },
+        zh: { name: '全臉彩妝',              note: '',                                  unit: '/名', qtyUnit: '名' } },
+      { name: '名古屋帯',         note: '帯を名古屋帯に変更できます',         price: 550,  unit: '',    qtyUnit: '個',
+        en: { name: 'Nagoya-obi Upgrade',    note: 'Change the obi to Nagoya-obi',      unit: '',    qtyUnit: 'item' },
+        zh: { name: '升級名古屋帶',          note: '可更換為名古屋帶',                    unit: '',    qtyUnit: '個' } },
+      { name: 'ぬくぬく肌着',     note: '冬の防寒用肌着（上下セット）',       price: 550,  unit: '/名', qtyUnit: '名',
+        en: { name: 'Winter Thermal Wear',   note: 'Winter thermal undergarment set (top & bottom)', unit: '/person', qtyUnit: 'person' },
+        zh: { name: '冬季保暖內衣',          note: '冬季保暖內衣（上下套裝）',             unit: '/名', qtyUnit: '名' } },
+      { name: 'コート・ショール', note: '羽織れる防寒アイテム',               price: 550,  unit: '/名', qtyUnit: '名',
+        en: { name: 'Coat / Shawl',          note: 'Wearable outerwear for cold weather', unit: '/person', qtyUnit: 'person' },
+        zh: { name: '外套・披肩',            note: '禦寒外衣',                            unit: '/名', qtyUnit: '名' } },
+      { name: '翌日返却',         note: 'お客様が持ち出し→翌日返却（火曜日来店は選択不可）', price: 1100, unit: '', qtyUnit: '個',
+        en: { name: 'Next-day Return',       note: 'You take home & return the next day (not available on Tue visits)', unit: '', qtyUnit: 'item' },
+        zh: { name: '隔日歸還',              note: '顧客帶回後隔日歸還（週二來店不可選）', unit: '', qtyUnit: '個' } },
+      { name: 'ホテル返却',       note: 'スタッフがホテルまでお届け。フロントに返却。（火曜日来店は選択不可）', price: 1650, unit: '', qtyUnit: '個',
+        en: { name: 'Hotel Return',          note: 'Staff delivers to hotel; return at front desk (not available on Tue visits)', unit: '', qtyUnit: 'item' },
+        zh: { name: '飯店歸還',              note: '工作人員送至飯店，於前台歸還（週二來店不可選）', unit: '', qtyUnit: '個' } },
+      { name: '人力車',           note: '30分コース。コースは事前相談可能。',  price: 8800, unit: '/台（2名）', qtyUnit: '台', wide: true,
+        en: { name: 'Rickshaw Ride',         note: '30-min course. Route can be discussed in advance.', unit: '/vehicle (2 persons)', qtyUnit: 'vehicle' },
+        zh: { name: '人力車體驗',            note: '30分鐘路線，可事先商量路線。',          unit: '/台（2名）', qtyUnit: '台' } },
+      { name: '観光タクシー',     note: '2時間乗り放題。コースはドライバーにお申し出ください。', price: 9900, unit: '/台（4名）', qtyUnit: '台', wide: true,
+        en: { name: 'Sightseeing Taxi',      note: '2-hour unlimited ride. Ask the driver for course options.', unit: '/vehicle (4 persons)', qtyUnit: 'vehicle' },
+        zh: { name: '觀光計程車',            note: '2小時暢遊，路線請告知司機。',           unit: '/台（4名）', qtyUnit: '台' } },
+    ],
+
+    // ── 管理画面用オプション定義（kimono-booking.html）──
+    adminOptions: [
+      { id: 'o1',  name: 'スタンダード着物にアップグレード',     plans: ['ベーシック','期間限定'],                     price: 990 },
+      { id: 'o2a', name: 'プレミアム着物にアップグレード（ベーシック/期間限定から）', plans: ['ベーシック','期間限定'], price: 1980 },
+      { id: 'o2b', name: 'プレミアム着物にアップグレード（スタンダードから）',       plans: ['スタンダード'],         price: 990 },
+      { id: 'o3',  name: 'ヘアセット',           plans: null, notForPlans: ['加賀友禅'], price: 1650 },
+      { id: 'o18', name: 'フォーマルヘアセット', plans: ['加賀友禅'],                    price: 4400 },
+      { id: 'o16', name: '髪飾り',               plans: null,                            price: 550  },
+      { id: 'o4',  name: 'メンズヘアセット',     plans: null,                            price: 880  },
+      { id: 'o19', name: 'フルメイク',           plans: null,                            price: 4400 },
+      { id: 'o17', name: '名古屋帯',             plans: null,                            price: 550 },
+      { id: 'o5',  name: 'ぬくぬく肌着',         plans: null,                            price: 550 },
+      { id: 'o6',  name: 'コート・ショール',     plans: null,                            price: 550 },
+      { id: 'o7',  name: '翌日返却',             plans: null,                            price: 1100 },
+      { id: 'o8',  name: 'ホテル返却',           plans: null,                            price: 1650 },
+      { id: 'o9',  name: '人力車',               plans: null,                            price: 8800 },
+      { id: 'o10', name: 'タクシー',             plans: null,                            price: 9900 },
+      { id: 'o11', name: 'スタジオ撮影データ渡し',               plans: null, price: 4950,  aliases: ['フォトスタジオ【データ渡し】'] },
+      { id: 'o12', name: 'スタジオ撮影データ＋プリント',         plans: null, price: 7700,  aliases: ['プリント渡し'] },
+      { id: 'o13', name: 'ロケーション撮影ブロンズ50枚渡し',     plans: null, price: 22000, aliases: ['ブロンズプラン'] },
+      { id: 'o14', name: 'ロケーション撮影シルバー100枚渡し',    plans: null, price: 33000, aliases: ['シルバープラン'] },
+      { id: 'o15', name: 'ロケーション撮影ゴールド150枚渡し',    plans: null, price: 55000, aliases: ['ゴールドプラン'] },
+    ],
+  };
+}
+
 // サイトのベースURL（予約確認メールのリンクに使用）
 // 例: 'https://akari-kanazawa.jp' → Script Properties の SITE_BASE_URL で設定
 function getSiteBaseUrl() {
@@ -221,6 +354,17 @@ function doGet(e) {
   }
 
   const action = e.parameter.action;
+
+  // ── 店舗設定（公開・認証不要の情報） ──────────────────────────
+  if (action === 'getConfig') {
+    try {
+      const config = getShopConfig();
+      output.setContent(JSON.stringify({ success: true, config }));
+    } catch(err) {
+      output.setContent(JSON.stringify({ success: false, error: err.message }));
+    }
+    return output;
+  }
 
   // ── 公開エンドポイント（顧客向け・ACCESS_KEY のみ） ──────────
   if (action === 'getAvailability') {

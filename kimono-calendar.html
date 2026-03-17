@@ -1254,9 +1254,10 @@ let activeBookingId = null;
 let settings = {};
 let rpCashSale = 0;       // 現金売上（日報モーダルで事務所持ち帰り自動計算用）
 let _rpSaveTimer = null;  // 日報自動保存タイマー
-const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
-const TOTAL_SLOTS = ALL_TIMES.length; // 1日のタイムスロット総数 = 11
+let ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
+let TOTAL_SLOTS = ALL_TIMES.length; // 1日のタイムスロット総数 = 11
 let defaultLimit = TOTAL_SLOTS; // 管理者未設定時はスロット総数がデフォルト上限
+let CLOSED_DAY = 3; // 定休日の曜日（0=日,...,3=水）
 
 // XSSサニタイズ: HTMLエスケープ
 function esc(str) {
@@ -2682,7 +2683,7 @@ function printDailyReport(manual = {}) {
   let businessDayCount = 0;
   const countDay = new Date(d.getFullYear(), d.getMonth(), 1);
   while (countDay <= d) {
-    if (countDay.getDay() !== 3) businessDayCount++; // 3=水曜日をスキップ
+    if (countDay.getDay() !== CLOSED_DAY) businessDayCount++; // 定休日をスキップ
     countDay.setDate(countDay.getDate() + 1);
   }
 
@@ -2947,15 +2948,36 @@ async function doProcessRequest(requestId, decision, adminNote) {
   }
 }
 
-// ── 初期化 ────────────────────────────────────────
-loadBookings();
-renderCalendar();
-renderSidePanel();
-// GASへのアクセスは認証済みの場合のみ実行
-if (localStorage.getItem('akariAdminToken')) {
-  refreshBookings();
-  startAutoRefresh();
+// ── GASから店舗設定を取得 ──
+async function loadShopConfigForCalendar() {
+  try {
+    const res = await fetch(`${GAS_URL}?key=&action=getConfig`);
+    const data = await res.json();
+    if (data.success && data.config) {
+      if (data.config.timeSlots) {
+        ALL_TIMES = data.config.timeSlots;
+        TOTAL_SLOTS = ALL_TIMES.length;
+        defaultLimit = TOTAL_SLOTS;
+      }
+      if (data.config.closedDayOfWeek != null) CLOSED_DAY = data.config.closedDayOfWeek;
+    }
+  } catch(e) {
+    console.warn('店舗設定の取得に失敗:', e);
+  }
 }
+
+// ── 初期化 ────────────────────────────────────────
+(async () => {
+  await loadShopConfigForCalendar();
+  loadBookings();
+  renderCalendar();
+  renderSidePanel();
+  // GASへのアクセスは認証済みの場合のみ実行
+  if (localStorage.getItem('akariAdminToken')) {
+    refreshBookings();
+    startAutoRefresh();
+  }
+})();
 </script>
 </body>
 </html>

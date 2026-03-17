@@ -214,6 +214,34 @@ const ACCESS_KEY = '34563456';
 const DAY_JA     = ['日','月','火','水','木','金','土'];
 
 let currentBooking = null;
+let CLOSED_DAY  = 3;  // 定休日の曜日（0=日,...,3=水）
+let SHOP_PHONE  = '076-201-8119';
+
+// ── GASから店舗設定を取得 ──
+(async function loadConfig() {
+  try {
+    const res = await fetch(`${GAS_URL}?key=${ACCESS_KEY}&action=getConfig`);
+    const data = await res.json();
+    if (!data.success || !data.config) return;
+    const c = data.config;
+    if (c.closedDayOfWeek != null) CLOSED_DAY = c.closedDayOfWeek;
+    if (c.shopPhone) SHOP_PHONE = c.shopPhone;
+    // 時間枠selectを動的生成
+    if (c.timeSlots) {
+      const sel = document.getElementById('newTime');
+      const ph = sel.querySelector('option[value=""]');
+      sel.innerHTML = '';
+      if (ph) sel.appendChild(ph);
+      c.timeSlots.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t; opt.textContent = t;
+        sel.appendChild(opt);
+      });
+    }
+  } catch(e) {
+    console.warn('店舗設定の取得に失敗:', e);
+  }
+})();
 
 // URLパラメータから予約番号を自動入力
 (function() {
@@ -326,7 +354,7 @@ function onNewDateChange() {
   const errEl = document.getElementById('newDateError');
   if (val) {
     const day = new Date(val + 'T00:00:00').getDay();
-    if (day === 3) {
+    if (day === CLOSED_DAY) {
       errEl.style.display = 'block';
       document.getElementById('newDate').value = '';
       return;
@@ -357,7 +385,7 @@ async function submitChange() {
     if (!data.success) { errEl.textContent = data.error || '送信に失敗しました'; return; }
     showDone('change');
   } catch(e) {
-    errEl.textContent = 'エラーが発生しました。お電話（076-201-8119）にてご連絡ください。';
+    errEl.textContent = 'エラーが発生しました。お電話（' + SHOP_PHONE + '）にてご連絡ください。';
   } finally {
     btn.disabled = false; btn.textContent = '変更申請を送る';
   }
@@ -398,7 +426,7 @@ async function submitCancel() {
     if (!data.success) { errEl.textContent = data.error || '送信に失敗しました'; return; }
     showDone('cancel');
   } catch(e) {
-    errEl.textContent = 'エラーが発生しました。お電話（076-201-8119）にてご連絡ください。';
+    errEl.textContent = 'エラーが発生しました。お電話（' + SHOP_PHONE + '）にてご連絡ください。';
   } finally {
     btn.disabled = false; btn.textContent = 'キャンセルを申請する';
   }
@@ -409,11 +437,11 @@ function showDone(type) {
   if (type === 'change') {
     document.getElementById('doneTitle').textContent = '変更申請を受け付けました';
     document.getElementById('doneText').innerHTML =
-      '店舗にて内容を確認いたします。<br>確定しましたらメールにてご連絡します。<br><br>ご不明な点はお電話にてお問い合わせください。<br>きものレンタル あかり　TEL：076-201-8119';
+      '店舗にて内容を確認いたします。<br>確定しましたらメールにてご連絡します。<br><br>ご不明な点はお電話にてお問い合わせください。<br>きものレンタル あかり　TEL：' + SHOP_PHONE + '';
   } else {
     document.getElementById('doneTitle').textContent = 'キャンセル申請を受け付けました';
     document.getElementById('doneText').innerHTML =
-      '店舗にて内容を確認いたします。<br>確定しましたらメールにてご連絡します。<br><br>ご不明な点はお電話にてお問い合わせください。<br>きものレンタル あかり　TEL：076-201-8119';
+      '店舗にて内容を確認いたします。<br>確定しましたらメールにてご連絡します。<br><br>ご不明な点はお電話にてお問い合わせください。<br>きものレンタル あかり　TEL：' + SHOP_PHONE + '';
   }
   showScreen('screenDone');
 }
