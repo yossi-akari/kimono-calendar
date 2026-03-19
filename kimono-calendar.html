@@ -681,7 +681,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     </div>
     <input type="text" id="otpInput" placeholder="認証コード（6桁）" autocomplete="off" maxlength="6" inputmode="numeric">
     <div style="font-size:0.72rem;color:rgba(255,255,255,0.3);margin-top:4px;text-align:center;">
-      6桁入力で自動送信 ／ <span id="otp-back" style="cursor:pointer;color:#8b3a3a;">← 戻る</span>
+      6桁入力で自動送信 ／ <span id="otp-resend" style="cursor:pointer;color:#c89660;">再送信</span> ／ <span id="otp-back" style="cursor:pointer;color:#8b3a3a;">← 戻る</span>
     </div>
   </div>
 
@@ -689,9 +689,14 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 </div>
 <script>
 // 既存トークンがあれば即座にPIN画面を非表示
+// OTPステップの途中でページが破棄された場合（iPad Safari等）は復元
 (function(){
   if(localStorage.getItem('akariAdminToken')) {
     document.getElementById('pin-screen').style.display='none';
+  } else if (sessionStorage.getItem('otpPending')) {
+    // iPad等でページ破棄後に復帰した場合、OTPステップを復元
+    document.getElementById('pin-step').style.display = 'none';
+    document.getElementById('otp-step').style.display = 'flex';
   }
 })();
 </script>
@@ -1086,6 +1091,7 @@ function showOtpStep() {
   otpInput.value    = '';
   otpInput.disabled = false;
   document.getElementById('pin-error').textContent = '';
+  sessionStorage.setItem('otpPending', '1');
   otpInput.focus();
 }
 function showPinStep() {
@@ -1096,7 +1102,30 @@ function showPinStep() {
   pinInput.value    = '';
   pinInput.disabled = false;
   document.getElementById('pin-error').textContent = '';
+  sessionStorage.removeItem('otpPending');
   pinInput.focus();
+}
+async function resendOtp() {
+  const err = document.getElementById('pin-error');
+  err.textContent = '再送信中...';
+  try {
+    const pin = sessionStorage.getItem('lastPin');
+    if (!pin) { showPinStep(); err.textContent = 'PINを再入力してください'; return; }
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'auth', pin }) });
+    const data = await res.json();
+    if (data.success && data.step === 'otp') {
+      err.textContent = '認証コードを再送信しました';
+      document.getElementById('otpInput').value = '';
+      document.getElementById('otpInput').disabled = false;
+      document.getElementById('otpInput').focus();
+      setTimeout(() => { err.textContent = ''; }, 3000);
+    } else {
+      err.textContent = data.error || '再送信に失敗しました';
+      setTimeout(showPinStep, 2000);
+    }
+  } catch(e) {
+    err.textContent = 'サーバーエラーが発生しました';
+  }
 }
 
 // ── Step 1: PIN認証（サーバー側検証 + アカウントロック対応）──
@@ -1112,7 +1141,8 @@ async function verifyPin(pin) {
     });
     const data = await res.json();
     if (data.success && data.step === 'otp') {
-      // PIN OK → OTPステップへ
+      // PIN OK → OTPステップへ（再送用にPIN保存）
+      sessionStorage.setItem('lastPin', pin);
       showOtpStep();
     } else if (data.error === 'ACCOUNT_LOCKED') {
       // アカウントロック（PCI DSS準拠）
@@ -1166,6 +1196,8 @@ async function verifyOtp(otp) {
     const data = await res.json();
     if (data.success && data.token) {
       localStorage.setItem('akariAdminToken', data.token);
+      sessionStorage.removeItem('otpPending');
+      sessionStorage.removeItem('lastPin');
       document.getElementById('pin-screen').style.display = 'none';
       err.textContent = '';
       refreshBookings();
@@ -1209,6 +1241,8 @@ async function verifyOtp(otp) {
     if (e.key === 'Enter' && this.value.length > 0) verifyOtp(this.value);
   });
 
+  // 「再送信」ボタン
+  document.getElementById('otp-resend').addEventListener('click', resendOtp);
   // 「戻る」ボタン
   document.getElementById('otp-back').addEventListener('click', showPinStep);
 })();
