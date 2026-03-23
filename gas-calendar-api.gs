@@ -1,6 +1,6 @@
 // =============================================================
 // Kimono Calendar API — Google Apps Script Web App
-// rentalakari@gmail.com アカウントで作成・デプロイしてください
+// hiroshi@akari-kanazawa.jp アカウントで作成・デプロイしてください
 // =============================================================
 
 
@@ -10,28 +10,62 @@
 //   ACCESS_KEY : 公開APIキー（reserve.html の公開リクエスト用）
 //   ADMIN_PIN  : 管理画面PINコード（kimono-calendar.html 用）
 // =============================================================
+
+// 顧客向けメール送信元（Gmailで送信元エイリアスとして設定済みであること）
+const CUSTOMER_EMAIL_FROM = 'reserve@akari-kanazawa.jp';
+
 function getAccessKey() {
   return PropertiesService.getScriptProperties().getProperty('ACCESS_KEY') || '';
 }
 function getAdminPin() {
   return PropertiesService.getScriptProperties().getProperty('ADMIN_PIN') || '';
 }
-// 管理者セッショントークン（8時間有効）
+// 管理者セッショントークン（8時間有効・複数デバイス対応）
+const MAX_ADMIN_SESSIONS = 10; // 同時セッション上限
+
 function generateAdminToken() {
+  const props = PropertiesService.getScriptProperties();
   const token = Utilities.getUuid();
-  const expires = new Date().getTime() + 8 * 60 * 60 * 1000; // 8時間
-  PropertiesService.getScriptProperties().setProperty(
-    'admin_session', JSON.stringify({ token, expires })
-  );
+  const now = new Date().getTime();
+  const expires = now + 8 * 60 * 60 * 1000; // 8時間
+
+  // 既存セッション読み込み・期限切れ除去
+  let sessions = [];
+  try {
+    sessions = JSON.parse(props.getProperty('admin_sessions') || '[]');
+  } catch(e) { sessions = []; }
+  sessions = sessions.filter(function(s) { return s.expires > now; });
+
+  // 上限超過時は古い順に削除
+  while (sessions.length >= MAX_ADMIN_SESSIONS) {
+    sessions.shift();
+  }
+
+  sessions.push({ token: token, expires: expires });
+  props.setProperty('admin_sessions', JSON.stringify(sessions));
   return token;
 }
+
 function isValidAdminToken(token) {
   if (!token) return false;
   try {
-    const session = JSON.parse(
-      PropertiesService.getScriptProperties().getProperty('admin_session') || '{}'
-    );
-    return session.token === token && new Date().getTime() < session.expires;
+    const props = PropertiesService.getScriptProperties();
+    const now = new Date().getTime();
+    let sessions = JSON.parse(props.getProperty('admin_sessions') || '[]');
+
+    // 旧形式（単一セッション）からの移行対応
+    if (!Array.isArray(sessions)) {
+      const old = sessions;
+      if (old.token === token && now < old.expires) {
+        // 旧形式で有効 → 新形式に移行
+        props.setProperty('admin_sessions', JSON.stringify([old]));
+        return true;
+      }
+      props.setProperty('admin_sessions', '[]');
+      return false;
+    }
+
+    return sessions.some(function(s) { return s.token === token && now < s.expires; });
   } catch(e) { return false; }
 }
 
@@ -146,7 +180,7 @@ function issueBookingOtp(email) {
     '身に覚えのない場合は、このメールを無視してください。',
     'If you did not request this, please ignore this email.'
   ].join('\n');
-  GmailApp.sendEmail(email, subject, body);
+  GmailApp.sendEmail(email, subject, body, { from: CUSTOMER_EMAIL_FROM, name: '着物レンタル あかり' });
 }
 
 /** 予約OTP検証。{ valid, expired } を返す */
@@ -2135,7 +2169,7 @@ ${getSiteBaseUrl() ? getSiteBaseUrl() + '/my-reservation.html?id=' + booking.res
 ──────────────────────────────
 ※ このメールは自動送信です。ご返信はお受けできません。`;
 
-    GmailApp.sendEmail(booking.email, subject, body);
+    GmailApp.sendEmail(booking.email, subject, body, { from: CUSTOMER_EMAIL_FROM, name: '着物レンタル あかり' });
   } catch(e) {
     Logger.log('確認メール送信エラー: ' + e.message);
   }
@@ -2208,7 +2242,7 @@ TEL：076-201-8119
 定休日：水曜日
 ※ このメールは自動送信です。ご返信はお受けできません。`;
 
-    GmailApp.sendEmail(booking.email, subject, body);
+    GmailApp.sendEmail(booking.email, subject, body, { from: CUSTOMER_EMAIL_FROM, name: '着物レンタル あかり' });
     Logger.log('感謝メール送信: ' + booking.email);
   } catch(e) {
     Logger.log('感謝メール送信エラー: ' + e.message);
@@ -2451,7 +2485,7 @@ function sendRequestResultEmail(booking, type, decision, newDate, newTime, admin
     } else {
       body = `${booking.name} 様\n\n${typeLabel}のご申請を受け付けましたが、今回はご希望に沿えない場合がございます。\n${adminNote ? '\n店舗よりメッセージ：' + adminNote + '\n' : ''}\nご不明な点はお電話にてご連絡ください。\nきものレンタル あかり　TEL：076-201-8119\n※ このメールは自動送信です。`;
     }
-    GmailApp.sendEmail(booking.email, subject, body);
+    GmailApp.sendEmail(booking.email, subject, body, { from: CUSTOMER_EMAIL_FROM, name: '着物レンタル あかり' });
   } catch(e) { Logger.log('申請結果メールエラー: ' + e.message); }
 }
 
