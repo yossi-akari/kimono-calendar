@@ -1220,8 +1220,15 @@ function buildBenefitSection() {
     selectedBenefit = null;
     return;
   }
-  section.style.display = '';
   const lang = currentLang;
+  // 特典が1つだけなら自動選択してUI非表示
+  if (pd.benefits.length === 1) {
+    selectedBenefit = pd.benefits[0][lang] || pd.benefits[0].ja;
+    section.style.display = 'none';
+    grid.innerHTML = '';
+    return;
+  }
+  section.style.display = '';
   grid.innerHTML = pd.benefits.map((b, i) => {
     const label = b[lang] || b.ja;
     return `<div class="option-item" id="benefit_${i}" onclick="selectBenefit(${i}, '${label}')">
