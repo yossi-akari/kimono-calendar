@@ -1336,8 +1336,15 @@ function getSettingsSheet() {
     sheet.appendRow(['date', 'limit', 'closed', 'note', 'photoLimit', 'photoBlockedSlots']);
     sheet.appendRow(['DEFAULT', ALL_TIMES.length, 'FALSE', 'デフォルト上限', 2, '']);
   } else {
-    // DEFAULT上限が旧バグ値(2)のままなら正しい値(11)に自動マイグレーション
     const rows = sheet.getDataRange().getValues();
+    const header = rows[0] || [];
+    // 既存シートにphotoLimit列がなければ追加（マイグレーション）
+    if (header.length < 6 || String(header[4]) !== 'photoLimit') {
+      sheet.getRange(1, 5).setValue('photoLimit');
+      sheet.getRange(1, 6).setValue('photoBlockedSlots');
+      Logger.log('設定シートにphotoLimit/photoBlockedSlots列を追加しました');
+    }
+    // DEFAULT上限が旧バグ値(2)のままなら正しい値(11)に自動マイグレーション
     for (let i = 1; i < rows.length; i++) {
       if (String(rows[i][0]) === 'DEFAULT' && (rows[i][1] === 2 || rows[i][1] === '2')) {
         sheet.getRange(i + 1, 2).setValue(ALL_TIMES.length);
@@ -1356,9 +1363,9 @@ function getAllSettings() {
     if (data.length <= 1) return {};
     const result = {};
     data.slice(1).forEach(row => {
-      const date  = String(row[0]);
+      const date  = normalizeSettingsDate(row[0]);
       const limit = (row[1] !== '' && row[1] !== null && !isNaN(row[1])) ? parseInt(row[1]) : null;
-      const closed = String(row[2]).toUpperCase() === 'TRUE';
+      const closed = String(row[2]).toUpperCase() === 'TRUE' || row[2] === true;
       const note  = String(row[3] || '');
       const photoLimit = (row[4] !== '' && row[4] !== null && row[4] !== undefined && !isNaN(row[4])) ? parseInt(row[4]) : null;
       const photoBlockedSlots = row[5] ? String(row[5]).split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
@@ -1371,13 +1378,18 @@ function getAllSettings() {
   }
 }
 
+function normalizeSettingsDate(val) {
+  if (val instanceof Date) return Utilities.formatDate(val, 'Asia/Tokyo', 'yyyy-MM-dd');
+  return String(val);
+}
+
 function saveSettingsToSheet(date, limit, closed, note, photoLimit, photoBlockedSlots) {
   const sheet = getSettingsSheet();
   const data  = sheet.getDataRange().getValues();
   const row = [date, limit !== null ? limit : '', closed ? 'TRUE' : 'FALSE', note || '',
                photoLimit !== null && photoLimit !== undefined ? photoLimit : '', photoBlockedSlots || ''];
   for (let i = 1; i < data.length; i++) {
-    if (String(data[i][0]) === date) {
+    if (normalizeSettingsDate(data[i][0]) === date) {
       sheet.getRange(i + 1, 1, 1, 6).setValues([row]);
       return;
     }
@@ -1389,9 +1401,8 @@ function deleteSettingsFromSheet(date) {
   const sheet = getSettingsSheet();
   const data  = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0]) === date) {
+    if (normalizeSettingsDate(data[i][0]) === date) {
       sheet.deleteRow(i + 1);
-      return;
     }
   }
 }
@@ -1797,7 +1808,11 @@ function doPost(e) {
       const limit = (data.limit !== '' && data.limit !== undefined && data.limit !== null) ? parseInt(data.limit) : null;
       const photoLimit = (data.photoLimit !== '' && data.photoLimit !== undefined && data.photoLimit !== null) ? parseInt(data.photoLimit) : null;
       const photoBlockedSlots = Array.isArray(data.photoBlockedSlots) ? data.photoBlockedSlots.join(',') : (data.photoBlockedSlots || '');
+      Logger.log('saveSettings: date=' + data.date + ' limit=' + limit + ' closed=' + data.closed + ' photoLimit=' + photoLimit);
       saveSettingsToSheet(data.date, limit, data.closed === true || data.closed === 'true', data.note || '', photoLimit, photoBlockedSlots);
+      // 保存後に読み返して確認
+      const verify = getAllSettings();
+      Logger.log('saveSettings verify: ' + JSON.stringify(verify[data.date]));
       output.setContent(JSON.stringify({ success: true }));
       return output;
     }

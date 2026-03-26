@@ -311,6 +311,10 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       <div class="photo-required-grid" id="photoRequiredGrid"></div>
       <div class="photo-req-error" id="photoReqError">撮影プランをいずれか1つ選択してください</div>
     </div>
+    <div class="form-block" id="benefitSection" style="display:none;">
+      <div class="section-label">特典を選択してください（1つ）</div>
+      <div id="benefitGrid" class="options-grid"></div>
+    </div>
     <div class="form-block">
       <div class="section-label" id="optSectionLabel">オプション（任意）</div>
       <div class="options-grid" id="optionsGrid"></div>
@@ -1185,6 +1189,8 @@ function buildOptCard(opt) {
   return div;
 }
 
+let selectedBenefit = null; // 選択中の特典名
+
 function buildOptions() {
   const grid    = document.getElementById('optionsGrid');
   const reqGrid = document.getElementById('photoRequiredGrid');
@@ -1192,6 +1198,7 @@ function buildOptions() {
   reqGrid.innerHTML = '';
   options = {};
   optQty  = {};
+  selectedBenefit = null;
   OPT_DEFS.forEach(opt => {
     const div = buildOptCard(opt);
     if (opt.photoRequired) reqGrid.appendChild(div);
@@ -1199,6 +1206,56 @@ function buildOptions() {
   });
   updatePhotoOnlyVisibility();
   updateMaleOnlyVisibility();
+  buildBenefitSection();
+}
+
+// ── 期間限定プラン特典選択 ──────────────────────────────
+function buildBenefitSection() {
+  const section = document.getElementById('benefitSection');
+  const grid = document.getElementById('benefitGrid');
+  // 現在のプラン定義を取得
+  const pd = PLAN_DEFS.find(p => p.name === plan.name);
+  if (!pd || !pd.benefits || pd.benefits.length === 0) {
+    section.style.display = 'none';
+    selectedBenefit = null;
+    return;
+  }
+  section.style.display = '';
+  const lang = currentLang;
+  grid.innerHTML = pd.benefits.map((b, i) => {
+    const label = b[lang] || b.ja;
+    return `<div class="opt-card" id="benefit_${i}" onclick="selectBenefit(${i}, '${label}')">
+      <div class="opt-check">☐</div>
+      <div class="opt-info"><div class="opt-name">${label}</div>
+        <div class="opt-price" style="color:var(--green);">無料特典</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectBenefit(index, label) {
+  const pd = PLAN_DEFS.find(p => p.name === plan.name);
+  if (!pd || !pd.benefits) return;
+  pd.benefits.forEach((b, i) => {
+    const el = document.getElementById('benefit_' + i);
+    if (!el) return;
+    if (i === index) {
+      if (selectedBenefit === label) {
+        // 選択解除
+        el.classList.remove('checked');
+        el.querySelector('.opt-check').textContent = '☐';
+        selectedBenefit = null;
+      } else {
+        el.classList.add('checked');
+        el.querySelector('.opt-check').textContent = '☑';
+        selectedBenefit = label;
+      }
+    } else {
+      el.classList.remove('checked');
+      el.querySelector('.opt-check').textContent = '☐';
+    }
+  });
+  updateSummary();
 }
 
 // ── 撮影必須：1択 ────────────────────────────────────
@@ -1318,12 +1375,16 @@ function updateSummary() {
   const base     = calcBase();
   const optTotal = Object.values(options).reduce((a, b) => a + b, 0);
   const total    = base !== null ? base + optTotal : null;
-  const optNames = Object.entries(optQty)
+  let optNamesList = Object.entries(optQty)
     .filter(([k, v]) => v > 0 && options[k])
     .map(([k, v]) => {
       const disp = getOptDisplayName(k);
       return v > 1 ? `${disp}×${v}` : disp;
-    }).join(t.joinSep);
+    });
+  if (selectedBenefit) {
+    optNamesList.unshift('★' + selectedBenefit + '（無料）');
+  }
+  const optNames = optNamesList.join(t.joinSep);
 
   const s = id => document.getElementById(id);
 
@@ -1353,12 +1414,13 @@ function updateSummary() {
   s('s2Total').textContent = base !== null ? fmt(base) : t.estimate;
 
   s('s3Base').textContent          = base !== null ? fmt(base) : t.estimate;
-  s('s3OptRow').style.display      = optTotal > 0 ? 'flex' : 'none';
-  s('s3Opt').textContent           = `${optNames}　+${fmt(optTotal)}`;
+  const hasOpts = optTotal > 0 || selectedBenefit;
+  s('s3OptRow').style.display      = hasOpts ? 'flex' : 'none';
+  s('s3Opt').textContent           = optTotal > 0 ? `${optNames}　+${fmt(optTotal)}` : optNames;
   s('s3Total').textContent         = total !== null ? fmt(total) : t.estimate;
 
   s('s4Plan').textContent          = planDisplay || '—';
-  s('s4OptRow').style.display      = optTotal > 0 ? 'flex' : 'none';
+  s('s4OptRow').style.display      = hasOpts ? 'flex' : 'none';
   s('s4Opt').textContent           = optNames;
   s('s4Total').textContent         = total !== null ? fmt(total) : t.estimate;
   s('s4People').textContent        = makePeopleStr(true);
@@ -1380,6 +1442,12 @@ function goStep(n) {
   if (n === 4 && plan.name === '撮影付き') {
     const hasPhoto = OPT_DEFS.filter(o => o.photoRequired).some(o => options[o.name]);
     if (!hasPhoto) { document.getElementById('photoReqError').classList.add('show'); return; }
+  }
+  if (n === 4) {
+    const pd = PLAN_DEFS.find(p => p.name === plan.name);
+    if (pd && pd.benefits && pd.benefits.length > 0 && !selectedBenefit) {
+      alert('特典を1つ選択してください'); return;
+    }
   }
   for (let i = 1; i <= 4; i++) {
     document.getElementById(`sc${i}`).style.display = i === n ? 'block' : 'none';
@@ -1490,6 +1558,10 @@ async function submitForm() {
   const selectedOpts = Object.entries(optQty)
     .filter(([k, v]) => v > 0 && options[k])
     .map(([k, v]) => ({ name: v > 1 ? `${k}×${v}` : k, price: options[k] }));
+  // 特典を無料オプションとして追加
+  if (selectedBenefit) {
+    selectedOpts.unshift({ name: '★' + selectedBenefit, price: 0 });
+  }
 
   const planDef = PLAN_DEFS.find(p => p.name === plan.name);
   const planDisplay = planDef ? (planDef[currentLang] || planDef.ja).displayName : plan.name;
