@@ -1224,10 +1224,13 @@ function buildBenefitSection() {
   const lang = currentLang;
   grid.innerHTML = pd.benefits.map((b, i) => {
     const label = b[lang] || b.ja;
-    return `<div class="opt-card" id="benefit_${i}" onclick="selectBenefit(${i}, '${label}')">
-      <div class="opt-check">☐</div>
-      <div class="opt-info"><div class="opt-name">${label}</div>
-        <div class="opt-price" style="color:var(--green);">無料特典</div>
+    return `<div class="option-item" id="benefit_${i}" onclick="selectBenefit(${i}, '${label}')">
+      <div class="option-top">
+        <div class="option-check" id="bchk_${i}">✓</div>
+        <div style="flex:1;min-width:0;">
+          <span>${label}</span>
+        </div>
+        <span class="option-price" style="color:var(--green);">無料</span>
       </div>
     </div>`;
   }).join('');
@@ -1241,18 +1244,14 @@ function selectBenefit(index, label) {
     if (!el) return;
     if (i === index) {
       if (selectedBenefit === label) {
-        // 選択解除
         el.classList.remove('checked');
-        el.querySelector('.opt-check').textContent = '☐';
         selectedBenefit = null;
       } else {
         el.classList.add('checked');
-        el.querySelector('.opt-check').textContent = '☑';
         selectedBenefit = label;
       }
     } else {
       el.classList.remove('checked');
-      el.querySelector('.opt-check').textContent = '☐';
     }
   });
   updateSummary();
