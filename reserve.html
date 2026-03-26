@@ -55,6 +55,8 @@ body { background: var(--paper); color: var(--ink); font-family: 'Noto Sans JP',
 .plan-price span { font-size: 0.65rem; color: var(--muted); font-family: 'Noto Sans JP', sans-serif; }
 .plan-price.estimate { font-size: 0.78rem; color: var(--green); font-family: 'Noto Sans JP', sans-serif; }
 .plan-note { font-size: 0.72rem; color: var(--muted); line-height: 1.7; }
+.plan-benefits { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.plan-benefit { font-size: 0.65rem; background: var(--accent); color: var(--paper); padding: 2px 8px; border-radius: 2px; letter-spacing: 0.04em; }
 
 .common-box { background: var(--cream); border-radius: 2px; padding: 16px 20px; margin-bottom: 28px; font-size: 0.8rem; line-height: 2; color: var(--muted); }
 .common-box strong { color: var(--ink); display: block; font-size: 0.7rem; letter-spacing: 0.1em; margin-bottom: 2px; font-weight: 400; }
@@ -1002,11 +1004,17 @@ function buildPlanCards() {
     // 既に選択中のプランは選択状態を復元
     if (plan.name === pd.name) card.classList.add('selected');
     card.onclick = () => selectPlan(card, pd.name, pd.price, pd.isEstimate);
+    let benefitsHtml = '';
+    if (pd.benefits && pd.benefits.length > 0) {
+      const tags = pd.benefits.map(b => `<span class="plan-benefit">${b[lang] || b.ja}</span>`).join('');
+      benefitsHtml = `<div class="plan-benefits">${tags}</div>`;
+    }
     card.innerHTML = `
       <div class="plan-badge ${pd.badgeClass}">${pd.badge}</div>
       <div class="plan-name">${displayName}</div>
       ${priceHtml}
       <div class="plan-note">${note}</div>
+      ${benefitsHtml}
     `;
     grid.appendChild(card);
   });
@@ -1028,10 +1036,15 @@ async function fetchSlotAvailability(date) {
   updateTimeOptions();
 }
 
+function isPhotoPlan() {
+  return plan.name && plan.name.indexOf('撮影') >= 0;
+}
+
 function updateTimeOptions() {
   const t = tl();
   const select   = document.getElementById('visitTime');
   const currentVal = select.value;
+  const photo = isPhotoPlan();
   [...select.options].forEach(opt => {
     if (!opt.value) return;
     const slot = slotAvailability[opt.value];
@@ -1042,12 +1055,18 @@ function updateTimeOptions() {
     } else if (slot.remaining <= 0) {
       opt.disabled = true;
       opt.textContent = `${opt.value}　${t.slotFull}`;
+    } else if (photo && slot.photoBlocked) {
+      opt.disabled = true;
+      opt.textContent = `${opt.value}　撮影不可`;
+    } else if (photo && slot.photoRemaining <= 0) {
+      opt.disabled = true;
+      opt.textContent = `${opt.value}　撮影枠満`;
     } else {
       opt.disabled = false;
       opt.textContent = opt.value;
     }
   });
-  if (currentVal && slotAvailability[currentVal] && !slotAvailability[currentVal].remaining) {
+  if (currentVal && select.querySelector(`option[value="${currentVal}"]`) && select.querySelector(`option[value="${currentVal}"]`).disabled) {
     select.value = '';
   }
 }
@@ -1064,6 +1083,7 @@ function selectPlan(el, name, price, isEstimate) {
   updateKagaVisibility();
   updateHairAccessoryVisibility();
   checkTuesdayRestriction();
+  updateTimeOptions();
   updateSummary();
 }
 

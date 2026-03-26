@@ -1049,6 +1049,19 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
         <input type="text" id="settingsNote" placeholder="例: 追加スタッフ出勤"
           style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:2px;font-family:inherit;font-size:0.85rem;margin-top:4px;">
       </div>
+      <div class="detail-row" style="flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line);">
+        <span class="detail-label">撮影プラン設定</span>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+          <span style="font-size:0.78rem;color:var(--muted);">1日の撮影上限:</span>
+          <input type="number" id="settingsPhotoLimit" min="0" max="10" placeholder="2"
+            style="width:60px;padding:6px 8px;border:1px solid var(--line);border-radius:2px;font-family:'DM Mono',monospace;font-size:0.9rem;">
+          <span style="font-size:0.78rem;color:var(--muted);">組（空白 = 2組）</span>
+        </div>
+        <div style="margin-top:8px;">
+          <span style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:6px;">撮影ブロック時間帯（チェックで撮影不可）:</span>
+          <div id="photoSlotGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;"></div>
+        </div>
+      </div>
       <div class="detail-row" style="flex-direction:column;gap:6px;padding:10px 0;border-top:2px solid var(--line);">
         <span class="detail-label" style="font-weight:bold;color:var(--ink);">デフォルト設定（全日共通）</span>
         <div style="display:flex;align-items:center;gap:10px;margin-top:6px;">
@@ -2121,6 +2134,17 @@ function openSettingsModal() {
   document.getElementById('settingsNote').value     = ds.note || '';
   document.getElementById('settingsDefaultShow').textContent  = defaultLimit;
   document.getElementById('settingsDefaultLimit').value       = defaultLimit;
+  document.getElementById('settingsPhotoLimit').value = ds.photoLimit != null ? ds.photoLimit : '';
+  // 撮影ブロック時間帯グリッドを構築
+  const photoGrid = document.getElementById('photoSlotGrid');
+  const blockedSet = new Set(ds.photoBlockedSlots || []);
+  const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
+  photoGrid.innerHTML = ALL_TIMES.map(t => {
+    const checked = blockedSet.has(t) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
+      <input type="checkbox" class="photoSlotCheck" value="${t}" ${checked} style="width:14px;height:14px;"> ${t}
+    </label>`;
+  }).join('');
   document.getElementById('btnDeleteSettings').style.display  =
     (ds.closed || ds.limit != null || ds.note) ? 'inline-block' : 'none';
   document.getElementById('settingsModal').classList.add('open');
@@ -2135,9 +2159,12 @@ async function saveSettingsForDate() {
   const limitVal = document.getElementById('settingsLimit').value;
   const limit    = limitVal !== '' ? parseInt(limitVal) : null;
   const note     = document.getElementById('settingsNote').value;
+  const photoLimitVal = document.getElementById('settingsPhotoLimit').value;
+  const photoLimit = photoLimitVal !== '' ? parseInt(photoLimitVal) : null;
+  const photoBlockedSlots = [...document.querySelectorAll('.photoSlotCheck:checked')].map(cb => cb.value);
   try {
-    await adminPost({ action: 'saveSettings', date: selectedDate, limit, closed, note });
-    settings[selectedDate] = { limit, closed, note };
+    await adminPost({ action: 'saveSettings', date: selectedDate, limit, closed, note, photoLimit, photoBlockedSlots });
+    settings[selectedDate] = { limit, closed, note, photoLimit, photoBlockedSlots };
     closeSettingsModal();
     renderCalendar();
     renderSidePanel();

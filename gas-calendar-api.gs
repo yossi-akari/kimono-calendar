@@ -241,7 +241,8 @@ const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:3
 // 変更時はここを編集して clasp push → clasp deploy のみでOK。
 // =============================================================
 function getShopConfig() {
-  return {
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+  const config = {
     // ── 営業情報 ──
     timeSlots: ALL_TIMES,
     closedDayOfWeek: 3,  // 0=日,1=月,...,3=水
@@ -282,9 +283,16 @@ function getShopConfig() {
         en: { displayName: 'Graduation Preview', note: "We'll help coordinate your hakama or kimono ensemble." },
         zh: { displayName: '畢業式試穿',  note: '我們將為您提供袴・和服的搭配建議。' } },
       { name: '期間限定',    price: 2970,  isEstimate: false, badge: 'LIMITED',        badgeClass: 'badge-red',
-        ja: { displayName: '期間限定プラン', note: '期間限定キャンペーンでお得に着物レンタル' },
-        en: { displayName: 'Limited Time', note: 'A special limited-time campaign for budget-friendly kimono rental.' },
-        zh: { displayName: '限時方案',    note: '限時優惠，超值和服租借活動。' } },
+        basePlan: 'ベーシック',
+        periodStart: '2026-03-01',
+        periodEnd:   '2026-04-05',
+        benefits: [
+          { ja: '着物アップグレード無料', en: 'Free kimono upgrade', zh: '免費升級和服' },
+          { ja: '翌日返却無料', en: 'Free next-day return', zh: '免費隔日歸還' }
+        ],
+        ja: { displayName: '学割プラン', note: '学生証ご提示で着物アップグレード＆翌日返却が無料！' },
+        en: { displayName: 'Student Discount', note: 'Show your student ID for a free kimono upgrade & next-day return!' },
+        zh: { displayName: '學生優惠', note: '出示學生證即可免費升級和服＆隔日歸還！' } },
     ],
 
     // ── オプション定義 ──
@@ -366,6 +374,22 @@ function getShopConfig() {
       { id: 'o15', name: 'ロケーション撮影ゴールド150枚渡し',    plans: null, price: 55000, aliases: ['ゴールドプラン'] },
     ],
   };
+
+  // ── 期間限定プランのフィルタリング＋並び替え ──
+  config.plans = config.plans.filter(function(p) {
+    if (!p.periodEnd) return true; // 期間設定なし → 常時表示
+    if (p.periodStart && today < p.periodStart) return false; // 開始前
+    if (p.periodEnd   && today > p.periodEnd)   return false; // 終了後
+    return true;
+  });
+  // 期間限定プランを先頭に移動
+  config.plans.sort(function(a, b) {
+    const aLimited = a.periodEnd ? 0 : 1;
+    const bLimited = b.periodEnd ? 0 : 1;
+    return aLimited - bLimited;
+  });
+
+  return config;
 }
 
 // サイトのベースURL（予約確認メールのリンクに使用）
@@ -1309,8 +1333,8 @@ function getSettingsSheet() {
   let sheet = ss.getSheetByName('設定');
   if (!sheet) {
     sheet = ss.insertSheet('設定');
-    sheet.appendRow(['date', 'limit', 'closed', 'note']);
-    sheet.appendRow(['DEFAULT', ALL_TIMES.length, 'FALSE', 'デフォルト上限']);
+    sheet.appendRow(['date', 'limit', 'closed', 'note', 'photoLimit', 'photoBlockedSlots']);
+    sheet.appendRow(['DEFAULT', ALL_TIMES.length, 'FALSE', 'デフォルト上限', 2, '']);
   } else {
     // DEFAULT上限が旧バグ値(2)のままなら正しい値(11)に自動マイグレーション
     const rows = sheet.getDataRange().getValues();
@@ -1336,7 +1360,9 @@ function getAllSettings() {
       const limit = (row[1] !== '' && row[1] !== null && !isNaN(row[1])) ? parseInt(row[1]) : null;
       const closed = String(row[2]).toUpperCase() === 'TRUE';
       const note  = String(row[3] || '');
-      result[date] = { limit, closed, note };
+      const photoLimit = (row[4] !== '' && row[4] !== null && row[4] !== undefined && !isNaN(row[4])) ? parseInt(row[4]) : null;
+      const photoBlockedSlots = row[5] ? String(row[5]).split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+      result[date] = { limit, closed, note, photoLimit, photoBlockedSlots };
     });
     return result;
   } catch(e) {
@@ -1345,16 +1371,18 @@ function getAllSettings() {
   }
 }
 
-function saveSettingsToSheet(date, limit, closed, note) {
+function saveSettingsToSheet(date, limit, closed, note, photoLimit, photoBlockedSlots) {
   const sheet = getSettingsSheet();
   const data  = sheet.getDataRange().getValues();
+  const row = [date, limit !== null ? limit : '', closed ? 'TRUE' : 'FALSE', note || '',
+               photoLimit !== null && photoLimit !== undefined ? photoLimit : '', photoBlockedSlots || ''];
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === date) {
-      sheet.getRange(i + 1, 1, 1, 4).setValues([[date, limit !== null ? limit : '', closed ? 'TRUE' : 'FALSE', note || '']]);
+      sheet.getRange(i + 1, 1, 1, 6).setValues([row]);
       return;
     }
   }
-  sheet.appendRow([date, limit !== null ? limit : '', closed ? 'TRUE' : 'FALSE', note || '']);
+  sheet.appendRow(row);
 }
 
 function deleteSettingsFromSheet(date) {
@@ -1767,7 +1795,9 @@ function doPost(e) {
     // 日付設定の保存
     if (data.action === 'saveSettings') {
       const limit = (data.limit !== '' && data.limit !== undefined && data.limit !== null) ? parseInt(data.limit) : null;
-      saveSettingsToSheet(data.date, limit, data.closed === true || data.closed === 'true', data.note || '');
+      const photoLimit = (data.photoLimit !== '' && data.photoLimit !== undefined && data.photoLimit !== null) ? parseInt(data.photoLimit) : null;
+      const photoBlockedSlots = Array.isArray(data.photoBlockedSlots) ? data.photoBlockedSlots.join(',') : (data.photoBlockedSlots || '');
+      saveSettingsToSheet(data.date, limit, data.closed === true || data.closed === 'true', data.note || '', photoLimit, photoBlockedSlots);
       output.setContent(JSON.stringify({ success: true }));
       return output;
     }
@@ -2280,16 +2310,35 @@ function getSlotAvailability(date) {
   const blockedReasons = {};
   blockedList.forEach(b => { blockedReasons[b.time] = b.reason; });
 
+  // 撮影プラン設定を取得
+  const settings = getAllSettings();
+  const dateSetting = settings[date] || {};
+  const defaultSetting = settings['DEFAULT'] || {};
+  const photoLimit = dateSetting.photoLimit !== null && dateSetting.photoLimit !== undefined
+    ? dateSetting.photoLimit
+    : (defaultSetting.photoLimit !== null && defaultSetting.photoLimit !== undefined ? defaultSetting.photoLimit : 2);
+  const photoBlockedSlots = new Set(dateSetting.photoBlockedSlots || []);
+
+  // 撮影プラン予約数をカウント（プラン名に「撮影」を含む予約）
+  const photoBookingsForDate = allForDate.filter(function(b) {
+    return b.plan && b.plan.indexOf('撮影') >= 0;
+  });
+  const totalPhotoBooked = photoBookingsForDate.length;
+
   const result = {};
   ALL_TIMES.forEach(t => {
     const booked  = allForDate.filter(b => b.time === t).length;
     const blocked = blockedTimes.has(t);
+    const photoBlocked = photoBlockedSlots.has(t);
+    const photoBookedInSlot = photoBookingsForDate.filter(b => b.time === t).length;
     result[t] = {
       booked,
       blocked,
       reason: blockedReasons[t] || '',
-      // ブロック済み or 予約済み なら remaining = 0
-      remaining: (blocked || booked >= SLOT_CAPACITY) ? 0 : SLOT_CAPACITY - booked
+      remaining: (blocked || booked >= SLOT_CAPACITY) ? 0 : SLOT_CAPACITY - booked,
+      // 撮影プラン情報
+      photoBlocked: photoBlocked,
+      photoRemaining: (photoBlocked || totalPhotoBooked >= photoLimit) ? 0 : photoLimit - totalPhotoBooked
     };
   });
   return result;
