@@ -217,6 +217,14 @@ let currentBooking = null;
 let CLOSED_DAY  = 3;  // 定休日の曜日（0=日,...,3=水）
 let SHOP_PHONE  = '076-201-8119';
 
+// XSSエスケープ
+function esc(str) {
+  if (!str) return '';
+  var d = document.createElement('div');
+  d.textContent = String(str);
+  return d.innerHTML;
+}
+
 // ── GASから店舗設定を取得 ──
 (async function loadConfig() {
   try {
@@ -301,13 +309,13 @@ function renderDetail(b, pending) {
   const totalStr = b.total > 0 ? `¥${b.total.toLocaleString()}（税込）` : '来店時お見積もり';
 
   document.getElementById('detailCard').innerHTML = `
-    <div class="detail-row"><span class="detail-label">予約番号</span><span class="detail-value" style="font-family:'DM Mono',monospace;font-size:0.82em;">${b.reservationId}</span></div>
-    <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${fmtDate(b.date)}　${b.time}</span></div>
-    <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${b.plan}</span></div>
-    <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${b.people}</span></div>
-    <div class="detail-row"><span class="detail-label">オプション</span><span class="detail-value">${optStr}</span></div>
-    <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);font-family:'DM Mono',monospace;">${totalStr}</span></div>
-    ${b.remarks ? `<div class="detail-row"><span class="detail-label">備考</span><span class="detail-value">${b.remarks}</span></div>` : ''}
+    <div class="detail-row"><span class="detail-label">予約番号</span><span class="detail-value" style="font-family:'DM Mono',monospace;font-size:0.82em;">${esc(b.reservationId)}</span></div>
+    <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${esc(fmtDate(b.date))}　${esc(b.time)}</span></div>
+    <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${esc(b.plan)}</span></div>
+    <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${esc(b.people)}</span></div>
+    <div class="detail-row"><span class="detail-label">オプション</span><span class="detail-value">${esc(optStr)}</span></div>
+    <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);font-family:'DM Mono',monospace;">${esc(totalStr)}</span></div>
+    ${b.remarks ? `<div class="detail-row"><span class="detail-label">備考</span><span class="detail-value">${esc(b.remarks)}</span></div>` : ''}
   `;
 
   // 未処理申請がある場合のバナー
@@ -398,10 +406,10 @@ function showCancel() {
     ? b.options.map(o => typeof o === 'string' ? o : o.name).join('、') : 'なし';
   const totalStr = b.total > 0 ? `¥${b.total.toLocaleString()}（税込）` : '来店時お見積もり';
   document.getElementById('cancelDetailCard').innerHTML = `
-    <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${fmtDate(b.date)}　${b.time}</span></div>
-    <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${b.plan}</span></div>
-    <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${b.people}</span></div>
-    <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);">${totalStr}</span></div>
+    <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${esc(fmtDate(b.date))}　${esc(b.time)}</span></div>
+    <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${esc(b.plan)}</span></div>
+    <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${esc(b.people)}</span></div>
+    <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);">${esc(totalStr)}</span></div>
   `;
   document.getElementById('cancelMessage').value = '';
   document.getElementById('cancelError').textContent = '';

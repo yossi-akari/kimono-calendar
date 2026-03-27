@@ -392,6 +392,94 @@ function getShopConfig() {
   return config;
 }
 
+// =============================================================
+// ── サーバーサイド金額検証 ────────────────────────────────────
+// =============================================================
+/**
+ * クライアントから送信された予約の金額をサーバー側で再計算・検証する
+ * @param {Object} booking - 予約オブジェクト
+ * @returns {{ valid: boolean, serverTotal: number, reason?: string }}
+ */
+function validateBookingTotal(booking) {
+  if (!booking || !booking.plan) return { valid: false, serverTotal: 0, reason: 'プラン未指定' };
+
+  const config = getShopConfig();
+
+  // プラン検索
+  const planDef = config.plans.find(function(p) { return p.name === booking.plan; });
+  if (!planDef) return { valid: false, serverTotal: 0, reason: '不明なプラン: ' + booking.plan };
+
+  // 見積もりプラン（成人式下見等）は金額検証スキップ
+  if (planDef.isEstimate) return { valid: true, serverTotal: 0 };
+
+  // 人数パース（'女性1名・男性2名・小人1名' 形式）
+  var female = 0, male = 0, child = 0;
+  var peopleStr = String(booking.people || '');
+  var fm = peopleStr.match(/女性(\d+)/);
+  var mm = peopleStr.match(/男性(\d+)/);
+  var cm = peopleStr.match(/小人(\d+)/);
+  if (fm) female = parseInt(fm[1]);
+  if (mm) male   = parseInt(mm[1]);
+  if (cm) child  = parseInt(cm[1]);
+  if (female + male + child === 0) return { valid: false, serverTotal: 0, reason: '人数不正' };
+
+  // 基本料金
+  var baseTotal = planDef.price * female + config.malePrice * male + config.childPrice * child;
+
+  // オプション料金
+  var optTotal = 0;
+  var bookingOpts = booking.options || [];
+  for (var i = 0; i < bookingOpts.length; i++) {
+    var opt = bookingOpts[i];
+    var optName = String(opt.name || '');
+    var optPrice = parseInt(opt.price) || 0;
+
+    // 特典（★付き）は price=0 であることを検証
+    if (optName.indexOf('★') === 0) {
+      if (optPrice !== 0) return { valid: false, serverTotal: 0, reason: '特典の価格が不正: ' + optName };
+      continue;
+    }
+
+    // オプション名から数量を抽出（'ヘアセット×2' 形式）
+    var qtyMatch = optName.match(/×(\d+)$/);
+    var qty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+    var baseName = qtyMatch ? optName.replace(/×\d+$/, '') : optName;
+
+    // オプション定義から正しい単価を取得
+    var optDef = config.options.find(function(o) { return o.name === baseName; });
+    if (!optDef) {
+      Logger.log('不明なオプション（スキップ）: ' + baseName);
+      continue;
+    }
+
+    var expectedPrice = optDef.price * qty;
+    if (optPrice !== expectedPrice) {
+      return { valid: false, serverTotal: 0, reason: 'オプション価格不一致: ' + baseName + ' expected=' + expectedPrice + ' got=' + optPrice };
+    }
+    optTotal += expectedPrice;
+  }
+
+  var serverTotal = baseTotal + optTotal;
+
+  // ポイント・クーポン控除
+  if (booking.pointUsed && parseInt(booking.pointUsed) > 0) {
+    serverTotal -= parseInt(booking.pointUsed);
+  }
+  if (booking.couponUsed && parseInt(booking.couponUsed) > 0) {
+    serverTotal -= parseInt(booking.couponUsed);
+  }
+
+  // 0円未満にならないように
+  if (serverTotal < 0) serverTotal = 0;
+
+  var clientTotal = parseInt(booking.total) || 0;
+  if (clientTotal !== serverTotal) {
+    return { valid: false, serverTotal: serverTotal, reason: '合計不一致: server=' + serverTotal + ' client=' + clientTotal };
+  }
+
+  return { valid: true, serverTotal: serverTotal };
+}
+
 // サイトのベースURL（予約確認メールのリンクに使用）
 // 例: 'https://akari-kanazawa.jp' → Script Properties の SITE_BASE_URL で設定
 function getSiteBaseUrl() {
@@ -1624,6 +1712,15 @@ function doPost(e) {
       const dateSettings = getAllSettings();
       if (dateSettings[booking.date] && dateSettings[booking.date].closed) {
         output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: 'この日は休業日のため予約できません' }));
+        return output;
+      }
+
+      // ── サーバーサイド金額検証 ─────────────────────────────
+      const amountCheck = validateBookingTotal(booking);
+      if (!amountCheck.valid) {
+        Logger.log('金額検証失敗: ' + amountCheck.reason);
+        notifyAdminError('AMOUNT_MISMATCH', amountCheck.reason, booking.email + ' / plan=' + booking.plan + ' / client=' + booking.total);
+        output.setContent(JSON.stringify({ success: false, error: 'AMOUNT_MISMATCH', message: '金額の検証に失敗しました。ページを再読み込みしてやり直してください。' }));
         return output;
       }
 
