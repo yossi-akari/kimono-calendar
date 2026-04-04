@@ -501,15 +501,25 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   .today-btn { padding: 5px 8px; font-size: 0.62rem; }
   .cal-grid { gap: 2px; }
   .cal-dayname { font-size: 0.55rem; padding: 4px 0; }
-  .cal-cell { min-height: 64px; padding: 3px; }
-  .cell-date { font-size: 0.65rem; margin-bottom: 2px; }
+  .cal-cell { min-height: 44px; padding: 3px; }
+  .cell-date { font-size: 0.65rem; margin-bottom: 0; }
   .cal-cell.today .cell-date { width: 18px; height: 18px; font-size: 0.6rem; }
-  .booking-chip { font-size: 0.5rem; padding: 1px 3px; margin-bottom: 1px; }
-  .more-chip { font-size: 0.5rem; }
+
+  /* カレンダーセル内の予約チップは非表示、組数バッジのみ表示 */
+  .booking-chip { display: none !important; }
+  .more-chip { display: none !important; }
+  .mobile-count {
+    display: block; text-align: center;
+    font-family: 'DM Mono', monospace; font-size: 0.7rem;
+    color: var(--accent); font-weight: 400; margin-top: 2px;
+  }
 
   /* サイドパネル: カレンダーの下に表示 */
   .side-panel { padding: 12px; }
 }
+
+/* PC: モバイル用組数バッジを非表示 */
+.mobile-count { display: none; }
 
 /* ── 印刷エリア（通常は非表示） ── */
 #printArea { display: none; }
@@ -1818,6 +1828,14 @@ function renderCalendar() {
       more.className = 'more-chip';
       more.textContent = `+${dayBookings.length - maxShow}件`;
       cell.appendChild(more);
+    }
+
+    // モバイル用: 予約組数のみ表示（チップはCSSで非表示）
+    if (dayBookings.length > 0) {
+      const mc = document.createElement('div');
+      mc.className = 'mobile-count';
+      mc.textContent = dayBookings.length + '組';
+      cell.appendChild(mc);
     }
 
     grid.appendChild(cell);
