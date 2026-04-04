@@ -312,6 +312,10 @@ function getShopConfig() {
       { name: 'ロケーション撮影 ゴールド（150カット）', price: 55000, qtyUnit: '回', maxQty: 1, photoOnly: true, photoRequired: true,
         en: { name: 'Location Photo Gold (150 shots)',       qtyUnit: 'session' },
         zh: { name: '外景攝影 金牌（150張）',                 qtyUnit: '次' } },
+      { name: 'スタンダード着物', price: 990,  qtyUnit: '名', photoOnly: true, gradeOnly: true,
+        en: { name: 'Standard Kimono Upgrade' }, zh: { name: '標準和服升級' } },
+      { name: 'プレミアム着物',   price: 1980, qtyUnit: '名', photoOnly: true, gradeOnly: true,
+        en: { name: 'Premium Kimono Upgrade' },  zh: { name: '優質和服升級' } },
       { name: 'ヘアセット',           note: '髪飾りも料金に含まれます',   price: 1650, unit: '/名', qtyUnit: '名',
         en: { name: 'Hair Styling',          note: 'Hair accessories included',         unit: '/person', qtyUnit: 'person' },
         zh: { name: '髮型設計',              note: '含髮飾',                             unit: '/名', qtyUnit: '名' } },
@@ -448,8 +452,7 @@ function validateBookingTotal(booking) {
     // オプション定義から正しい単価を取得
     var optDef = config.options.find(function(o) { return o.name === baseName; });
     if (!optDef) {
-      Logger.log('不明なオプション（スキップ）: ' + baseName);
-      continue;
+      return { valid: false, serverTotal: 0, reason: '不正なオプション: ' + baseName };
     }
 
     var expectedPrice = optDef.price * qty;
@@ -1701,7 +1704,7 @@ function doPost(e) {
       // ── サーバーサイド入力サニタイズ ─────────────────────
       booking.name    = String(booking.name || '').trim().substring(0, 100);
       booking.remarks = String(booking.remarks || '').trim().substring(0, 500);
-      booking.tel     = String(booking.tel || '').replace(/[^\d\-+() ]/g, '').substring(0, 20);
+      booking.tel     = String(booking.tel || '').replace(/[^\d\-+()./ ]/g, '').substring(0, 30);
 
       // ── 定休日チェック（水曜日 + 設定日）──────────────────
       const bookingDow = new Date(booking.date + 'T00:00:00+09:00').getDay();

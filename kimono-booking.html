@@ -476,6 +476,13 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 </div>
 
 <script>
+function esc(str) {
+  if (!str) return '';
+  var d = document.createElement('div');
+  d.textContent = String(str);
+  return d.innerHTML;
+}
+
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyUjRWMu_ZgGroCakrRfIxuobAjJvl_So1HVzK2s5wEYY-ToZUjo89jwRgy5GQwb6Si/exec';
 
 // ── 料金テーブル（GASから動的に上書きされる） ──
@@ -872,15 +879,15 @@ async function renderList() {
     const days = ['日','月','火','水','木','金','土'];
     return `<div class="manual-item">
       <div class="manual-item-info">
-        <div class="mi-name">${b.name} 様</div>
-        <div class="mi-sub">${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}） ${b.time} ／ ${b.plan} ／ ${b.people}
+        <div class="mi-name">${esc(b.name)} 様</div>
+        <div class="mi-sub">${d.getMonth()+1}月${d.getDate()}日（${days[d.getDay()]}） ${esc(b.time)} ／ ${esc(b.plan)} ／ ${esc(b.people)}
           ${b.total > 0 ? ' ／ ¥' + b.total.toLocaleString() : ''}
-          ${b.channel ? ' ／ ' + b.channel : ''}
+          ${b.channel ? ' ／ ' + esc(b.channel) : ''}
         </div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;">
-        <button class="manual-item-edit" onclick="startEdit('${b.id}')">編集</button>
-        <button class="manual-item-del" onclick="deleteManual('${b.id}')">✕</button>
+        <button class="manual-item-edit" onclick="startEdit('${esc(b.id)}')">編集</button>
+        <button class="manual-item-del" onclick="deleteManual('${esc(b.id)}')">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -1181,8 +1188,8 @@ function parseAndFillEmail() {
   const href = source === 'aj'
     ? `https://ptn.activityjapan.com/reserve/detail/${parsed.reservationId}`
     : 'https://activityboard.jp/activityboard/booking/list/?from=header';
-  const idText = parsed.reservationId ? `　予約番号：<span style="font-family:monospace;font-weight:400">${parsed.reservationId}</span>　<a href="${href}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:underline">管理画面 →</a>` : '';
-  const noteText = parsed.adultNote ? `<br><span style="color:var(--muted);font-size:0.73rem">${parsed.adultNote}</span>` : '';
+  const idText = parsed.reservationId ? `　予約番号：<span style="font-family:monospace;font-weight:400">${esc(parsed.reservationId)}</span>　<a href="${href}" target="_blank" rel="noopener" style="color:var(--green);text-decoration:underline">管理画面 →</a>` : '';
+  const noteText = parsed.adultNote ? `<br><span style="color:var(--muted);font-size:0.73rem">${esc(parsed.adultNote)}</span>` : '';
   resultEl.innerHTML = `<span class="success">✓ ${label}のメールを解析しました</span>${idText}${noteText}`;
   document.querySelector('.form-card').nextElementSibling.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }

@@ -474,6 +474,40 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 
+/* ── モバイル最適化（iPhone） ── */
+@media (max-width: 600px) {
+  /* ヘッダー: 横一列に収まるようコンパクト化 */
+  .header { padding: 10px 12px; flex-wrap: nowrap; gap: 8px; }
+  .header-left h1 { font-size: 0.82rem; letter-spacing: 0.08em; }
+  .header-left p { font-size: 0.55rem; margin-top: 1px; }
+  .header-right { gap: 5px; flex-wrap: wrap; justify-content: flex-end; }
+  .header-btn { padding: 5px 8px; font-size: 0.65rem; white-space: nowrap; }
+
+  /* 統計バー: 横並びコンパクト */
+  .stats-bar { padding: 10px 12px; gap: 0; }
+  .stat-item { padding: 2px 12px 2px 0; margin-right: 12px; }
+  .stat-num { font-size: 1rem; }
+  .stat-label { font-size: 0.58rem; }
+  .stat-sub { font-size: 0.55rem; }
+
+  /* カレンダー: 7日間が収まるよう調整 */
+  .cal-panel { padding: 10px 6px; }
+  .cal-nav { margin-bottom: 10px; }
+  .cal-nav .month { font-size: 1rem; }
+  .nav-btn { padding: 5px 10px; font-size: 0.85rem; }
+  .today-btn { padding: 5px 8px; font-size: 0.62rem; }
+  .cal-grid { gap: 2px; }
+  .cal-dayname { font-size: 0.55rem; padding: 4px 0; }
+  .cal-cell { min-height: 64px; padding: 3px; }
+  .cell-date { font-size: 0.65rem; margin-bottom: 2px; }
+  .cal-cell.today .cell-date { width: 18px; height: 18px; font-size: 0.6rem; }
+  .booking-chip { font-size: 0.5rem; padding: 1px 3px; margin-bottom: 1px; }
+  .more-chip { font-size: 0.5rem; }
+
+  /* サイドパネル: カレンダーの下に表示 */
+  .side-panel { padding: 12px; }
+}
+
 /* ── 印刷エリア（通常は非表示） ── */
 #printArea { display: none; }
 
@@ -698,7 +732,18 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
     document.getElementById('pin-step').style.display = 'none';
     document.getElementById('otp-step').style.display = 'flex';
   }
+  // bfcache復元時の古いエラーメッセージをクリア
+  document.getElementById('pin-error').textContent = '';
 })();
+// bfcache（Safari戻る/進むキャッシュ）からの復元を検知
+window.addEventListener('pageshow', function(e) {
+  if (e.persisted) {
+    document.getElementById('pin-error').textContent = '';
+    if (!localStorage.getItem('akariAdminToken')) {
+      document.getElementById('pin-screen').style.display = 'flex';
+    }
+  }
+});
 </script>
 
 <div class="header">
@@ -1088,6 +1133,31 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
 // ★ Google Apps ScriptのデプロイURL
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyUjRWMu_ZgGroCakrRfIxuobAjJvl_So1HVzK2s5wEYY-ToZUjo89jwRgy5GQwb6Si/exec';
 
+// GAS Web AppへのPOSTリクエスト（iOS Safari 302リダイレクト問題対策付き）
+// iOS SafariではGASの302リダイレクト後にHTMLが返る場合があるため、リトライで対応
+async function gasPost(body, retries) {
+  retries = retries || 2;
+  for (let i = 0; i <= retries; i++) {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      redirect: 'follow',
+      body: JSON.stringify(body)
+    });
+    const ct = res.headers.get('content-type') || '';
+    // GASが正常ならJSONが返る。HTMLが返った場合はリトライ
+    if (ct.indexOf('application/json') !== -1 || ct.indexOf('text/json') !== -1) {
+      return await res.json();
+    }
+    // content-typeがJSONでない場合、テキストとして読んでJSONパースを試みる
+    const text = await res.text();
+    try { return JSON.parse(text); } catch(e) { /* HTMLが返った */ }
+    // 最後のリトライでなければ少し待ってから再試行
+    if (i < retries) await new Promise(r => setTimeout(r, 500));
+  }
+  throw new Error('GAS応答がJSON形式ではありません');
+}
+
 // 全角→半角変換（iPad対策）
 function toHalf(str) {
   return (str || '').trim()
@@ -1124,8 +1194,7 @@ async function resendOtp() {
   try {
     const pin = sessionStorage.getItem('lastPin');
     if (!pin) { showPinStep(); err.textContent = 'PINを再入力してください'; return; }
-    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'auth', pin }) });
-    const data = await res.json();
+    const data = await gasPost({ action: 'auth', pin });
     if (data.success && data.step === 'otp') {
       err.textContent = '認証コードを再送信しました';
       document.getElementById('otpInput').value = '';
@@ -1148,11 +1217,7 @@ async function verifyPin(pin) {
   input.disabled = true;
   err.textContent = '確認中...';
   try {
-    const res  = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'auth', pin })
-    });
-    const data = await res.json();
+    const data = await gasPost({ action: 'auth', pin });
     if (data.success && data.step === 'otp') {
       // PIN OK → OTPステップへ（再送用にPIN保存）
       sessionStorage.setItem('lastPin', pin);
@@ -1202,11 +1267,7 @@ async function verifyOtp(otp) {
   input.disabled = true;
   err.textContent = '確認中...';
   try {
-    const res  = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'auth', step: 'otp', otp })
-    });
-    const data = await res.json();
+    const data = await gasPost({ action: 'auth', step: 'otp', otp });
     if (data.success && data.token) {
       localStorage.setItem('akariAdminToken', data.token);
       sessionStorage.removeItem('otpPending');
@@ -1263,16 +1324,15 @@ async function verifyOtp(otp) {
 // ── 管理者POST ヘルパー（全admin APIコールに使用） ──────────
 function adminPost(params) {
   const token = localStorage.getItem('akariAdminToken');
-  return fetch(GAS_URL, {
-    method: 'POST',
-    body: JSON.stringify({ token, ...params })
-  })
-  .then(r => r.json())
-  .catch(e => ({ success: false, error: e.message }));
+  return gasPost({ token, ...params })
+    .catch(function(e) { return { success: false, error: e.message }; });
 }
 // トークン期限切れ時は再ログイン促す
 function handleUnauthorized() {
   localStorage.removeItem('akariAdminToken');
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
+  if (syncElapsedTimer) { clearInterval(syncElapsedTimer); syncElapsedTimer = null; }
+  retryCount = MAX_RETRY; // リトライを停止
   document.getElementById('pin-screen').style.display = 'flex';
   showPinStep();
   document.getElementById('pin-error').textContent = 'セッションが期限切れになりました。再度PINを入力してください。';
@@ -1573,19 +1633,19 @@ function renderListModal() {
     if (isNew) tr.classList.add('is-new');
     tr.innerHTML = `
       <td style="font-family:'DM Mono',monospace;font-size:0.78rem;white-space:nowrap;">
-        ${isNew ? '<span class="new-dot"></span>' : '<span style="display:inline-block;width:12px;"></span>'}${dateLabel}&nbsp;${b.time}
+        ${isNew ? '<span class="new-dot"></span>' : '<span style="display:inline-block;width:12px;"></span>'}${dateLabel}&nbsp;${esc(b.time)}
       </td>
-      <td>${b.name}&nbsp;様</td>
-      <td><span class="${chipClass(b.plan, b.source)}" style="font-size:0.68rem;padding:2px 8px;border-radius:10px;display:inline-block;">${b.plan}</span></td>
-      <td style="font-size:0.75rem;color:var(--muted);">${b.people}</td>
+      <td>${esc(b.name)}&nbsp;様</td>
+      <td><span class="${chipClass(b.plan, b.source)}" style="font-size:0.68rem;padding:2px 8px;border-radius:10px;display:inline-block;">${esc(b.plan)}</span></td>
+      <td style="font-size:0.75rem;color:var(--muted);">${esc(b.people)}</td>
       <td style="font-family:'DM Mono',monospace;font-size:0.78rem;color:var(--accent);">${totalStr}</td>
       <td style="font-size:0.7rem;color:${srcColor};">${srcLabel}</td>
       <td style="white-space:nowrap;">
         ${b.visitStatus && b.visitStatus !== 'confirmed' ? visitStatusBadge(b.visitStatus) + ' ' : ''}
         ${isNew
-          ? `<button class="list-confirm-btn" onclick="confirmBooking('${b.id}')">確認しました</button>`
+          ? `<button class="list-confirm-btn" onclick="confirmBooking('${esc(b.id)}')">確認しました</button>`
           : `<span style="font-size:0.68rem;color:var(--muted);">確認済</span>`}
-        <button class="list-detail-btn" onclick="openDetailFromList('${b.id}')">詳細</button>
+        <button class="list-detail-btn" onclick="openDetailFromList('${esc(b.id)}')">詳細</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -1808,10 +1868,10 @@ function renderSidePanel() {
     const vsBadge = vs !== 'confirmed' ? ' ' + visitStatusBadge(vs) : '';
     const pastBadge = isPast && vs === 'confirmed' ? '<span class="past-badge">過去</span>' : '';
     card.innerHTML = `
-      <div class="bc-time">${b.time}${pastBadge}</div>
-      <div class="bc-name">${b.name} 様${vsBadge}</div>
-      <span class="bc-plan ${chipClass(b.plan, b.source)}">${b.plan}${b.source === 'MANUAL' ? ' ✎' : b.source === 'WEB' ? ' ✦' : ''}</span>
-      <div class="bc-people">${b.people}</div>
+      <div class="bc-time">${esc(b.time)}${pastBadge}</div>
+      <div class="bc-name">${esc(b.name)} 様${vsBadge}</div>
+      <span class="bc-plan ${chipClass(b.plan, b.source)}">${esc(b.plan)}${b.source === 'MANUAL' ? ' ✎' : b.source === 'WEB' ? ' ✦' : ''}</span>
+      <div class="bc-people">${esc(b.people)}</div>
     `;
     card.onclick = () => openDetail(b.id);
     container.appendChild(card);
@@ -1993,7 +2053,7 @@ function openDetail(id) {
     ${b.tel ? `<div class="detail-row"><span class="detail-label">電話</span><span class="detail-value"><a href="tel:${esc(b.tel)}" style="color:inherit;">${esc(b.tel)}</a></span></div>` : ''}
     <div class="detail-row"><span class="detail-label">備考</span><span class="detail-value">${esc((b.remarks || '').replace(/アクティビティジャパン予約管理システムをご利用ください。?/g, '').trim())}</span></div>
     ${b.source === 'MANUAL'
-      ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#5a1a8a;">✎ 手動入力${b.channel ? '（' + b.channel + '）' : ''}</span></div>`
+      ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#5a1a8a;">✎ 手動入力${b.channel ? '（' + esc(b.channel) + '）' : ''}</span></div>`
       : b.source === 'WEB'
         ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#0a4a8a;">✦ ウェブ予約</span></div>`
         : `<div class="detail-row"><span class="detail-label">管理画面</span><span class="detail-value">${
@@ -2939,11 +2999,11 @@ function renderRequestModal() {
         : '';
 
     const actionHtml = isPending ? `
-      <button class="req-approve-btn" onclick="approveRequest('${req.requestId}')">承認</button>
-      <button class="req-reject-btn"  onclick="showRejectNote('${req.requestId}')">却下</button>
-      <div class="req-note-wrap" id="rejectNote_${req.requestId}">
-        <input class="req-note-input" type="text" placeholder="却下理由（任意）" id="noteInput_${req.requestId}">
-        <button class="req-note-send" onclick="rejectRequest('${req.requestId}')">送信</button>
+      <button class="req-approve-btn" onclick="approveRequest('${esc(req.requestId)}')">承認</button>
+      <button class="req-reject-btn"  onclick="showRejectNote('${esc(req.requestId)}')">却下</button>
+      <div class="req-note-wrap" id="rejectNote_${esc(req.requestId)}">
+        <input class="req-note-input" type="text" placeholder="却下理由（任意）" id="noteInput_${esc(req.requestId)}">
+        <button class="req-note-send" onclick="rejectRequest('${esc(req.requestId)}')">送信</button>
       </div>
     ` : statusLabel;
 
@@ -2953,12 +3013,12 @@ function renderRequestModal() {
       <td style="font-family:'DM Mono',monospace;font-size:0.75rem;white-space:nowrap;">${subLabel}</td>
       <td><span class="req-type-badge ${typeClass}">${typeLabel}</span></td>
       <td style="font-size:0.8rem;">
-        <div style="font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--muted);">${req.bookingId}</div>
-        <div>${req.bookingName} 様</div>
+        <div style="font-family:'DM Mono',monospace;font-size:0.7rem;color:var(--muted);">${esc(req.bookingId)}</div>
+        <div>${esc(req.bookingName)} 様</div>
       </td>
       <td style="font-size:0.78rem;white-space:nowrap;">${origLabel}</td>
       <td style="font-size:0.78rem;white-space:nowrap;">${wishHtml}</td>
-      <td style="font-size:0.78rem;color:var(--muted);max-width:160px;word-break:break-all;">${req.message || '—'}</td>
+      <td style="font-size:0.78rem;color:var(--muted);max-width:160px;word-break:break-all;">${esc(req.message || '—')}</td>
       <td>${actionHtml}</td>
     `;
     tbody.appendChild(tr);
