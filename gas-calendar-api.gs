@@ -228,6 +228,14 @@ function verifyOtpCode(inputOtp) {
   return { valid: true };
 }
 
+// 電話番号の先頭0補完（スプレッドシートが数値化して0を消す対策）
+// 9桁〜10桁の数字のみの場合、国内番号とみなし先頭に0を付与
+function fixTel(val) {
+  var s = String(val || '');
+  if (/^\d{9,10}$/.test(s)) return '0' + s;
+  return s;
+}
+
 // =============================================================
 // ── 定員設定 ─────────────────────────────────────────────────
 // 1スロット（30分）あたりの最大受入組数（人数に関わらず1予約=1組）
@@ -1146,7 +1154,7 @@ function getManualSheetBookings(includePast) {
           channel: String(row[5]), people: String(row[6]),
           options: JSON.parse(row[7] || '[]'),
           total: parseInt(row[8]) || 0,
-          payment: String(row[9]), tel: String(row[10]), email: String(row[11]),
+          payment: String(row[9]), tel: fixTel(row[10]), email: String(row[11]),
           remarks: String(row[12]), createdAt: String(row[13]),
           reservationId: String(row[0]), bookingStatus: src === 'WEB' ? 'ウェブ予約' : '手動入力',
           visitStatus: vs === '' ? 'confirmed' : vs,
@@ -1233,7 +1241,7 @@ function getExternalSheetBookings() {
         total:         parseInt(row[9]) || 0,
         payment:       String(row[10]),
         email:         String(row[11]),
-        tel:           String(row[12]),
+        tel:           fixTel(row[12]),
         remarks:       String(row[13]),
         bookingStatus: String(row[14]),
         createdAt:     String(row[15])
