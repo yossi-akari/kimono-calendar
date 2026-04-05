@@ -1238,6 +1238,7 @@ async function verifyPin(pin) {
       userRole = 'staff';
       document.getElementById('pin-screen').style.display = 'none';
       err.textContent = '';
+      applyRoleUI(); // PIN画面非表示直後にスタッフUI適用
       refreshBookings();
       startAutoRefresh();
     } else if (data.success && data.step === 'otp') {
