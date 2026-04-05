@@ -1,0 +1,6 @@
+.claude/
+.DS_Store
+.env
+*secret*
+*credential*
+node_modules/
