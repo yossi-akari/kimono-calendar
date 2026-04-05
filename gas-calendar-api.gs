@@ -9,6 +9,7 @@
 // GASエディタ → プロジェクトの設定 → スクリプトプロパティ に設定:
 //   ACCESS_KEY : 公開APIキー（reserve.html の公開リクエスト用）
 //   ADMIN_PIN  : 管理画面PINコード（kimono-calendar.html 用）
+//   STAFF_PIN  : スタッフモード用PINコード（閲覧専用）
 // =============================================================
 
 // 顧客向けメール送信元（Gmailで送信元エイリアスとして設定済みであること）
@@ -19,6 +20,10 @@ function getAccessKey() {
 }
 function getAdminPin() {
   return PropertiesService.getScriptProperties().getProperty('ADMIN_PIN') || '';
+}
+// スタッフPINを取得（閲覧専用モード用）
+function getStaffPin() {
+  return PropertiesService.getScriptProperties().getProperty('STAFF_PIN') || '';
 }
 // 管理者セッショントークン（8時間有効・複数デバイス対応）
 const MAX_ADMIN_SESSIONS = 10; // 同時セッション上限
@@ -65,6 +70,46 @@ function isValidAdminToken(token) {
       return false;
     }
 
+    return sessions.some(function(s) { return s.token === token && now < s.expires; });
+  } catch(e) { return false; }
+}
+
+// スタッフセッショントークン（8時間有効・admin_sessionsとは別管理）
+const MAX_STAFF_SESSIONS = 10; // 同時セッション上限
+
+// スタッフトークンの生成（staff_sessionsに保存、role: 'staff' を含めて返す）
+function generateStaffToken() {
+  const props = PropertiesService.getScriptProperties();
+  const token = Utilities.getUuid();
+  const now = new Date().getTime();
+  const expires = now + 8 * 60 * 60 * 1000; // 8時間
+
+  let sessions = [];
+  try {
+    sessions = JSON.parse(props.getProperty('staff_sessions') || '[]');
+  } catch(e) { sessions = []; }
+  sessions = sessions.filter(function(s) { return s.expires > now; });
+
+  while (sessions.length >= MAX_STAFF_SESSIONS) {
+    sessions.shift();
+  }
+
+  sessions.push({ token: token, expires: expires });
+  props.setProperty('staff_sessions', JSON.stringify(sessions));
+  return token;
+}
+
+// スタッフトークンの検証
+function isValidStaffToken(token) {
+  if (!token) return false;
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const now = new Date().getTime();
+    let sessions = JSON.parse(props.getProperty('staff_sessions') || '[]');
+    if (!Array.isArray(sessions)) {
+      props.setProperty('staff_sessions', '[]');
+      return false;
+    }
     return sessions.some(function(s) { return s.token === token && now < s.expires; });
   } catch(e) { return false; }
 }
@@ -1578,23 +1623,35 @@ function doPost(e) {
         output.setContent(JSON.stringify({ success: false, error: 'ACCOUNT_LOCKED', lockedUntil: lockState.lockedUntil }));
         return output;
       }
-      // ② PIN検証
+      // ② PIN検証（管理者PIN → OTPステップ、スタッフPIN → 即トークン発行）
       const pin = data.pin || '';
-      if (!pin || pin !== getAdminPin()) {
-        const result = recordPinFailure();
-        if (result.locked) {
-          output.setContent(JSON.stringify({ success: false, error: 'ACCOUNT_LOCKED', lockedUntil: result.lockedUntil }));
-        } else {
-          output.setContent(JSON.stringify({ success: false, error: 'PINが違います', attemptsLeft: result.attemptsLeft }));
+      const staffPin = getStaffPin();
+
+      if (pin && pin === getAdminPin()) {
+        // 管理者PIN一致 → 従来通りOTPステップへ
+        try {
+          issueOtp();
+          output.setContent(JSON.stringify({ success: true, step: 'otp' }));
+        } catch(e) {
+          output.setContent(JSON.stringify({ success: false, error: 'メール送信に失敗しました: ' + e.message }));
         }
         return output;
       }
-      // ③ PIN正しい → OTP発行・メール送信
-      try {
-        issueOtp();
-        output.setContent(JSON.stringify({ success: true, step: 'otp' }));
-      } catch(e) {
-        output.setContent(JSON.stringify({ success: false, error: 'メール送信に失敗しました: ' + e.message }));
+
+      if (pin && staffPin && pin === staffPin) {
+        // スタッフPIN一致 → OTP不要で即トークン発行
+        clearPinAttempts(); // PIN成功なので失敗カウンタリセット
+        const token = generateStaffToken();
+        output.setContent(JSON.stringify({ success: true, token: token, role: 'staff' }));
+        return output;
+      }
+
+      // どちらのPINとも不一致
+      const result = recordPinFailure();
+      if (result.locked) {
+        output.setContent(JSON.stringify({ success: false, error: 'ACCOUNT_LOCKED', lockedUntil: result.lockedUntil }));
+      } else {
+        output.setContent(JSON.stringify({ success: false, error: 'PINが違います', attemptsLeft: result.attemptsLeft }));
       }
       return output;
     }
@@ -1855,9 +1912,22 @@ function doPost(e) {
       return output;
     }
 
-    // ── 以下はすべて管理者トークン認証が必要 ─────────────────────
-    if (!isValidAdminToken(data.token)) {
+    // ── 以下はすべて管理者またはスタッフトークン認証が必要 ─────────
+    const isAdmin = isValidAdminToken(data.token);
+    const isStaff = !isAdmin && isValidStaffToken(data.token);
+    if (!isAdmin && !isStaff) {
       output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
+      return output;
+    }
+
+    // スタッフ禁止アクション（管理者のみ許可）
+    const adminOnlyActions = [
+      'saveManual', 'delete', 'getSettings', 'saveSettings', 'deleteSettings',
+      'clearCache', 'blockSlot', 'unblockSlot',
+      'getRequests', 'processRequest', 'updateBookingStatus'
+    ];
+    if (isStaff && adminOnlyActions.indexOf(data.action) !== -1) {
+      output.setContent(JSON.stringify({ success: false, error: 'スタッフモードではこの操作はできません' }));
       return output;
     }
 
@@ -1883,14 +1953,40 @@ function doPost(e) {
       const cancelledIds = getCancelledIds();
       const filtered = bookings.filter(b => !cancelledIds.has(b.reservationId));
       const manualBookings = getManualSheetBookings(true);
-      const allBookings = [...filtered, ...manualBookings].sort((a, b) => {
+      let allBookings = [...filtered, ...manualBookings].sort((a, b) => {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
         return a.time.localeCompare(b.time);
       });
+
+      // スタッフモード: 個人情報・金額をサーバー側で除去してから返す
+      if (isStaff) {
+        allBookings = allBookings.map(function(b) {
+          const safe = Object.assign({}, b);
+          delete safe.tel;
+          delete safe.email;
+          delete safe.remarks;
+          delete safe.total;
+          delete safe.payment;
+          delete safe.pointUsed;
+          delete safe.couponUsed;
+          // オプションの金額情報を除去
+          if (safe.options && Array.isArray(safe.options)) {
+            safe.options = safe.options.map(function(o) {
+              if (typeof o === 'object') {
+                return { name: o.name };
+              }
+              return o;
+            });
+          }
+          return safe;
+        });
+      }
+
       output.setContent(JSON.stringify({
         success: true, bookings: allBookings, count: allBookings.length,
-        settings: getAllSettings(),
-        lastUpdated: new Date().toISOString()
+        settings: isStaff ? {} : getAllSettings(), // スタッフには設定情報を返さない
+        lastUpdated: new Date().toISOString(),
+        role: isStaff ? 'staff' : 'admin'
       }));
       return output;
     }

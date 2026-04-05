@@ -766,16 +766,16 @@ window.addEventListener('pageshow', function(e) {
   </div>
   <div class="header-right">
     <span id="syncStatus" style="font-family:'DM Mono',monospace;font-size:0.65rem;color:rgba(255,255,255,0.45);margin-right:8px;"></span>
-    <button class="header-btn" id="reqBtn" onclick="openRequestModal()" style="display:none;">
+    <button class="header-btn admin-only" id="reqBtn" onclick="openRequestModal()" style="display:none;">
       ✉ 申請<span class="notif-badge visible" id="reqBadge">0</span>
     </button>
-    <button class="header-btn" id="newBtn" onclick="openListModal(true)" style="display:none;">
+    <button class="header-btn admin-only" id="newBtn" onclick="openListModal(true)" style="display:none;">
       🔔 新着<span class="notif-badge visible" id="newBadge">0</span>
     </button>
-    <button class="header-btn" onclick="openListModal(false)">📋 一覧</button>
-    <a href="kimono-booking.html" class="header-btn accent" target="_blank">＋ 予約を手動入力</a>
+    <button class="header-btn admin-only" onclick="openListModal(false)">📋 一覧</button>
+    <a href="kimono-booking.html" class="header-btn accent admin-only" target="_blank">＋ 予約を手動入力</a>
     <button class="header-btn" onclick="refreshBookings()">↻ 更新</button>
-    <button class="header-btn" onclick="forceClearCache()" title="GASキャッシュをリセットして再取得（予約が反映されない場合）" style="opacity:0.6;font-size:0.72rem;">⚡ キャッシュ再取得</button>
+    <button class="header-btn admin-only" onclick="forceClearCache()" title="GASキャッシュをリセットして再取得（予約が反映されない場合）" style="opacity:0.6;font-size:0.72rem;">⚡ キャッシュ再取得</button>
   </div>
 </div>
 
@@ -786,7 +786,7 @@ window.addEventListener('pageshow', function(e) {
     <div class="stat-num" id="statTotal">0</div>
     <div class="stat-sub" id="statBreakdown"><span class="aj">AJ 0</span> / <span class="jaran">じゃらん 0</span></div>
   </div>
-  <div class="stat-item">
+  <div class="stat-item admin-only">
     <div class="stat-label">今月の売上合計</div>
     <div class="stat-num" id="statRevenue">—</div>
     <div class="stat-sub" id="statRevenueBreakdown">—</div>
@@ -818,7 +818,7 @@ window.addEventListener('pageshow', function(e) {
       <div class="date-label" id="sideDateLabel">日付を選択してください</div>
       <div class="booking-count" id="sideCount"></div>
       <div id="sideAvail" style="font-family:'DM Mono',monospace;font-size:0.72rem;margin-top:3px;"></div>
-      <div style="display:flex;gap:6px;margin-top:8px;align-items:center;">
+      <div class="admin-only" style="display:flex;gap:6px;margin-top:8px;align-items:center;">
         <button class="side-print-btn" onclick="printDayList()" id="btnPrintList" title="この日の予約一覧を印刷">
           🖨 一覧印刷
         </button>
@@ -830,8 +830,8 @@ window.addEventListener('pageshow', function(e) {
         </button>
       </div>
     </div>
-    <!-- スロット管理パネル（日付選択後に表示） -->
-    <div class="slot-panel" id="slotPanel" style="display:none;">
+    <!-- スロット管理パネル（日付選択後に表示、管理者のみ） -->
+    <div class="slot-panel admin-only" id="slotPanel" style="display:none;">
       <div class="slot-panel-header" onclick="toggleSlotPanelOpen()">
         <span class="slot-panel-title">スロット管理</span>
         <span class="slot-panel-summary" id="slotSummary"></span>
@@ -1231,8 +1231,17 @@ async function verifyPin(pin) {
   err.textContent = '確認中...';
   try {
     const data = await gasPost({ action: 'auth', pin });
-    if (data.success && data.step === 'otp') {
-      // PIN OK → OTPステップへ（再送用にPIN保存）
+    if (data.success && data.token && data.role === 'staff') {
+      // スタッフPIN一致 → OTPスキップで即ログイン
+      localStorage.setItem('akariAdminToken', data.token);
+      localStorage.setItem('akariUserRole', 'staff');
+      userRole = 'staff';
+      document.getElementById('pin-screen').style.display = 'none';
+      err.textContent = '';
+      refreshBookings();
+      startAutoRefresh();
+    } else if (data.success && data.step === 'otp') {
+      // 管理者PIN OK → OTPステップへ（再送用にPIN保存）
       sessionStorage.setItem('lastPin', pin);
       showOtpStep();
     } else if (data.error === 'ACCOUNT_LOCKED') {
@@ -1283,6 +1292,8 @@ async function verifyOtp(otp) {
     const data = await gasPost({ action: 'auth', step: 'otp', otp });
     if (data.success && data.token) {
       localStorage.setItem('akariAdminToken', data.token);
+      localStorage.setItem('akariUserRole', 'admin');
+      userRole = 'admin';
       sessionStorage.removeItem('otpPending');
       sessionStorage.removeItem('lastPin');
       document.getElementById('pin-screen').style.display = 'none';
@@ -1340,9 +1351,28 @@ function adminPost(params) {
   return gasPost({ token, ...params })
     .catch(function(e) { return { success: false, error: e.message }; });
 }
+// ── スタッフモードUI制御 ─────────────────────────────
+// roleに応じて管理者専用要素の表示/非表示を切り替える
+function applyRoleUI() {
+  if (userRole !== 'staff') return;
+  // admin-onlyクラスの要素を非表示
+  document.querySelectorAll('.admin-only').forEach(function(el) {
+    el.style.display = 'none';
+  });
+  // ヘッダーにスタッフモード表示
+  const header = document.querySelector('.header-left p');
+  if (header && !header.dataset.staffApplied) {
+    header.textContent = 'STAFF MODE（閲覧専用）';
+    header.style.color = '#f39c12';
+    header.dataset.staffApplied = '1';
+  }
+}
+
 // トークン期限切れ時は再ログイン促す
 function handleUnauthorized() {
   localStorage.removeItem('akariAdminToken');
+  localStorage.removeItem('akariUserRole');
+  userRole = null;
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null; }
   if (syncElapsedTimer) { clearInterval(syncElapsedTimer); syncElapsedTimer = null; }
   retryCount = MAX_RETRY; // リトライを停止
@@ -1372,6 +1402,7 @@ let selectedDate = todayStr;
 let bookings = [];
 let activeBookingId = null;
 let settings = {};
+let userRole = localStorage.getItem('akariUserRole') || null; // 'admin' or 'staff'
 let rpCashSale = 0;       // 現金売上（日報モーダルで事務所持ち帰り自動計算用）
 let _rpSaveTimer = null;  // 日報自動保存タイマー
 let ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
@@ -1505,6 +1536,7 @@ async function refreshBookings() {
   updateStats();
   updateNewBadge();
   loadRequests();
+  applyRoleUI();
 }
 
 // 経過時間を「○分前に同期」形式でリアルタイム更新
@@ -2050,47 +2082,70 @@ function openDetail(id) {
 
   const d = new Date(b.date + 'T00:00:00');
   const dateStr = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DAY_NAMES[d.getDay()]}）`;
+  const isStaffMode = userRole === 'staff';
+
+  // オプション表示（スタッフモードでは金額を除去）
   const optStr = b.options && b.options.length > 0
     ? b.options.map(o => {
         const n = typeof o === 'string' ? esc(o) : esc(o.name);
-        const p = typeof o === 'object' && o.price > 0
+        const p = !isStaffMode && typeof o === 'object' && o.price > 0
           ? `<span style="color:var(--muted);font-family:'DM Mono',monospace;font-size:0.8em;"> ¥${o.price.toLocaleString()}</span>` : '';
         return n + p;
       }).join('<br>') : 'なし';
-  const totalStr = b.total ? `¥${b.total.toLocaleString()}` : '来店時お見積もり';
 
   document.getElementById('modalName').textContent = `${b.name} 様`;
-  document.getElementById('modalBody').innerHTML = `
-    <div class="detail-row"><span class="detail-label">予約番号</span><span class="detail-value" style="font-family:'DM Mono',monospace;font-size:0.85em;">${esc(b.reservationId)}</span></div>
-    <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${esc(dateStr)} ${esc(b.time)}</span></div>
-    <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${esc(b.plan)}</span></div>
-    <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${esc(b.people)}</span></div>
-    <div class="detail-row"><span class="detail-label">オプション</span><span class="detail-value">${optStr}</span></div>
-    <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);font-family:'DM Mono',monospace;">${totalStr}</span></div>
-    ${b.payment ? `<div class="detail-row"><span class="detail-label">支払方法</span><span class="detail-value">${esc(b.payment)}</span></div>` : ''}
-    ${b.pointUsed > 0 ? `<div class="detail-row"><span class="detail-label">ポイント</span><span class="detail-value" style="color:var(--muted);">${b.pointUsed.toLocaleString()} pt 利用</span></div>` : ''}
-    ${b.couponUsed > 0 ? `<div class="detail-row"><span class="detail-label">クーポン</span><span class="detail-value" style="color:var(--muted);">¥${b.couponUsed.toLocaleString()} 利用</span></div>` : ''}
-    ${b.email ? `<div class="detail-row"><span class="detail-label">メール</span><span class="detail-value"><a href="mailto:${esc(b.email)}" style="color:inherit;">${esc(b.email)}</a></span></div>` : ''}
-    ${b.tel ? `<div class="detail-row"><span class="detail-label">電話</span><span class="detail-value"><a href="tel:${esc(b.tel)}" style="color:inherit;">${esc(b.tel)}</a></span></div>` : ''}
-    <div class="detail-row"><span class="detail-label">備考</span><span class="detail-value">${esc((b.remarks || '').replace(/アクティビティジャパン予約管理システムをご利用ください。?/g, '').trim())}</span></div>
-    ${b.source === 'MANUAL'
-      ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#5a1a8a;">✎ 手動入力${b.channel ? '（' + esc(b.channel) + '）' : ''}</span></div>`
-      : b.source === 'WEB'
-        ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#0a4a8a;">✦ ウェブ予約</span></div>`
-        : `<div class="detail-row"><span class="detail-label">管理画面</span><span class="detail-value">${
-            b.source === 'AJ'
-              ? `<a href="https://ptn.activityjapan.com/reserve/detail/${b.reservationId}" target="_blank" style="color:var(--accent);">AJ管理画面 →</a>`
-              : `<a href="https://acb.jalan.net/gw/kanri/slogin.html" target="_blank" style="color:var(--accent);">じゃらん管理画面 →</a>`
-          }</span></div>`
-    }
-    <div class="detail-row"><span class="detail-label">受付日時</span><span class="detail-value" style="font-size:0.75rem;color:var(--muted);">${new Date(b.createdAt).toLocaleString('ja-JP')}</span></div>
-    ${b.visitStatus && b.visitStatus !== 'confirmed' ? `<div class="detail-row"><span class="detail-label">来店状況</span><span class="detail-value">${visitStatusBadge(b.visitStatus)}</span></div>` : ''}
-  `;
 
-  // ステータスアクションバーの表示
+  if (isStaffMode) {
+    // スタッフモード: 予約番号・日時・プラン・人数・受付方法のみ
+    document.getElementById('modalBody').innerHTML = `
+      <div class="detail-row"><span class="detail-label">予約番号</span><span class="detail-value" style="font-family:'DM Mono',monospace;font-size:0.85em;">${esc(b.reservationId)}</span></div>
+      <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${esc(dateStr)} ${esc(b.time)}</span></div>
+      <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${esc(b.plan)}</span></div>
+      <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${esc(b.people)}</span></div>
+      <div class="detail-row"><span class="detail-label">オプション</span><span class="detail-value">${optStr}</span></div>
+      ${b.source === 'MANUAL'
+        ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#5a1a8a;">✎ 手動入力${b.channel ? '（' + esc(b.channel) + '）' : ''}</span></div>`
+        : b.source === 'WEB'
+          ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#0a4a8a;">✦ ウェブ予約</span></div>`
+          : `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value">${b.source === 'AJ' ? 'Activity Japan' : 'じゃらん'}</span></div>`
+      }
+      ${b.visitStatus && b.visitStatus !== 'confirmed' ? `<div class="detail-row"><span class="detail-label">来店状況</span><span class="detail-value">${visitStatusBadge(b.visitStatus)}</span></div>` : ''}
+    `;
+  } else {
+    // 管理者モード: フル表示（従来通り）
+    const totalStr = b.total ? `¥${b.total.toLocaleString()}` : '来店時お見積もり';
+    document.getElementById('modalBody').innerHTML = `
+      <div class="detail-row"><span class="detail-label">予約番号</span><span class="detail-value" style="font-family:'DM Mono',monospace;font-size:0.85em;">${esc(b.reservationId)}</span></div>
+      <div class="detail-row"><span class="detail-label">来店日時</span><span class="detail-value">${esc(dateStr)} ${esc(b.time)}</span></div>
+      <div class="detail-row"><span class="detail-label">プラン</span><span class="detail-value">${esc(b.plan)}</span></div>
+      <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${esc(b.people)}</span></div>
+      <div class="detail-row"><span class="detail-label">オプション</span><span class="detail-value">${optStr}</span></div>
+      <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);font-family:'DM Mono',monospace;">${totalStr}</span></div>
+      ${b.payment ? `<div class="detail-row"><span class="detail-label">支払方法</span><span class="detail-value">${esc(b.payment)}</span></div>` : ''}
+      ${b.pointUsed > 0 ? `<div class="detail-row"><span class="detail-label">ポイント</span><span class="detail-value" style="color:var(--muted);">${b.pointUsed.toLocaleString()} pt 利用</span></div>` : ''}
+      ${b.couponUsed > 0 ? `<div class="detail-row"><span class="detail-label">クーポン</span><span class="detail-value" style="color:var(--muted);">¥${b.couponUsed.toLocaleString()} 利用</span></div>` : ''}
+      ${b.email ? `<div class="detail-row"><span class="detail-label">メール</span><span class="detail-value"><a href="mailto:${esc(b.email)}" style="color:inherit;">${esc(b.email)}</a></span></div>` : ''}
+      ${b.tel ? `<div class="detail-row"><span class="detail-label">電話</span><span class="detail-value"><a href="tel:${esc(b.tel)}" style="color:inherit;">${esc(b.tel)}</a></span></div>` : ''}
+      <div class="detail-row"><span class="detail-label">備考</span><span class="detail-value">${esc((b.remarks || '').replace(/アクティビティジャパン予約管理システムをご利用ください。?/g, '').trim())}</span></div>
+      ${b.source === 'MANUAL'
+        ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#5a1a8a;">✎ 手動入力${b.channel ? '（' + esc(b.channel) + '）' : ''}</span></div>`
+        : b.source === 'WEB'
+          ? `<div class="detail-row"><span class="detail-label">受付方法</span><span class="detail-value" style="color:#0a4a8a;">✦ ウェブ予約</span></div>`
+          : `<div class="detail-row"><span class="detail-label">管理画面</span><span class="detail-value">${
+              b.source === 'AJ'
+                ? `<a href="https://ptn.activityjapan.com/reserve/detail/${b.reservationId}" target="_blank" style="color:var(--accent);">AJ管理画面 →</a>`
+                : `<a href="https://acb.jalan.net/gw/kanri/slogin.html" target="_blank" style="color:var(--accent);">じゃらん管理画面 →</a>`
+            }</span></div>`
+      }
+      <div class="detail-row"><span class="detail-label">受付日時</span><span class="detail-value" style="font-size:0.75rem;color:var(--muted);">${new Date(b.createdAt).toLocaleString('ja-JP')}</span></div>
+      ${b.visitStatus && b.visitStatus !== 'confirmed' ? `<div class="detail-row"><span class="detail-label">来店状況</span><span class="detail-value">${visitStatusBadge(b.visitStatus)}</span></div>` : ''}
+    `;
+  }
+
+  // ステータスアクションバーの表示（スタッフモードでは非表示）
   const actionBar = document.getElementById('statusActionBar');
   const vs = b.visitStatus || 'confirmed';
-  if ((b.source === 'MANUAL' || b.source === 'WEB') && vs === 'confirmed') {
+  if (!isStaffMode && (b.source === 'MANUAL' || b.source === 'WEB') && vs === 'confirmed') {
     actionBar.style.display = '';
     actionBar.innerHTML = `
       <button class="btn-visited" onclick="updateBookingStatus('${esc(b.id)}', 'visited')">✓ 来店済み</button>
@@ -2102,9 +2157,12 @@ function openDetail(id) {
     actionBar.innerHTML = '';
   }
 
-  // MANUAL・WEB予約はボタンを「編集」に切り替え
+  // 削除/編集ボタン（スタッフモードでは非表示）
   const delBtn = document.querySelector('.del-btn');
-  if (b.source === 'MANUAL' || b.source === 'WEB') {
+  if (isStaffMode) {
+    delBtn.style.display = 'none';
+  } else if (b.source === 'MANUAL' || b.source === 'WEB') {
+    delBtn.style.display = '';
     delBtn.textContent = 'この予約を編集する';
     delBtn.onclick = editManualFromCalendar;
     delBtn.style.cssText = 'border-color:var(--muted);color:var(--muted);';
@@ -3118,6 +3176,8 @@ async function loadShopConfigForCalendar() {
   if (localStorage.getItem('akariAdminToken')) {
     refreshBookings();
     startAutoRefresh();
+    // ロール復元済みの場合、初回表示にも適用
+    if (userRole === 'staff') applyRoleUI();
   }
 })();
 </script>
