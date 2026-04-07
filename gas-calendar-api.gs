@@ -1210,6 +1210,43 @@ function getManualSheetBookings(includePast) {
   } catch(e) { Logger.log('手動予約取得エラー: ' + e.message); return []; }
 }
 
+// 指定月の手動予約を取得（過去月表示用）
+function getManualSheetBookingsForMonth(year, month) {
+  const prefix = year + '-' + String(month).padStart(2, '0');
+  try {
+    const sheet = getManualSheet();
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    return data.slice(1)
+      .filter(function(row) {
+        if (!row[0]) return false;
+        const d = row[1] instanceof Date
+          ? Utilities.formatDate(row[1], 'Asia/Tokyo', 'yyyy-MM-dd')
+          : String(row[1]);
+        return d.substring(0, 7) === prefix;
+      })
+      .map(function(row) {
+        const src = String(row[5]) === 'ウェブサイト' && String(row[0]).startsWith('HP-') ? 'WEB' : 'MANUAL';
+        const vs = String(row[14] || 'confirmed');
+        return {
+          id: String(row[0]), source: src,
+          date: row[1] instanceof Date ? Utilities.formatDate(row[1], 'Asia/Tokyo', 'yyyy-MM-dd') : String(row[1]),
+          time: row[2] instanceof Date ? Utilities.formatDate(row[2], 'Asia/Tokyo', 'HH:mm') : String(row[2]),
+          name: String(row[3]), plan: String(row[4]),
+          channel: String(row[5]), people: String(row[6]),
+          options: JSON.parse(row[7] || '[]'),
+          total: parseInt(row[8]) || 0,
+          payment: String(row[9]), tel: fixTel(row[10]), email: String(row[11]),
+          remarks: String(row[12]), createdAt: String(row[13]),
+          reservationId: String(row[0]), bookingStatus: src === 'WEB' ? 'ウェブ予約' : '手動入力',
+          visitStatus: vs === '' ? 'confirmed' : vs,
+          visitChargeId: String(row[15] || ''),
+          statusUpdatedAt: String(row[16] || '')
+        };
+      });
+  } catch(e) { Logger.log('手動予約(月別)取得エラー: ' + e.message); return []; }
+}
+
 function saveManualToSheet(booking) {
   const sheet = getManualSheet();
   sheet.appendRow([
@@ -1293,6 +1330,47 @@ function getExternalSheetBookings() {
       }));
   } catch(e) {
     Logger.log('外部予約取得エラー: ' + e.message);
+    return [];
+  }
+}
+
+// 指定月の外部予約（AJ/じゃらん）を取得（過去月表示用）
+function getExternalSheetBookingsForMonth(year, month) {
+  const prefix = year + '-' + String(month).padStart(2, '0');
+  try {
+    const sheet = getExternalBookingsSheet();
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    return data.slice(1)
+      .filter(function(row) {
+        if (!row[0]) return false;
+        const d = row[3] instanceof Date
+          ? Utilities.formatDate(row[3], 'Asia/Tokyo', 'yyyy-MM-dd')
+          : String(row[3]);
+        return d.substring(0, 7) === prefix;
+      })
+      .map(function(row) {
+        return {
+          reservationId: String(row[0]),
+          source:        String(row[1]),
+          id:            String(row[2]),
+          date:          row[3] instanceof Date ? Utilities.formatDate(row[3], 'Asia/Tokyo', 'yyyy-MM-dd') : String(row[3]),
+          time:          row[4] instanceof Date ? Utilities.formatDate(row[4], 'Asia/Tokyo', 'HH:mm') : String(row[4]),
+          name:          String(row[5]),
+          plan:          String(row[6]),
+          people:        String(row[7]),
+          options:       JSON.parse(row[8] || '[]'),
+          total:         parseInt(row[9]) || 0,
+          payment:       String(row[10]),
+          email:         String(row[11]),
+          tel:           fixTel(row[12]),
+          remarks:       String(row[13]),
+          bookingStatus: String(row[14]),
+          createdAt:     String(row[15])
+        };
+      });
+  } catch(e) {
+    Logger.log('外部予約(月別)取得エラー: ' + e.message);
     return [];
   }
 }
@@ -1933,30 +2011,54 @@ function doPost(e) {
 
     // 全予約一覧取得
     if (data.action === 'getBookings') {
-      let bookings = getCachedBookings();
-      if (!bookings || bookings.length === 0) {
-        bookings = getRawBookings(); // ← 内部で syncExternalBookingsToSheet() が呼ばれ永続化
-        Logger.log('キャッシュミス → Gmail再取得: ' + bookings.length + '件');
-        setCachedBookings(bookings);
+      // 月指定パラメータ（過去月の予約取得用）
+      const reqYear  = data.year  ? parseInt(data.year)  : null;
+      const reqMonth = data.month ? parseInt(data.month) : null;
+      const todayDate = new Date();
+      const todayCal = { y: todayDate.getFullYear(), m: todayDate.getMonth() + 1 };
+      const isPastMonth = reqYear && reqMonth &&
+        (reqYear < todayCal.y || (reqYear === todayCal.y && reqMonth < todayCal.m));
+
+      let allBookings;
+
+      if (isPastMonth) {
+        // ── 過去月: スプレッドシートから月指定で取得（Gmail/キャッシュ不使用）──
+        const externalBookings = getExternalSheetBookingsForMonth(reqYear, reqMonth);
+        const manualBookings   = getManualSheetBookingsForMonth(reqYear, reqMonth);
+        const cancelledIds     = getCancelledIds();
+        const filtered         = externalBookings.filter(function(b) { return !cancelledIds.has(b.reservationId); });
+        allBookings = [...filtered, ...manualBookings].sort(function(a, b) {
+          if (a.date !== b.date) return a.date.localeCompare(b.date);
+          return a.time.localeCompare(b.time);
+        });
+        Logger.log('過去月取得: ' + reqYear + '/' + reqMonth + ' → ' + allBookings.length + '件');
       } else {
-        // キャッシュヒット時も外部予約シートから補完
-        const externalSheet = getExternalSheetBookings();
-        const cachedIds = new Set(bookings.map(b => b.reservationId));
-        const recovered = externalSheet.filter(b => !cachedIds.has(b.reservationId));
-        if (recovered.length > 0) {
-          bookings = [...bookings, ...recovered];
-          Logger.log('キャッシュヒット: ' + (bookings.length - recovered.length) + '件 + 外部シート補完: ' + recovered.length + '件');
+        // ── 当月/未来月: 既存ロジック（Gmail + キャッシュ）──
+        let bookings = getCachedBookings();
+        if (!bookings || bookings.length === 0) {
+          bookings = getRawBookings(); // ← 内部で syncExternalBookingsToSheet() が呼ばれ永続化
+          Logger.log('キャッシュミス → Gmail再取得: ' + bookings.length + '件');
+          setCachedBookings(bookings);
         } else {
-          Logger.log('キャッシュヒット: ' + bookings.length + '件');
+          // キャッシュヒット時も外部予約シートから補完
+          const externalSheet = getExternalSheetBookings();
+          const cachedIds = new Set(bookings.map(function(b) { return b.reservationId; }));
+          const recovered = externalSheet.filter(function(b) { return !cachedIds.has(b.reservationId); });
+          if (recovered.length > 0) {
+            bookings = [...bookings, ...recovered];
+            Logger.log('キャッシュヒット: ' + (bookings.length - recovered.length) + '件 + 外部シート補完: ' + recovered.length + '件');
+          } else {
+            Logger.log('キャッシュヒット: ' + bookings.length + '件');
+          }
         }
-      }
-      const cancelledIds = getCancelledIds();
-      const filtered = bookings.filter(b => !cancelledIds.has(b.reservationId));
-      const manualBookings = getManualSheetBookings(true);
-      let allBookings = [...filtered, ...manualBookings].sort((a, b) => {
-        if (a.date !== b.date) return a.date.localeCompare(b.date);
-        return a.time.localeCompare(b.time);
-      });
+        const cancelledIds = getCancelledIds();
+        const filtered = bookings.filter(function(b) { return !cancelledIds.has(b.reservationId); });
+        const manualBookings = getManualSheetBookings(true);
+        allBookings = [...filtered, ...manualBookings].sort(function(a, b) {
+          if (a.date !== b.date) return a.date.localeCompare(b.date);
+          return a.time.localeCompare(b.time);
+        });
+      } // ← isPastMonth else ブロックの終了
 
       // スタッフモード: 個人情報・金額をサーバー側で除去してから返す
       if (isStaff) {

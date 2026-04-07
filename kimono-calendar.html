@@ -1404,6 +1404,7 @@ let bookings = [];
 let activeBookingId = null;
 let settings = {};
 let userRole = localStorage.getItem('akariUserRole') || null; // 'admin' or 'staff'
+let pastMonthBookings = null; // 過去月表示時のデータ（当月/未来月表示時はnull）
 let rpCashSale = 0;       // 現金売上（日報モーダルで事務所持ち帰り自動計算用）
 let _rpSaveTimer = null;  // 日報自動保存タイマー
 let ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
@@ -1508,6 +1509,72 @@ async function forceClearCache() {
   } catch(e) {
     console.warn('キャッシュリセットエラー:', e);
     if (statusEl) statusEl.textContent = 'リセット失敗';
+  }
+}
+
+// ── 月別データ取得（過去月表示用）────────────────────
+// 表示中の月が過去月なら pastMonthBookings を、それ以外は bookings を返す
+function getActiveBookings() {
+  const now = new Date();
+  const isPast = curYear < now.getFullYear() ||
+    (curYear === now.getFullYear() && curMonth < now.getMonth());
+  if (isPast && pastMonthBookings) return pastMonthBookings;
+  return bookings;
+}
+
+// 過去月のデータをGASから取得（localStorageに1時間キャッシュ）
+async function loadMonthBookings(year, month) {
+  const cacheKey = 'kimono_month_' + year + '_' + month;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      const parsed = JSON.parse(cached);
+      if (parsed.ts && Date.now() - parsed.ts < 3600000) {
+        pastMonthBookings = parsed.bookings;
+        renderCalendar();
+        renderSidePanel();
+        updateStats();
+        return;
+      }
+    } catch(e) {}
+  }
+
+  const statusEl = document.getElementById('syncStatus');
+  if (statusEl) statusEl.textContent = year + '年' + month + '月を読み込み中...';
+
+  try {
+    const data = await adminPost({ action: 'getBookings', year: year, month: month });
+    if (data.error === 'Unauthorized') { handleUnauthorized(); return; }
+    if (data.success && data.bookings) {
+      pastMonthBookings = data.bookings;
+      localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), bookings: data.bookings }));
+      if (statusEl) statusEl.textContent = year + '年' + month + '月: ' + data.count + '件';
+    }
+  } catch(e) {
+    console.warn('月別データ読み込みエラー:', e);
+    pastMonthBookings = [];
+    if (statusEl) statusEl.textContent = '読み込み失敗';
+  }
+
+  renderCalendar();
+  renderSidePanel();
+  updateStats();
+}
+
+// 古い月別キャッシュを削除（7日以上前のものを除去）
+function cleanupMonthCache() {
+  const prefix = 'kimono_month_';
+  const now = Date.now();
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key && key.indexOf(prefix) === 0) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key));
+        if (!parsed.ts || now - parsed.ts > 7 * 86400000) {
+          localStorage.removeItem(key);
+        }
+      } catch(e) { localStorage.removeItem(key); }
+    }
   }
 }
 
@@ -1729,13 +1796,14 @@ function openDetailFromList(id) {
 
 // ── 統計 ──────────────────────────────────────────
 function updateStats() {
-  const monthBookings = bookings.filter(b => {
+  const activeData = getActiveBookings();
+  const monthBookings = activeData.filter(b => {
     const d = new Date(b.date + 'T00:00:00');
     return d.getFullYear() === curYear && d.getMonth() === curMonth;
   });
   const ajBookings     = monthBookings.filter(b => b.source === 'AJ');
   const jaranBookings  = monthBookings.filter(b => b.source !== 'AJ');
-  const todayBookings  = bookings.filter(b => b.date === todayStr);
+  const todayBookings  = bookings.filter(b => b.date === todayStr); // 今日の予約は常にグローバルbookingsから
   const todayAJ        = todayBookings.filter(b => b.source === 'AJ').length;
   const todayJaran     = todayBookings.filter(b => b.source !== 'AJ').length;
 
@@ -1797,7 +1865,7 @@ function renderCalendar() {
     const dateSetting   = settings[dateStr] || {};
     const isClosed      = dateSetting.closed === true;
     const cellLimit     = (dateSetting.limit != null) ? dateSetting.limit : defaultLimit;
-    const dayBookingsAll = bookings.filter(b => b.date === dateStr);
+    const dayBookingsAll = getActiveBookings().filter(b => b.date === dateStr);
     // 占有スロット数 = 予約が入っている時間帯の種類数（同時間帯複数予約でも1カウント）
     const occupiedSlots = new Set(dayBookingsAll.map(b => b.time)).size;
     const isFull        = !isClosed && cellLimit > 0 && occupiedSlots >= cellLimit;
@@ -1883,7 +1951,7 @@ function renderSidePanel() {
   document.getElementById('sideDateLabel').textContent =
     `${d.getMonth()+1}月${d.getDate()}日（${DAY_NAMES[d.getDay()]}）`;
 
-  const dayBookings = bookings
+  const dayBookings = getActiveBookings()
     .filter(b => b.date === selectedDate)
     .sort((a,b) => a.time.localeCompare(b.time));
 
@@ -2345,16 +2413,29 @@ function changeMonth(dir) {
   curMonth += dir;
   if (curMonth > 11) { curMonth = 0; curYear++; }
   if (curMonth < 0)  { curMonth = 11; curYear--; }
-  renderCalendar();
-  renderSidePanel();
+
+  // 過去月なら月別データをGASから取得、当月/未来月なら既存データで描画
+  const now = new Date();
+  const isPast = curYear < now.getFullYear() ||
+    (curYear === now.getFullYear() && curMonth < now.getMonth());
+  if (isPast) {
+    loadMonthBookings(curYear, curMonth + 1); // GASは1-indexed月
+  } else {
+    pastMonthBookings = null;
+    renderCalendar();
+    renderSidePanel();
+    updateStats();
+  }
 }
 
 function goToday() {
+  pastMonthBookings = null;
   curYear = today.getFullYear();
   curMonth = today.getMonth();
   selectedDate = todayStr;
   renderCalendar();
   renderSidePanel();
+  updateStats();
 }
 
 // モーダル外クリックで閉じる
@@ -3170,6 +3251,7 @@ async function loadShopConfigForCalendar() {
 // ── 初期化 ────────────────────────────────────────
 (async () => {
   await loadShopConfigForCalendar();
+  cleanupMonthCache(); // 古い月別キャッシュを削除
   loadBookings();
   renderCalendar();
   renderSidePanel();
