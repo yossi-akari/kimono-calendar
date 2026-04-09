@@ -1910,9 +1910,9 @@ function renderCalendar() {
       cell.appendChild(badge);
     }
 
-    // 予約チップ（時間順）
-    const dayBookings = bookings
-      .filter(b => b.date === dateStr)
+    // 予約チップ（時間順）— getActiveBookings()を使い在庫計算と同じデータソースを参照
+    const dayBookings = dayBookingsAll
+      .slice()
       .sort((a,b) => a.time.localeCompare(b.time));
 
     const maxShow = 3;
