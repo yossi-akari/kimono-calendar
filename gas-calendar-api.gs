@@ -1938,7 +1938,8 @@ function doPost(e) {
               booking.paymentStatus = 'paid';
               Logger.log('Pay.jp 課金成功: ' + charge.id + ' ¥' + charge.amount);
             } catch(chargeErr) {
-              notifyAdminError('CHARGE_FAILED', chargeErr.message, booking.reservationId + ' / ' + booking.email);
+              // カード拒否はお客さん側の問題 → 管理者通知は不要（フォーム上でエラー表示済み）
+              Logger.log('決済失敗（通知省略）: ' + chargeErr.message + ' / ' + booking.reservationId);
               output.setContent(JSON.stringify({ success: false, error: 'CHARGE_FAILED', message: chargeErr.message }));
               return output;
             }
