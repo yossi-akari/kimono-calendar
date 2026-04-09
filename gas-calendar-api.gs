@@ -1555,8 +1555,8 @@ function getSettingsSheet() {
   let sheet = ss.getSheetByName('設定');
   if (!sheet) {
     sheet = ss.insertSheet('設定');
-    sheet.appendRow(['date', 'limit', 'closed', 'note', 'photoLimit', 'photoBlockedSlots']);
-    sheet.appendRow(['DEFAULT', ALL_TIMES.length, 'FALSE', 'デフォルト上限', 2, '']);
+    sheet.appendRow(['date', 'limit', 'closed', 'note', 'photoLimit', 'photoBlockedSlots', 'blockedSlots']);
+    sheet.appendRow(['DEFAULT', ALL_TIMES.length, 'FALSE', 'デフォルト上限', 2, '', '']);
   } else {
     const rows = sheet.getDataRange().getValues();
     const header = rows[0] || [];
@@ -1565,6 +1565,11 @@ function getSettingsSheet() {
       sheet.getRange(1, 5).setValue('photoLimit');
       sheet.getRange(1, 6).setValue('photoBlockedSlots');
       Logger.log('設定シートにphotoLimit/photoBlockedSlots列を追加しました');
+    }
+    // blockedSlots列（G列）がなければ追加（マイグレーション）
+    if (header.length < 7 || String(header[6]) !== 'blockedSlots') {
+      sheet.getRange(1, 7).setValue('blockedSlots');
+      Logger.log('設定シートにblockedSlots列を追加しました');
     }
     // DEFAULT上限が旧バグ値(2)のままなら正しい値(11)に自動マイグレーション
     for (let i = 1; i < rows.length; i++) {
@@ -1591,7 +1596,8 @@ function getAllSettings() {
       const note  = String(row[3] || '');
       const photoLimit = (row[4] !== '' && row[4] !== null && row[4] !== undefined && !isNaN(row[4])) ? parseInt(row[4]) : null;
       const photoBlockedSlots = row[5] ? String(row[5]).split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
-      result[date] = { limit, closed, note, photoLimit, photoBlockedSlots };
+      const blockedSlots = row[6] ? String(row[6]).split(',').map(function(s){return s.trim();}).filter(Boolean) : [];
+      result[date] = { limit, closed, note, photoLimit, photoBlockedSlots, blockedSlots };
     });
     return result;
   } catch(e) {
@@ -1605,14 +1611,14 @@ function normalizeSettingsDate(val) {
   return String(val);
 }
 
-function saveSettingsToSheet(date, limit, closed, note, photoLimit, photoBlockedSlots) {
+function saveSettingsToSheet(date, limit, closed, note, photoLimit, photoBlockedSlots, blockedSlots) {
   const sheet = getSettingsSheet();
   const data  = sheet.getDataRange().getValues();
   const row = [date, limit !== null ? limit : '', closed ? 'TRUE' : 'FALSE', note || '',
-               photoLimit !== null && photoLimit !== undefined ? photoLimit : '', photoBlockedSlots || ''];
+               photoLimit !== null && photoLimit !== undefined ? photoLimit : '', photoBlockedSlots || '', blockedSlots || ''];
   for (let i = 1; i < data.length; i++) {
     if (normalizeSettingsDate(data[i][0]) === date) {
-      sheet.getRange(i + 1, 1, 1, 6).setValues([row]);
+      sheet.getRange(i + 1, 1, 1, 7).setValues([row]);
       return;
     }
   }
@@ -2115,8 +2121,9 @@ function doPost(e) {
       const limit = (data.limit !== '' && data.limit !== undefined && data.limit !== null) ? parseInt(data.limit) : null;
       const photoLimit = (data.photoLimit !== '' && data.photoLimit !== undefined && data.photoLimit !== null) ? parseInt(data.photoLimit) : null;
       const photoBlockedSlots = Array.isArray(data.photoBlockedSlots) ? data.photoBlockedSlots.join(',') : (data.photoBlockedSlots || '');
+      const blockedSlots = Array.isArray(data.blockedSlots) ? data.blockedSlots.join(',') : (data.blockedSlots || '');
       Logger.log('saveSettings: date=' + data.date + ' limit=' + limit + ' closed=' + data.closed + ' photoLimit=' + photoLimit);
-      saveSettingsToSheet(data.date, limit, data.closed === true || data.closed === 'true', data.note || '', photoLimit, photoBlockedSlots);
+      saveSettingsToSheet(data.date, limit, data.closed === true || data.closed === 'true', data.note || '', photoLimit, photoBlockedSlots, blockedSlots);
       // 保存後に読み返して確認
       const verify = getAllSettings();
       Logger.log('saveSettings verify: ' + JSON.stringify(verify[data.date]));
@@ -2640,6 +2647,7 @@ function getSlotAvailability(date) {
     ? dateSetting.photoLimit
     : (defaultSetting.photoLimit !== null && defaultSetting.photoLimit !== undefined ? defaultSetting.photoLimit : 2);
   const photoBlockedSlots = new Set(dateSetting.photoBlockedSlots || []);
+  const settingsBlockedSlots = new Set(dateSetting.blockedSlots || []); // 設定モーダルからの一般ブロック
 
   // 撮影プラン予約数をカウント（プラン名に「撮影」を含む予約）
   const photoBookingsForDate = allForDate.filter(function(b) {
@@ -2650,7 +2658,7 @@ function getSlotAvailability(date) {
   const result = {};
   ALL_TIMES.forEach(t => {
     const booked  = allForDate.filter(b => b.time === t).length;
-    const blocked = blockedTimes.has(t);
+    const blocked = blockedTimes.has(t) || settingsBlockedSlots.has(t); // スロットブロック OR 設定ブロック
     const photoBlocked = photoBlockedSlots.has(t);
     const photoBookedInSlot = photoBookingsForDate.filter(b => b.time === t).length;
     result[t] = {

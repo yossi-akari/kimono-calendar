@@ -1108,6 +1108,16 @@ window.addEventListener('pageshow', function(e) {
           style="width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:2px;font-family:inherit;font-size:0.85rem;margin-top:4px;">
       </div>
       <div class="detail-row" style="flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line);">
+        <span class="detail-label">予約ブロック時間帯</span>
+        <div style="margin-top:4px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-size:0.78rem;color:var(--muted);">チェックで予約不可（全プラン共通）:</span>
+            <button type="button" onclick="toggleAllSlotChecks('generalSlotCheck')" style="font-size:0.7rem;padding:3px 8px;border:1px solid var(--line);border-radius:3px;background:var(--bg);cursor:pointer;">すべて受付不可</button>
+          </div>
+          <div id="generalSlotGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;"></div>
+        </div>
+      </div>
+      <div class="detail-row" style="flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line);">
         <span class="detail-label">撮影プラン設定</span>
         <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
           <span style="font-size:0.78rem;color:var(--muted);">1日の撮影上限:</span>
@@ -1116,7 +1126,10 @@ window.addEventListener('pageshow', function(e) {
           <span style="font-size:0.78rem;color:var(--muted);">組（空白 = 2組）</span>
         </div>
         <div style="margin-top:8px;">
-          <span style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:6px;">撮影ブロック時間帯（チェックで撮影不可）:</span>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-size:0.78rem;color:var(--muted);">撮影ブロック時間帯（チェックで撮影不可）:</span>
+            <button type="button" onclick="toggleAllSlotChecks('photoSlotCheck')" style="font-size:0.7rem;padding:3px 8px;border:1px solid var(--line);border-radius:3px;background:var(--bg);cursor:pointer;">すべて受付不可</button>
+          </div>
           <div id="photoSlotGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;"></div>
         </div>
       </div>
@@ -2343,10 +2356,19 @@ function openSettingsModal() {
   document.getElementById('settingsDefaultShow').textContent  = defaultLimit;
   document.getElementById('settingsDefaultLimit').value       = defaultLimit;
   document.getElementById('settingsPhotoLimit').value = ds.photoLimit != null ? ds.photoLimit : '';
+  // 一般ブロック時間帯グリッドを構築
+  const generalGrid = document.getElementById('generalSlotGrid');
+  const generalBlockedSet = new Set(ds.blockedSlots || []);
+  const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
+  generalGrid.innerHTML = ALL_TIMES.map(t => {
+    const checked = generalBlockedSet.has(t) ? 'checked' : '';
+    return `<label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
+      <input type="checkbox" class="generalSlotCheck" value="${t}" ${checked} style="width:14px;height:14px;"> ${t}
+    </label>`;
+  }).join('');
   // 撮影ブロック時間帯グリッドを構築
   const photoGrid = document.getElementById('photoSlotGrid');
   const blockedSet = new Set(ds.photoBlockedSlots || []);
-  const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
   photoGrid.innerHTML = ALL_TIMES.map(t => {
     const checked = blockedSet.has(t) ? 'checked' : '';
     return `<label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;">
@@ -2362,6 +2384,13 @@ function closeSettingsModal() {
   document.getElementById('settingsModal').classList.remove('open');
 }
 
+// すべてのチェックボックスをON/OFFトグル（すべて受付不可ボタン用）
+function toggleAllSlotChecks(className) {
+  const checks = document.querySelectorAll('.' + className);
+  const allChecked = [...checks].every(cb => cb.checked);
+  checks.forEach(cb => { cb.checked = !allChecked; });
+}
+
 async function saveSettingsForDate() {
   const closed   = document.getElementById('settingsClosed').checked;
   const limitVal = document.getElementById('settingsLimit').value;
@@ -2370,9 +2399,10 @@ async function saveSettingsForDate() {
   const photoLimitVal = document.getElementById('settingsPhotoLimit').value;
   const photoLimit = photoLimitVal !== '' ? parseInt(photoLimitVal) : null;
   const photoBlockedSlots = [...document.querySelectorAll('.photoSlotCheck:checked')].map(cb => cb.value);
+  const blockedSlots = [...document.querySelectorAll('.generalSlotCheck:checked')].map(cb => cb.value);
   try {
-    await adminPost({ action: 'saveSettings', date: selectedDate, limit, closed, note, photoLimit, photoBlockedSlots });
-    settings[selectedDate] = { limit, closed, note, photoLimit, photoBlockedSlots };
+    await adminPost({ action: 'saveSettings', date: selectedDate, limit, closed, note, photoLimit, photoBlockedSlots, blockedSlots });
+    settings[selectedDate] = { limit, closed, note, photoLimit, photoBlockedSlots, blockedSlots };
     closeSettingsModal();
     renderCalendar();
     renderSidePanel();
