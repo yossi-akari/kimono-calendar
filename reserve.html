@@ -266,6 +266,31 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   font-weight: 400; font-size: 0.8rem; color: var(--accent);
   margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
 }
+/* ── 口コミセクション ── */
+.reviews-section {
+  background: var(--cream); padding: 36px 24px 28px; text-align: center;
+}
+.reviews-title {
+  font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.25em;
+  color: var(--muted); margin-bottom: 20px; text-transform: uppercase;
+}
+.reviews-grid {
+  display: flex; gap: 16px; max-width: 900px; margin: 0 auto;
+  overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+  padding-bottom: 8px;
+}
+.review-card {
+  flex: 0 0 280px; scroll-snap-align: start;
+  background: var(--white); border-radius: 3px; padding: 20px;
+  text-align: left; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.review-stars { color: var(--gold); font-size: 0.8rem; letter-spacing: 2px; margin-bottom: 8px; }
+.review-text { font-size: 0.82rem; line-height: 1.7; color: var(--ink); margin-bottom: 10px; }
+.review-author { font-size: 0.7rem; color: var(--muted); }
+@media (max-width: 600px) {
+  .review-card { flex: 0 0 240px; padding: 16px; }
+  .reviews-section { padding: 24px 12px 20px; }
+}
 </style>
 </head>
 <body>
@@ -282,6 +307,28 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   <h1 id="heroTitle">着物レンタル<br>ご予約</h1>
   <p id="heroSub">特別な一日を、丁寧に。</p>
   <div class="hero-line"></div>
+</div>
+
+<!-- 口コミセクション -->
+<div class="reviews-section" id="reviewsSection">
+  <div class="reviews-title" id="reviewsTitle">CUSTOMER REVIEWS</div>
+  <div class="reviews-grid">
+    <div class="review-card">
+      <div class="review-stars">★★★★★</div>
+      <div class="review-text" id="rv1">着物の種類が豊富で、スタッフの方がとても親切に選んでくださいました。着付けも丁寧で、一日中着崩れしませんでした。</div>
+      <div class="review-author" id="rv1a">— 20代女性</div>
+    </div>
+    <div class="review-card">
+      <div class="review-stars">★★★★★</div>
+      <div class="review-text" id="rv2">ヘアセットまで含めてこの価格は驚きです。近江町市場やひがし茶屋街を着物で歩けて、金沢旅行が最高の思い出になりました。</div>
+      <div class="review-author" id="rv2a">— カップル</div>
+    </div>
+    <div class="review-card">
+      <div class="review-stars">★★★★★</div>
+      <div class="review-text" id="rv3">海外からの旅行でしたが、とても丁寧に対応していただきました。着物を着て兼六園を散策できて感動です。</div>
+      <div class="review-author" id="rv3a">— 海外からの旅行者</div>
+    </div>
+  </div>
 </div>
 
 <div class="steps">
@@ -588,6 +635,10 @@ const I18N = {
     visitDate: 'ご来店日', visitTime: 'ご来店時間',
     timeSelect: '選択してください',
     slotBlocked: '受付不可', slotFull: '予約済', slotAvailable: '◎ 空き', slotRemaining: '残り{n}枠',
+    reviewsTitle: 'お客様の声',
+    rv1: '着物の種類が豊富で、スタッフの方がとても親切に選んでくださいました。着付けも丁寧で、一日中着崩れしませんでした。', rv1a: '— 20代女性',
+    rv2: 'ヘアセットまで含めてこの価格は驚きです。近江町市場やひがし茶屋街を着物で歩けて、金沢旅行が最高の思い出になりました。', rv2a: '— カップル',
+    rv3: '海外からの旅行でしたが、とても丁寧に対応していただきました。着物を着て兼六園を散策できて感動です。', rv3a: '— 海外からの旅行者',
     peopleSectionLabel: '人数',
     femaleLabel: '女性人数',
     maleLabel: '男性人数（¥4,400/名）',
@@ -673,6 +724,10 @@ const I18N = {
     visitDate: 'Visit Date', visitTime: 'Visit Time',
     timeSelect: 'Please select',
     slotBlocked: 'Unavailable', slotFull: 'Fully Booked', slotAvailable: '◎ Available', slotRemaining: '{n} slots left',
+    reviewsTitle: 'CUSTOMER REVIEWS',
+    rv1: 'A wonderful selection of kimonos, and the staff were incredibly helpful. The dressing was perfect — it stayed in place all day.', rv1a: '— Female guest, 20s',
+    rv2: 'Amazing value with hair styling included. Walking through Omicho Market and Higashi Chaya in kimono made our Kanazawa trip unforgettable.', rv2a: '— Couple',
+    rv3: 'We visited from abroad and received such warm, attentive service. Wearing kimono at Kenrokuen Garden was truly special.', rv3a: '— International traveler',
     peopleSectionLabel: 'Number of Guests',
     femaleLabel: 'Female Guests',
     maleLabel: 'Male Guests (¥4,400/person)',
@@ -761,6 +816,10 @@ const I18N = {
     visitDate: '來店日期', visitTime: '來店時間',
     timeSelect: '請選擇',
     slotBlocked: '不可預約', slotFull: '已額滿', slotAvailable: '◎ 有空位', slotRemaining: '剩餘{n}個名額',
+    reviewsTitle: '顧客評價',
+    rv1: '和服種類豐富，工作人員非常親切地幫我挑選。穿著整天都沒有鬆散，非常滿意。', rv1a: '— 20多歲女性',
+    rv2: '包含髮型設計的價格令人驚喜。穿著和服在近江町市場和東茶屋街散步，成為金澤旅行最美好的回憶。', rv2a: '— 情侶',
+    rv3: '從海外來旅行，受到了非常細心的接待。穿著和服在兼六園散步，非常感動。', rv3a: '— 海外旅客',
     peopleSectionLabel: '人數',
     femaleLabel: '女性人數',
     maleLabel: '男性人數（¥4,400/名）',
@@ -1020,6 +1079,11 @@ function applyLang() {
   document.title = t.pageTitle;
   document.getElementById('heroTitle').innerHTML = t.heroTitle;
   document.getElementById('heroSub').textContent = t.heroSub;
+  // 口コミセクション
+  document.getElementById('reviewsTitle').textContent = t.reviewsTitle;
+  document.getElementById('rv1').textContent = t.rv1; document.getElementById('rv1a').textContent = t.rv1a;
+  document.getElementById('rv2').textContent = t.rv2; document.getElementById('rv2a').textContent = t.rv2a;
+  document.getElementById('rv3').textContent = t.rv3; document.getElementById('rv3a').textContent = t.rv3a;
   document.getElementById('stepLbl1').textContent = t.step1;
   document.getElementById('stepLbl2').textContent = t.step2;
   document.getElementById('stepLbl3').textContent = t.step3;
