@@ -266,6 +266,26 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   font-weight: 400; font-size: 0.8rem; color: var(--accent);
   margin-bottom: 6px; display: flex; align-items: center; gap: 6px;
 }
+/* ── FAQセクション ── */
+.faq-section {
+  background: var(--paper); max-width: 700px; margin: 0 auto; padding: 40px 24px;
+}
+.faq-title {
+  font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.25em;
+  color: var(--muted); text-align: center; margin-bottom: 24px; text-transform: uppercase;
+}
+.faq-item { border-bottom: 1px solid var(--line); }
+.faq-q {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 14px 0; cursor: pointer; font-size: 0.88rem; font-weight: 400; color: var(--ink);
+}
+.faq-q::after { content: '+'; font-size: 1.1rem; color: var(--muted); transition: transform 0.2s; }
+.faq-item.open .faq-q::after { content: '−'; }
+.faq-a {
+  max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+  font-size: 0.82rem; line-height: 1.8; color: var(--muted); padding: 0 0 0 4px;
+}
+.faq-item.open .faq-a { max-height: 200px; padding-bottom: 14px; }
 /* ── 口コミセクション ── */
 .reviews-section {
   background: var(--cream); padding: 36px 24px 28px; text-align: center;
@@ -543,6 +563,35 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 
 </div>
 
+<!-- FAQ -->
+<div class="faq-section" id="faqSection">
+  <div class="faq-title" id="faqTitle">FAQ — よくあるご質問</div>
+  <div class="faq-item" onclick="this.classList.toggle('open')">
+    <div class="faq-q" id="fq1">予約なしで当日利用できますか？</div>
+    <div class="faq-a" id="fa1">はい、空きがあれば当日のご利用も可能です。ただし混雑する時期は事前予約をおすすめします。</div>
+  </div>
+  <div class="faq-item" onclick="this.classList.toggle('open')">
+    <div class="faq-q" id="fq2">着付けにどのくらい時間がかかりますか？</div>
+    <div class="faq-a" id="fa2">着物の着付けは約15〜20分です。ヘアセットを追加される場合は合わせて30〜40分ほどです。</div>
+  </div>
+  <div class="faq-item" onclick="this.classList.toggle('open')">
+    <div class="faq-q" id="fq3">雨の日でも大丈夫ですか？</div>
+    <div class="faq-a" id="fa3">はい。雨天時は無料で傘をお貸ししています。着物は多少の雨なら問題ありません。</div>
+  </div>
+  <div class="faq-item" onclick="this.classList.toggle('open')">
+    <div class="faq-q" id="fq4">返却時間は何時までですか？</div>
+    <div class="faq-a" id="fa4">当日17:00までにご返却ください。オプションでホテル返却も承っております。</div>
+  </div>
+  <div class="faq-item" onclick="this.classList.toggle('open')">
+    <div class="faq-q" id="fq5">男性や子供も利用できますか？</div>
+    <div class="faq-a" id="fa5">はい。男性用の着物や、3歳〜10歳のお子様用の着物もご用意しています。</div>
+  </div>
+  <div class="faq-item" onclick="this.classList.toggle('open')">
+    <div class="faq-q" id="fq6">キャンセル料はかかりますか？</div>
+    <div class="faq-a" id="fa6">前日までのキャンセルは無料です。当日キャンセルの場合はキャンセル料が発生する場合があります。詳しくは特定商取引法に基づく表記をご確認ください。</div>
+  </div>
+</div>
+
 <!-- OTP確認モーダル（予約メール認証）-->
 <div id="otpConfirmModal" style="display:none; position:fixed; inset:0; z-index:200; background:rgba(28,26,24,0.82); align-items:center; justify-content:center;">
   <div style="background:var(--white); border-radius:4px; padding:40px 28px; max-width:380px; width:92%; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.3);">
@@ -639,6 +688,13 @@ const I18N = {
     rv1: '着物の種類が豊富で、スタッフの方がとても親切に選んでくださいました。着付けも丁寧で、一日中着崩れしませんでした。', rv1a: '— 20代女性',
     rv2: 'ヘアセットまで含めてこの価格は驚きです。近江町市場やひがし茶屋街を着物で歩けて、金沢旅行が最高の思い出になりました。', rv2a: '— カップル',
     rv3: '海外からの旅行でしたが、とても丁寧に対応していただきました。着物を着て兼六園を散策できて感動です。', rv3a: '— 海外からの旅行者',
+    faqTitle: 'FAQ — よくあるご質問',
+    fq1: '予約なしで当日利用できますか？', fa1: 'はい、空きがあれば当日のご利用も可能です。ただし混雑する時期は事前予約をおすすめします。',
+    fq2: '着付けにどのくらい時間がかかりますか？', fa2: '着物の着付けは約15〜20分です。ヘアセットを追加される場合は合わせて30〜40分ほどです。',
+    fq3: '雨の日でも大丈夫ですか？', fa3: 'はい。雨天時は無料で傘をお貸ししています。着物は多少の雨なら問題ありません。',
+    fq4: '返却時間は何時までですか？', fa4: '当日17:00までにご返却ください。オプションでホテル返却も承っております。',
+    fq5: '男性や子供も利用できますか？', fa5: 'はい。男性用の着物や、3歳〜10歳のお子様用の着物もご用意しています。',
+    fq6: 'キャンセル料はかかりますか？', fa6: '前日までのキャンセルは無料です。当日キャンセルの場合はキャンセル料が発生する場合があります。',
     peopleSectionLabel: '人数',
     femaleLabel: '女性人数',
     maleLabel: '男性人数（¥4,400/名）',
@@ -728,6 +784,13 @@ const I18N = {
     rv1: 'A wonderful selection of kimonos, and the staff were incredibly helpful. The dressing was perfect — it stayed in place all day.', rv1a: '— Female guest, 20s',
     rv2: 'Amazing value with hair styling included. Walking through Omicho Market and Higashi Chaya in kimono made our Kanazawa trip unforgettable.', rv2a: '— Couple',
     rv3: 'We visited from abroad and received such warm, attentive service. Wearing kimono at Kenrokuen Garden was truly special.', rv3a: '— International traveler',
+    faqTitle: 'FAQ — Frequently Asked Questions',
+    fq1: 'Can I rent without a reservation?', fa1: 'Yes, walk-ins are welcome if we have availability. We recommend booking in advance during busy seasons.',
+    fq2: 'How long does dressing take?', fa2: 'Kimono dressing takes about 15–20 minutes. With hair styling, allow 30–40 minutes total.',
+    fq3: 'What if it rains?', fa3: 'We provide free umbrellas on rainy days. Kimono can handle light rain without any issues.',
+    fq4: 'What time do I need to return the kimono?', fa4: 'Please return by 5:00 PM the same day. Hotel return service is also available as an option.',
+    fq5: 'Do you have kimono for men and children?', fa5: 'Yes, we have kimono for men and children aged 3–10.',
+    fq6: 'Is there a cancellation fee?', fa6: 'Cancellations made by the day before are free. Same-day cancellations may incur a fee.',
     peopleSectionLabel: 'Number of Guests',
     femaleLabel: 'Female Guests',
     maleLabel: 'Male Guests (¥4,400/person)',
@@ -820,6 +883,13 @@ const I18N = {
     rv1: '和服種類豐富，工作人員非常親切地幫我挑選。穿著整天都沒有鬆散，非常滿意。', rv1a: '— 20多歲女性',
     rv2: '包含髮型設計的價格令人驚喜。穿著和服在近江町市場和東茶屋街散步，成為金澤旅行最美好的回憶。', rv2a: '— 情侶',
     rv3: '從海外來旅行，受到了非常細心的接待。穿著和服在兼六園散步，非常感動。', rv3a: '— 海外旅客',
+    faqTitle: '常見問題',
+    fq1: '可以不預約直接去嗎？', fa1: '可以，如果有空位可以當天直接來。但旺季時建議提前預約。',
+    fq2: '穿和服需要多長時間？', fa2: '和服穿著大約15-20分鐘。加上髮型設計大約30-40分鐘。',
+    fq3: '下雨天也可以嗎？', fa3: '可以。雨天我們提供免費雨傘。和服在小雨中沒有問題。',
+    fq4: '幾點之前需要歸還？', fa4: '請在當天17:00之前歸還。也可選擇酒店歸還服務。',
+    fq5: '有男性和兒童的和服嗎？', fa5: '有的。我們備有男性和3-10歲兒童的和服。',
+    fq6: '需要取消費嗎？', fa6: '前一天之前取消免費。當天取消可能會產生取消費。',
     peopleSectionLabel: '人數',
     femaleLabel: '女性人數',
     maleLabel: '男性人數（¥4,400/名）',
@@ -1084,6 +1154,9 @@ function applyLang() {
   document.getElementById('rv1').textContent = t.rv1; document.getElementById('rv1a').textContent = t.rv1a;
   document.getElementById('rv2').textContent = t.rv2; document.getElementById('rv2a').textContent = t.rv2a;
   document.getElementById('rv3').textContent = t.rv3; document.getElementById('rv3a').textContent = t.rv3a;
+  // FAQ
+  document.getElementById('faqTitle').textContent = t.faqTitle;
+  for (let i = 1; i <= 6; i++) { document.getElementById('fq'+i).textContent = t['fq'+i]; document.getElementById('fa'+i).textContent = t['fa'+i]; }
   document.getElementById('stepLbl1').textContent = t.step1;
   document.getElementById('stepLbl2').textContent = t.step2;
   document.getElementById('stepLbl3').textContent = t.step3;
