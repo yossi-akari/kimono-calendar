@@ -329,6 +329,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
             <option>13:00</option><option>13:30</option>
             <option>14:00</option>
           </select>
+          <div id="slotSummary" style="display:none;font-size:0.75rem;margin-top:6px;color:var(--green);font-weight:400;"></div>
         </div>
       </div>
     </div>
@@ -586,7 +587,7 @@ const I18N = {
     dateSectionLabel: 'ご来店日時',
     visitDate: 'ご来店日', visitTime: 'ご来店時間',
     timeSelect: '選択してください',
-    slotBlocked: '受付不可', slotFull: '予約済',
+    slotBlocked: '受付不可', slotFull: '予約済', slotAvailable: '◎ 空き', slotRemaining: '残り{n}枠',
     peopleSectionLabel: '人数',
     femaleLabel: '女性人数',
     maleLabel: '男性人数（¥4,400/名）',
@@ -671,7 +672,7 @@ const I18N = {
     dateSectionLabel: 'Visit Date & Time',
     visitDate: 'Visit Date', visitTime: 'Visit Time',
     timeSelect: 'Please select',
-    slotBlocked: 'Unavailable', slotFull: 'Fully Booked',
+    slotBlocked: 'Unavailable', slotFull: 'Fully Booked', slotAvailable: '◎ Available', slotRemaining: '{n} slots left',
     peopleSectionLabel: 'Number of Guests',
     femaleLabel: 'Female Guests',
     maleLabel: 'Male Guests (¥4,400/person)',
@@ -759,7 +760,7 @@ const I18N = {
     dateSectionLabel: '來店日期及時間',
     visitDate: '來店日期', visitTime: '來店時間',
     timeSelect: '請選擇',
-    slotBlocked: '不可預約', slotFull: '已額滿',
+    slotBlocked: '不可預約', slotFull: '已額滿', slotAvailable: '◎ 有空位', slotRemaining: '剩餘{n}個名額',
     peopleSectionLabel: '人數',
     femaleLabel: '女性人數',
     maleLabel: '男性人數（¥4,400/名）',
@@ -1213,11 +1214,22 @@ function updateTimeOptions() {
       opt.textContent = `${opt.value}　撮影枠満`;
     } else {
       opt.disabled = false;
-      opt.textContent = opt.value;
+      opt.textContent = `${opt.value}　${t.slotAvailable}`;
     }
   });
   if (currentVal && select.querySelector(`option[value="${currentVal}"]`) && select.querySelector(`option[value="${currentVal}"]`).disabled) {
     select.value = '';
+  }
+  // 空き枠サマリーを更新
+  const summaryEl = document.getElementById('slotSummary');
+  const hasData = Object.keys(slotAvailability).length > 0;
+  if (hasData) {
+    const availCount = Object.values(slotAvailability).filter(s => !s.blocked && s.remaining > 0).length;
+    summaryEl.textContent = t.slotRemaining.replace('{n}', availCount);
+    summaryEl.style.color = availCount <= 2 ? 'var(--accent)' : 'var(--green)';
+    summaryEl.style.display = '';
+  } else {
+    summaryEl.style.display = 'none';
   }
 }
 
