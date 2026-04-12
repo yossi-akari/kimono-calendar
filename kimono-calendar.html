@@ -1493,7 +1493,7 @@ async function loadFromGAS() {
         if (a.date !== b.date) return a.date.localeCompare(b.date);
         return a.time.localeCompare(b.time);
       });
-      if (data.settings) {
+      if (data.settings && Object.keys(data.settings).length > 0) {
         settings = data.settings;
         defaultLimit = (settings['DEFAULT'] && settings['DEFAULT'].limit != null) ? settings['DEFAULT'].limit : TOTAL_SLOTS;
       }
@@ -1536,13 +1536,16 @@ function getActiveBookings() {
 }
 
 // 過去月のデータをGASから取得（localStorageに1時間キャッシュ）
+let _monthLoadSeq = 0; // 月ナビ連打対策：古いリクエストの結果を無視するためのシーケンス番号
 async function loadMonthBookings(year, month) {
+  const seq = ++_monthLoadSeq; // このリクエストのシーケンス番号
   const cacheKey = 'kimono_month_' + year + '_' + month;
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
     try {
       const parsed = JSON.parse(cached);
       if (parsed.ts && Date.now() - parsed.ts < 3600000) {
+        if (seq !== _monthLoadSeq) return; // 別の月に移動済みなら無視
         pastMonthBookings = parsed.bookings;
         renderCalendar();
         renderSidePanel();
@@ -1557,6 +1560,7 @@ async function loadMonthBookings(year, month) {
 
   try {
     const data = await adminPost({ action: 'getBookings', year: year, month: month });
+    if (seq !== _monthLoadSeq) return; // 古いリクエストの結果は無視
     if (data.error === 'Unauthorized') { handleUnauthorized(); return; }
     if (data.success && data.bookings) {
       pastMonthBookings = data.bookings;
@@ -1564,6 +1568,7 @@ async function loadMonthBookings(year, month) {
       if (statusEl) statusEl.textContent = year + '年' + month + '月: ' + data.count + '件';
     }
   } catch(e) {
+    if (seq !== _monthLoadSeq) return;
     console.warn('月別データ読み込みエラー:', e);
     pastMonthBookings = [];
     if (statusEl) statusEl.textContent = '読み込み失敗';
@@ -1612,6 +1617,12 @@ async function refreshBookings() {
     lastSyncTime = new Date();
     startSyncElapsed();
   }
+  // 過去月表示中はデータ取得だけ行い、描画はスキップ（画面ちらつき防止）
+  const now = new Date();
+  const viewingPast = curYear < now.getFullYear() ||
+    (curYear === now.getFullYear() && curMonth < now.getMonth());
+  if (viewingPast && pastMonthBookings) return;
+
   renderCalendar();
   renderSidePanel();
   updateStats();
