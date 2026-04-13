@@ -628,21 +628,32 @@ const GAS_URL    = 'https://script.google.com/macros/s/AKfycbyUjRWMu_ZgGroCakrRf
 const ACCESS_KEY = 'b62260ea88bfe062108c3b7e6ba90187';
 
 // GAS Web AppへのPOSTリクエスト（iOS Safari 302リダイレクト問題対策付き）
-async function gasPost(body, retries) {
+async function gasPost(body, retries, timeoutMs) {
   retries = retries || 2;
+  timeoutMs = timeoutMs || 30000; // デフォルト30秒タイムアウト
   for (let i = 0; i <= retries; i++) {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      redirect: 'follow',
-      body: JSON.stringify(body)
-    });
-    const ct = res.headers.get('content-type') || '';
-    if (ct.indexOf('application/json') !== -1 || ct.indexOf('text/json') !== -1) {
-      return await res.json();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(GAS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        redirect: 'follow',
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      const ct = res.headers.get('content-type') || '';
+      if (ct.indexOf('application/json') !== -1 || ct.indexOf('text/json') !== -1) {
+        return await res.json();
+      }
+      const text = await res.text();
+      try { return JSON.parse(text); } catch(e) { /* HTMLが返った */ }
+    } catch(e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') throw new Error('TIMEOUT');
+      if (i >= retries) throw e;
     }
-    const text = await res.text();
-    try { return JSON.parse(text); } catch(e) { /* HTMLが返った */ }
     if (i < retries) await new Promise(r => setTimeout(r, 500));
   }
   throw new Error('GAS応答がJSON形式ではありません');
@@ -749,6 +760,8 @@ const I18N = {
     alertOtpExpired: '確認コードの有効期限が切れました。再度「予約を確定する」からお試しください。',
     alertOtpInvalid: 'コードが違います。もう一度お試しください。',
     alertOtpSendFail: '確認コードの送信に失敗しました。\nお手数ですが、お電話（076-201-8119）にてご連絡ください。',
+    alertOtpTimeout: '通信に時間がかかっています。電波の良い場所でもう一度お試しください。',
+    alertOtpEmailInvalid: 'メールアドレスの形式を確認してください。',
     alertOtpRateLimit: 'コード送信回数の上限に達しました。10分後にお試しください。',
     paymentSectionLabel: 'お支払い方法',
     pmCard: 'クレジットカード', pmCardSub: 'Visa / Mastercard / JCB / Amex',
@@ -845,6 +858,8 @@ const I18N = {
     alertOtpExpired: 'The verification code has expired. Please click "Confirm Booking" again.',
     alertOtpInvalid: 'Incorrect code. Please try again.',
     alertOtpSendFail: 'Failed to send verification code.\nPlease call us: 076-201-8119.',
+    alertOtpTimeout: 'Connection timed out. Please check your signal and try again.',
+    alertOtpEmailInvalid: 'Please check your email address format.',
     alertOtpRateLimit: 'Too many code requests. Please try again in 10 minutes.',
     paymentSectionLabel: 'Payment Method',
     pmCard: 'Credit Card', pmCardSub: 'Visa / Mastercard / JCB / Amex',
@@ -944,6 +959,8 @@ const I18N = {
     alertOtpExpired: '驗證碼已過期，請重新點擊「確認預約」。',
     alertOtpInvalid: '驗證碼錯誤，請再試一次。',
     alertOtpSendFail: '驗證碼傳送失敗。\n請撥打電話：076-201-8119。',
+    alertOtpTimeout: '連線逾時。請確認網路訊號後再試一次。',
+    alertOtpEmailInvalid: '請確認電子郵件地址格式。',
     alertOtpRateLimit: '驗證碼傳送次數已達上限，請10分鐘後再試。',
     paymentSectionLabel: '付款方式',
     pmCard: '信用卡', pmCardSub: 'Visa / Mastercard / JCB / Amex',
@@ -2010,10 +2027,12 @@ async function submitForm() {
 
   btn.innerHTML = '<span class="spinner"></span>' + t.otpSending;
   try {
-    const json = await gasPost({ key: ACCESS_KEY, action: 'sendBookingOtp', email: em }).catch(() => null);
+    const json = await gasPost({ key: ACCESS_KEY, action: 'sendBookingOtp', email: em });
     if (!json || !json.success) {
       if (json && json.error === 'OTP_RATE_LIMIT') {
         alert(t.alertOtpRateLimit);
+      } else if (json && json.error && json.error.indexOf('メールアドレス') >= 0) {
+        alert(t.alertOtpEmailInvalid);
       } else {
         alert(t.alertOtpSendFail);
       }
@@ -2023,7 +2042,12 @@ async function submitForm() {
     }
     showOtpModal(em);
   } catch(err) {
-    alert(t.alertOtpSendFail);
+    // 原因別のエラーメッセージ
+    if (err.message === 'TIMEOUT') {
+      alert(t.alertOtpTimeout);
+    } else {
+      alert(t.alertOtpSendFail);
+    }
     pendingBooking = null;
   }
   btnRestore();
@@ -2131,7 +2155,7 @@ async function resendOtp() {
   btn.disabled = true;
   err.textContent = t.otpSending;
   try {
-    const json = await gasPost({ key: ACCESS_KEY, action: 'sendBookingOtp', email }).catch(() => null);
+    const json = await gasPost({ key: ACCESS_KEY, action: 'sendBookingOtp', email });
     if (!json || !json.success) {
       err.textContent = json?.error === 'OTP_RATE_LIMIT' ? t.alertOtpRateLimit : t.alertOtpSendFail;
     } else {
@@ -2140,7 +2164,7 @@ async function resendOtp() {
       document.getElementById('otpModalInput').focus();
     }
   } catch(e) {
-    err.textContent = t.alertOtpSendFail;
+    err.textContent = e.message === 'TIMEOUT' ? t.alertOtpTimeout : t.alertOtpSendFail;
   }
   // 30秒後に再送ボタンを再有効化
   setTimeout(() => { btn.disabled = false; }, 30000);
