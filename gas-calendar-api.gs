@@ -2102,6 +2102,8 @@ function doPost(e) {
     // 手動予約の保存（管理者）
     if (data.action === 'saveManual') {
       saveManualToSheet(data.booking);
+      // 手動予約を即座にSupabaseに同期（ダブルブッキング防止）
+      try { syncBookingsToSupabase(); } catch(e) { Logger.log('手動予約同期エラー: ' + e.message); }
       output.setContent(JSON.stringify({ success: true }));
       return output;
     }
@@ -2458,10 +2460,101 @@ function hourlySync() {
       Logger.log('キャッシュ更新完了(Gmail): ' + b.length + '件');
     }
     setCachedBookings(b);
+    // GAS側の予約をSupabaseに同期（ダブルブッキング防止）
+    syncBookingsToSupabase();
   } catch(e) {
     Logger.log('キャッシュ更新エラー: ' + e.message);
     logAudit('HOURLY_SYNC_ERROR', { error: e.message });
     notifyAdminError('hourlySync', e.message);
+  }
+}
+
+// =============================================================
+// ── GAS → Supabase 予約同期 ─────────────────────────────────────
+// Supabaseのbookingsテーブルに、GAS側の予約データを一方向同期する。
+// 目的: 管理画面の手動予約やAJ/じゃらん予約を、reserve.htmlの
+//       check-slotに反映してダブルブッキングを防止する。
+// =============================================================
+
+/**
+ * GASの全予約をSupabaseにUPSERT同期する
+ * 手動予約 + 外部予約（AJ/じゃらん）を対象。
+ * WEB予約はSupabaseに直接保存されるため、ここでは上書きしない。
+ */
+function syncBookingsToSupabase() {
+  const props = PropertiesService.getScriptProperties();
+  const supabaseUrl = props.getProperty('SUPABASE_URL');
+  const supabaseKey = props.getProperty('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !supabaseKey) {
+    Logger.log('Supabase同期スキップ: SUPABASE_URL または SUPABASE_SERVICE_ROLE_KEY が未設定');
+    return;
+  }
+
+  try {
+    // 手動予約 + 外部予約を取得（今日以降のみ）
+    const manual = getManualSheetBookings();
+    const external = getExternalSheetBookings();
+
+    // GAS側の全予約を同期（移行前のWEB予約もGASにしかないため）
+    // UPSERTなので、Supabaseに既にある予約は上書き更新される
+    const gasBookings = [...manual, ...external];
+
+    if (gasBookings.length === 0) {
+      Logger.log('Supabase同期: 対象予約なし');
+      return;
+    }
+
+    // Supabase bookingsテーブルの形式に変換
+    var records = gasBookings.map(function(b) {
+      return {
+        id: b.id || b.reservationId,
+        reservation_id: b.reservationId || b.id,
+        source: b.source || 'MANUAL',
+        date: b.date,
+        time: b.time,
+        name: b.name,
+        email: b.email || null,
+        tel: b.tel || null,
+        plan: b.plan || 'ベーシック',
+        people: b.people || null,
+        options: b.options || [],
+        total: b.total || 0,
+        payment: b.payment || null,
+        remarks: b.remarks || null,
+        charge_id: b.visitChargeId || null,
+        payment_status: b.visitChargeId ? 'paid' : 'pending',
+        visit_status: b.visitStatus || 'confirmed',
+        channel: b.channel || null,
+        created_at: b.createdAt || new Date().toISOString()
+      };
+    });
+
+    // Supabase REST APIで一括UPSERT（50件ずつバッチ処理）
+    var batchSize = 50;
+    var totalUpserted = 0;
+    for (var i = 0; i < records.length; i += batchSize) {
+      var batch = records.slice(i, i + batchSize);
+      var resp = UrlFetchApp.fetch(supabaseUrl + '/rest/v1/bookings', {
+        method: 'post',
+        headers: {
+          'Authorization': 'Bearer ' + supabaseKey,
+          'apikey': supabaseKey,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates'
+        },
+        payload: JSON.stringify(batch),
+        muteHttpExceptions: true
+      });
+      var code = resp.getResponseCode();
+      if (code >= 400) {
+        Logger.log('Supabase UPSERT エラー (' + code + '): ' + resp.getContentText().substring(0, 200));
+      } else {
+        totalUpserted += batch.length;
+      }
+    }
+    Logger.log('Supabase同期完了: ' + totalUpserted + '/' + records.length + '件');
+  } catch(e) {
+    Logger.log('Supabase同期エラー: ' + e.message);
   }
 }
 
