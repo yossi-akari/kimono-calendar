@@ -624,31 +624,31 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 </div>
 
 <script>
-const GAS_URL    = 'https://script.google.com/macros/s/AKfycbyUjRWMu_ZgGroCakrRfIxuobAjJvl_So1HVzK2s5wEYY-ToZUjo89jwRgy5GQwb6Si/exec';
-const ACCESS_KEY = 'b62260ea88bfe062108c3b7e6ba90187';
+// Supabase Edge Functions エンドポイント
+// ※デプロイ後にプロジェクトIDを設定すること
+const API_URL = 'https://ovaauspaumntorumuvrs.supabase.co/functions/v1';
+const SUPABASE_ANON_KEY = 'sb_publishable_YbKqHzrsx5urxzqQN1dp0g_cxEiZkJ1';
 
-// GAS Web AppへのPOSTリクエスト（iOS Safari 302リダイレクト問題対策付き）
-async function gasPost(body, retries, timeoutMs) {
+// Supabase Edge FunctionsへのPOSTリクエスト
+async function apiPost(endpoint, body, retries, timeoutMs) {
   retries = retries || 2;
   timeoutMs = timeoutMs || 30000; // デフォルト30秒タイムアウト
   for (let i = 0; i <= retries; i++) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(GAS_URL, {
+      const res = await fetch(API_URL + endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        redirect: 'follow',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+          'apikey': SUPABASE_ANON_KEY
+        },
         body: JSON.stringify(body),
         signal: controller.signal
       });
       clearTimeout(timer);
-      const ct = res.headers.get('content-type') || '';
-      if (ct.indexOf('application/json') !== -1 || ct.indexOf('text/json') !== -1) {
-        return await res.json();
-      }
-      const text = await res.text();
-      try { return JSON.parse(text); } catch(e) { /* HTMLが返った */ }
+      return await res.json();
     } catch(e) {
       clearTimeout(timer);
       if (e.name === 'AbortError') throw new Error('TIMEOUT');
@@ -656,7 +656,7 @@ async function gasPost(body, retries, timeoutMs) {
     }
     if (i < retries) await new Promise(r => setTimeout(r, 500));
   }
-  throw new Error('GAS応答がJSON形式ではありません');
+  throw new Error('API応答が取得できません');
 }
 
 let plan   = { name: null, price: 0, isEstimate: false };
@@ -1075,7 +1075,9 @@ let OPT_DEFS = [
 // ── 店舗設定をGASから取得 ─────────────────────────────
 async function loadShopConfig() {
   try {
-    const res = await fetch(`${GAS_URL}?key=${ACCESS_KEY}&action=getConfig`);
+    const res = await fetch(API_URL + '/config', {
+      headers: { 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'apikey': SUPABASE_ANON_KEY }
+    });
     const data = await res.json();
     if (data.success && data.config) {
       SHOP_CONFIG = data.config;
@@ -1333,7 +1335,7 @@ function buildPlanCards() {
 // ── 空き状況を取得して時間セレクトに反映 ─────────────
 async function fetchSlotAvailability(date) {
   try {
-    const data = await gasPost({ key: ACCESS_KEY, action: 'checkSlot', date }).catch(() => null);
+    const data = await apiPost('/check-slot', { date }).catch(() => null);
     if (data && data.success) slotAvailability = data.slots || {};
   } catch(e) {
     slotAvailability = {};
@@ -2027,7 +2029,7 @@ async function submitForm() {
 
   btn.innerHTML = '<span class="spinner"></span>' + t.otpSending;
   try {
-    const json = await gasPost({ key: ACCESS_KEY, action: 'sendBookingOtp', email: em });
+    const json = await apiPost('/send-otp', { email: em });
     if (!json || !json.success) {
       if (json && json.error === 'OTP_RATE_LIMIT') {
         alert(t.alertOtpRateLimit);
@@ -2087,7 +2089,7 @@ async function confirmWithOtp() {
   btnText.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span>' + t.otpVerifying;
   err.textContent = '';
   try {
-    const json = await gasPost({ key: ACCESS_KEY, action: 'save', booking: pendingBooking.booking, otp, cardToken: pendingBooking.cardToken || null }).catch(() => null);
+    const json = await apiPost('/save-booking', { booking: pendingBooking.booking, otp, cardToken: pendingBooking.cardToken || null }).catch(() => null);
     if (!json || json.success === false) {
       btn.classList.remove('otp-btn-loading');
       btnText.textContent = t.otpConfirmBtn;
@@ -2155,7 +2157,7 @@ async function resendOtp() {
   btn.disabled = true;
   err.textContent = t.otpSending;
   try {
-    const json = await gasPost({ key: ACCESS_KEY, action: 'sendBookingOtp', email });
+    const json = await apiPost('/send-otp', { email });
     if (!json || !json.success) {
       err.textContent = json?.error === 'OTP_RATE_LIMIT' ? t.alertOtpRateLimit : t.alertOtpSendFail;
     } else {
