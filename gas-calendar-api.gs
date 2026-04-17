@@ -3187,3 +3187,180 @@ function debugAJChange() {
   }
   Logger.log('変更メール合計: ' + changeCount + '件 / 解析OK: ' + parseOk + ' / 失敗: ' + parseFail);
 }
+
+// =============================================================
+// ── 健全性監視（Health Check / Synthetic Monitoring）─────────────
+// =============================================================
+// 2026-04-17 追加。4/5のACCESS_KEYローテーションでXserver旧版の予約が
+// 12日間静かに壊れていた事故の再発防止。詳細は project memory 参照。
+// セットアップ: GASエディタで setupHealthCheckTriggers() を1回手動実行。
+
+const HEALTH_CHECK_DEPLOY_URL = 'https://script.google.com/macros/s/AKfycbyUjRWMu_ZgGroCakrRfIxuobAjJvl_So1HVzK2s5wEYY-ToZUjo89jwRgy5GQwb6Si/exec';
+const XSERVER_RESERVE_URL     = 'https://akari-kanazawa.jp/reserve/reserve.html';
+
+/**
+ * 毎日実行: GASのcheckSlot APIをお客様視点で実際に叩いて、正常応答するか確認。
+ * Unauthorized・接続エラー・JSONパース失敗のいずれもアラート対象。
+ * ACCESS_KEYミスマッチ・デプロイ事故・GAS停止などを「予約が止まる前」に検知できる。
+ * 予約数とは無関係なので閑散期でも誤報ゼロ。
+ */
+function dailyHealthCheck() {
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+  const key   = getAccessKey();
+  const url   = HEALTH_CHECK_DEPLOY_URL + '?key=' + encodeURIComponent(key) + '&action=checkSlot&date=' + today;
+
+  try {
+    const res  = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    const code = res.getResponseCode();
+    const body = res.getContentText();
+
+    if (code !== 200) {
+      sendHealthAlert('GAS API不調 (HTTP ' + code + ')',
+        'checkSlot APIがHTTP ' + code + 'を返しました。\n\nレスポンス先頭500字:\n' + body.substring(0, 500));
+      return;
+    }
+
+    const data = JSON.parse(body);
+    if (!data.success) {
+      sendHealthAlert('GAS API認証/動作エラー',
+        'checkSlot APIが success=false を返しました。\n\n' +
+        'エラー: ' + (data.error || '(不明)') + '\n\n' +
+        '考えられる原因:\n' +
+        '  - ACCESS_KEYの不一致（rotation後の更新漏れ等）\n' +
+        '  - デプロイ事故\n' +
+        '  - GAS Script Property破損\n\n' +
+        '至急確認してください。');
+      return;
+    }
+
+    Logger.log('Health check OK: ' + JSON.stringify(data).substring(0, 200));
+  } catch (err) {
+    sendHealthAlert('Health Check例外',
+      'dailyHealthCheck()で例外: ' + err.message + '\n\n' +
+      'GASがネットワーク的に到達不可、もしくはJSON解析に失敗しています。');
+  }
+}
+
+/**
+ * 毎週月曜実行: Xserverのリダイレクトが生きているか確認。
+ * 200が返ったら=リダイレクトが消えているのでアラート。
+ * 畠中さんのリダイレクト反映後に意味を持つ（反映前は常にアラート出る）。
+ */
+function weeklyXserverRedirectCheck() {
+  try {
+    const res  = UrlFetchApp.fetch(XSERVER_RESERVE_URL, {
+      muteHttpExceptions: true,
+      followRedirects:    false
+    });
+    const code = res.getResponseCode();
+
+    if (code === 301 || code === 302) {
+      Logger.log('Xserver redirect OK (HTTP ' + code + ')');
+      return;
+    }
+    if (code === 200) {
+      sendHealthAlert('Xserverリダイレクト消失',
+        XSERVER_RESERVE_URL + ' がHTTP 200を返しています（301/302が期待値）。\n\n' +
+        'リダイレクト設定が外された可能性があります。畠中さんに確認してください。\n\n' +
+        '現状で予約自体は動いていますが、未来のACCESS_KEYローテーションで再発リスクがあります。');
+    } else {
+      sendHealthAlert('Xserver応答異常',
+        XSERVER_RESERVE_URL + ' がHTTP ' + code + ' を返しています。');
+    }
+  } catch (err) {
+    sendHealthAlert('Xserverチェック例外', 'weeklyXserverRedirectCheck()例外: ' + err.message);
+  }
+}
+
+/**
+ * 毎週月曜実行: ヒロシに週次サマリーをメール送付（情報提供のみ・アラートではない）。
+ * 過去7日のWEB予約数・過去30日の平均を可視化。
+ */
+function weeklyBookingSummary() {
+  try {
+    const cached   = getCachedBookings();
+    const all      = (cached && cached.length > 0) ? cached : getRawBookings();
+    const cancelled = getCancelledIds();
+
+    const now      = new Date();
+    const tz       = 'Asia/Tokyo';
+    const today    = new Date(Utilities.formatDate(now, tz, 'yyyy/MM/dd'));
+    const past7    = new Date(today.getTime() - 7  * 86400000);
+    const past30   = new Date(today.getTime() - 30 * 86400000);
+
+    // WEB予約判定（HP-で始まる予約番号、キャンセル除く）
+    const isWebBooking = b => {
+      if (cancelled.has(b.reservationId)) return false;
+      const id = b.reservationId || '';
+      return id.indexOf('HP-') === 0;
+    };
+
+    // 受付日時の取得（複数フィールド名に対応）
+    const parseCreated = b => {
+      const v = b.createdAt || b.created_at || b.timestamp;
+      if (!v) return null;
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    const web7  = all.filter(b => { if (!isWebBooking(b)) return false; const d = parseCreated(b); return d && d >= past7;  }).length;
+    const web30 = all.filter(b => { if (!isWebBooking(b)) return false; const d = parseCreated(b); return d && d >= past30; }).length;
+    const avgDaily30 = (web30 / 30).toFixed(1);
+
+    const subject = '[週次レポート] 予約システム状況 ' + Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+    const body = [
+      '着物レンタル予約システム 週次サマリー',
+      '',
+      '■ WEB予約件数',
+      '  過去7日:  ' + web7  + '件',
+      '  過去30日: ' + web30 + '件 (1日平均 ' + avgDaily30 + '件)',
+      '',
+      '■ 状態確認',
+      '  - 過去7日が著しく少ない場合、システム不具合の可能性あり',
+      '  - 閑散期の自然な減少か判断に迷う場合は、GA4で reserve.html の流入を確認',
+      '  - https://analytics.google.com/  →  着物レンタル予約 プロパティ',
+      '',
+      '※ このメールは情報提供です。アラートではありません。'
+    ].join('\n');
+
+    GmailApp.sendEmail(getAdminEmail(), subject, body);
+  } catch (err) {
+    sendHealthAlert('週次サマリー生成エラー', 'weeklyBookingSummary()例外: ' + err.message);
+  }
+}
+
+/**
+ * アラートメール送信ヘルパー
+ */
+function sendHealthAlert(subject, body) {
+  const fullBody = body + '\n\n――――――\n発生時刻: ' + new Date().toISOString() + '\nプロジェクト: 着物レンタル予約システム';
+  GmailApp.sendEmail(getAdminEmail(), '[ALERT] 予約システム: ' + subject, fullBody);
+}
+
+/**
+ * セットアップ用: 健全性チェックTriggerを再構築。
+ * GASエディタで「setupHealthCheckTriggers」を選んで実行ボタンを1回押すだけ。
+ * 既に登録されている同名Triggerは削除して登録し直す（重複防止）。
+ */
+function setupHealthCheckTriggers() {
+  const targets = ['dailyHealthCheck', 'weeklyXserverRedirectCheck', 'weeklyBookingSummary'];
+
+  // 既存削除
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (targets.indexOf(t.getHandlerFunction()) !== -1) {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  // 毎日12時
+  ScriptApp.newTrigger('dailyHealthCheck')
+    .timeBased().atHour(12).everyDays(1).create();
+
+  // 毎週月曜10時
+  ScriptApp.newTrigger('weeklyXserverRedirectCheck')
+    .timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(10).create();
+  ScriptApp.newTrigger('weeklyBookingSummary')
+    .timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(10).create();
+
+  Logger.log('健全性チェックTriggerを登録しました（dailyHealthCheck / weeklyXserverRedirectCheck / weeklyBookingSummary）');
+}
