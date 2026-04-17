@@ -18,6 +18,15 @@ const CUSTOMER_EMAIL_FROM = 'reserve@akari-kanazawa.jp';
 function getAccessKey() {
   return PropertiesService.getScriptProperties().getProperty('ACCESS_KEY') || '';
 }
+// ⚠️ 暫定: 旧Xserver reserve.htmlに残っている旧キーも一時的に許可（2026-04-17〜）
+// 4/5の ACCESS_KEY ローテーションでXserver側の予約が壊れていたため、
+// 畠中さんによるリダイレクト設定が反映されるまでの応急措置。反映確認後に LEGACY_KEYS を空配列に戻すこと。
+function isValidAccessKey(key) {
+  if (!key) return false;
+  if (key === getAccessKey()) return true;
+  const LEGACY_KEYS = ['34563456'];
+  return LEGACY_KEYS.indexOf(key) !== -1;
+}
 function getAdminPin() {
   return PropertiesService.getScriptProperties().getProperty('ADMIN_PIN') || '';
 }
@@ -568,7 +577,7 @@ function doGet(e) {
   output.setMimeType(ContentService.MimeType.JSON);
 
   // キー認証（公開エンドポイントのみ）
-  if (!e || e.parameter.key !== getAccessKey()) {
+  if (!e || !isValidAccessKey(e.parameter.key)) {
     output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
     return output;
   }
@@ -1762,7 +1771,7 @@ function doPost(e) {
 
     // ── 公開エンドポイント（ACCESS_KEY認証、POST対応） ────────────
     // reserve.html / my-reservation.html がPOSTで呼び出す
-    if (data.key && data.key !== getAccessKey()) {
+    if (data.key && !isValidAccessKey(data.key)) {
       output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
       return output;
     }
@@ -1839,7 +1848,7 @@ function doPost(e) {
 
     // ── WEB予約の保存（公開フォームから、ACCESS_KEY で認証）──────
     if (data.action === 'save' && data.key) {
-      if (data.key !== getAccessKey()) {
+      if (!isValidAccessKey(data.key)) {
         output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
         return output;
       }
