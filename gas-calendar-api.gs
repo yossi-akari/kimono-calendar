@@ -25,14 +25,22 @@ function getAdminPin() {
 function getStaffPin() {
   return PropertiesService.getScriptProperties().getProperty('STAFF_PIN') || '';
 }
-// 管理者セッショントークン（8時間有効・複数デバイス対応）
+// 管理者セッショントークン（通常8時間有効・信頼済み端末は30日有効）
 const MAX_ADMIN_SESSIONS = 10; // 同時セッション上限
+const ADMIN_TOKEN_TTL_MS        = 8 * 60 * 60 * 1000;       // 通常: 8時間
+const ADMIN_TRUSTED_TTL_MS      = 30 * 24 * 60 * 60 * 1000; // 信頼済み端末: 30日
 
-function generateAdminToken() {
+/**
+ * 管理者トークンを発行
+ * @param {boolean} rememberDevice - true で信頼済み端末として30日有効トークンを発行
+ * @param {string}  deviceId       - 端末識別UUID（同じdeviceIdの既存セッションは上書き）
+ */
+function generateAdminToken(rememberDevice, deviceId) {
   const props = PropertiesService.getScriptProperties();
   const token = Utilities.getUuid();
   const now = new Date().getTime();
-  const expires = now + 8 * 60 * 60 * 1000; // 8時間
+  const ttl = rememberDevice ? ADMIN_TRUSTED_TTL_MS : ADMIN_TOKEN_TTL_MS;
+  const expires = now + ttl;
 
   // 既存セッション読み込み・期限切れ除去
   let sessions = [];
@@ -41,12 +49,22 @@ function generateAdminToken() {
   } catch(e) { sessions = []; }
   sessions = sessions.filter(function(s) { return s.expires > now; });
 
+  // 同じdeviceIdの既存セッションは上書き（端末ごとに1セッションに制限）
+  if (deviceId) {
+    sessions = sessions.filter(function(s) { return s.deviceId !== deviceId; });
+  }
+
   // 上限超過時は古い順に削除
   while (sessions.length >= MAX_ADMIN_SESSIONS) {
     sessions.shift();
   }
 
-  sessions.push({ token: token, expires: expires });
+  sessions.push({
+    token: token,
+    expires: expires,
+    deviceId: deviceId || null,
+    trusted: !!rememberDevice
+  });
   props.setProperty('admin_sessions', JSON.stringify(sessions));
   return token;
 }
@@ -1693,7 +1711,9 @@ function doPost(e) {
         const result = verifyOtpCode(data.otp || '');
         if (result.valid) {
           clearPinAttempts();
-          output.setContent(JSON.stringify({ success: true, token: generateAdminToken() }));
+          // 信頼済み端末は30日、通常は8時間有効のトークンを発行
+          const token = generateAdminToken(data.rememberDevice === true, data.deviceId || null);
+          output.setContent(JSON.stringify({ success: true, token: token }));
         } else {
           output.setContent(JSON.stringify({ success: false, error: result.error, expired: result.expired || false }));
         }

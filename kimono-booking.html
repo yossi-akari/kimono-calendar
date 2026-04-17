@@ -220,6 +220,11 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
   <div id="otp-step-b" style="display:none;flex-direction:column;align-items:center;gap:12px;">
     <div style="color:#c8b89a;font-size:0.88rem;text-align:center;">登録メールアドレスに6桁の認証コードを送信しました</div>
     <input type="text" id="otpInputB" placeholder="認証コード（6桁）" autocomplete="off" maxlength="6" inputmode="numeric">
+    <!-- 信頼済み端末チェックボックス（30日間ログイン維持） -->
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;color:#c8b89a;cursor:pointer;user-select:none;">
+      <input type="checkbox" id="rememberDeviceB" style="width:16px;height:16px;cursor:pointer;accent-color:#c89660;">
+      <span>この端末を信頼する（30日間ログイン維持）</span>
+    </label>
     <div style="font-size:0.8rem;color:#7a7068;">6桁入力で自動送信 ／ <span id="otp-back-b" style="cursor:pointer;color:#8b3a3a;">← 戻る</span></div>
   </div>
   <div id="pin-error"></div>
@@ -249,10 +254,22 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
       else{ err.textContent='PINが違います'; pinInput.value=''; setTimeout(()=>{ err.textContent=''; pinInput.disabled=false; pinInput.focus(); },1500); }
     }catch(e){ err.textContent='通信エラーが発生しました'; pinInput.disabled=false; }
   }
+  // 端末識別用UUID（初回アクセス時に生成して以後使い回す）
+  function getDeviceId(){
+    let id=localStorage.getItem('akariDeviceId');
+    if(!id){
+      id=(self.crypto&&self.crypto.randomUUID)?self.crypto.randomUUID():'dev-'+Date.now()+'-'+Math.random().toString(36).slice(2,10);
+      localStorage.setItem('akariDeviceId',id);
+    }
+    return id;
+  }
   async function tryOtp(otp){
     otpInput.disabled=true; err.textContent='確認中...';
     try{
-      const res=await fetch(GAS,{method:'POST',body:JSON.stringify({action:'auth',step:'otp',otp})});
+      // 「この端末を信頼する」がONなら30日トークン発行を要求
+      const rememberDevice=!!document.getElementById('rememberDeviceB')?.checked;
+      const deviceId=getDeviceId();
+      const res=await fetch(GAS,{method:'POST',body:JSON.stringify({action:'auth',step:'otp',otp,rememberDevice,deviceId})});
       const data=await res.json();
       if(data.success && data.token){ localStorage.setItem('akariAdminToken',data.token); screen.style.display='none'; }
       else if(data.expired){ err.textContent='コードが期限切れです。最初からやり直してください。'; setTimeout(showPin,2000); }

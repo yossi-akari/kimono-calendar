@@ -727,6 +727,11 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
       登録メールアドレスに6桁の認証コードを送信しました
     </div>
     <input type="text" id="otpInput" placeholder="認証コード（6桁）" autocomplete="off" maxlength="6" inputmode="numeric">
+    <!-- 信頼済み端末チェックボックス（30日間ログイン維持） -->
+    <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:0.78rem;color:rgba(255,255,255,0.55);cursor:pointer;user-select:none;">
+      <input type="checkbox" id="rememberDevice" style="width:16px;height:16px;cursor:pointer;accent-color:#c89660;">
+      <span>この端末を信頼する（30日間ログイン維持）</span>
+    </label>
     <div style="font-size:0.72rem;color:rgba(255,255,255,0.3);margin-top:4px;text-align:center;">
       6桁入力で自動送信 ／ <span id="otp-resend" style="cursor:pointer;color:#c89660;">再送信</span> ／ <span id="otp-back" style="cursor:pointer;color:#8b3a3a;">← 戻る</span>
     </div>
@@ -1296,6 +1301,19 @@ async function verifyPin(pin) {
   }
 }
 
+// 端末識別用UUID（初回アクセス時に生成して以後使い回す）
+function getDeviceId() {
+  let id = localStorage.getItem('akariDeviceId');
+  if (!id) {
+    // crypto.randomUUID() が使えない環境へのフォールバック
+    id = (self.crypto && self.crypto.randomUUID)
+      ? self.crypto.randomUUID()
+      : 'dev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('akariDeviceId', id);
+  }
+  return id;
+}
+
 // ── Step 2: OTP認証 ─────────────────────────────────────────
 async function verifyOtp(otp) {
   const input = document.getElementById('otpInput');
@@ -1303,7 +1321,10 @@ async function verifyOtp(otp) {
   input.disabled = true;
   err.textContent = '確認中...';
   try {
-    const data = await gasPost({ action: 'auth', step: 'otp', otp });
+    // 「この端末を信頼する」がONなら30日トークン発行を要求
+    const rememberDevice = !!document.getElementById('rememberDevice')?.checked;
+    const deviceId = getDeviceId();
+    const data = await gasPost({ action: 'auth', step: 'otp', otp, rememberDevice, deviceId });
     if (data.success && data.token) {
       localStorage.setItem('akariAdminToken', data.token);
       localStorage.setItem('akariUserRole', 'admin');
