@@ -87,3 +87,10 @@
   3. `getRawBookings()`がGmail/シートからしか読まず、Supabase only保存のWEB予約が見えなかった（4/14のSupabase移行時の潜在ギャップ）
 - **正しい対処**: 上記「Supabase Edge Functions 作業時の必須チェック」3点を毎回確認
 - **適用範囲**: Supabase Edge Functions の編集・デプロイ全般
+
+### [2026-04-18] my-reservation.html Supabase化と管理画面書き込み系のSupabase対応
+- **何をしたか**: my-reservation.htmlからACCESS_KEYを排除するためSupabase Edge Functionsに移行。同時に発見した「管理画面の書き込み系（ステータス更新、申請承認/却下）がGAS sheet前提でWEB予約に対応していない」潜在ギャップも修正
+- **追加した関数（GAS）**:
+  - `getSupabaseRequestsList()` / `processSupabaseRequest()` — booking_requests連携
+  - `processSupabaseBookingStatusUpdate()` — bookings.visit_status更新+PAY.JP返金
+- **適用範囲**: Supabase化作業時は読み取り(getXxx)だけでなく書き込み(processXxx, deleteXxx, updateXxx)も全部チェック
