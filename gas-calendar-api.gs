@@ -726,10 +726,19 @@ function getRawBookings() {
     });
   }
 
-  const merged = [...gmailBookings, ...recovered];
+  // ── Supabase から WEB予約（reserve.html経由）を取得 ──
+  // 4/14のSupabase移行以降、WEB予約は Supabase only に保存される。
+  // Gmail/シート には来ないので、ここで Supabase から直接読む。
+  const webBookings = getWebBookingsFromSupabase();
+  if (webBookings.length > 0) {
+    Logger.log('Supabase WEB予約: ' + webBookings.length + '件');
+  }
+
+  const merged = [...gmailBookings, ...recovered, ...webBookings];
   logAudit('SYNC', {
     gmail: gmailBookings.length,
     recovered: recovered.length,
+    web: webBookings.length,
     total: merged.length,
     count: merged.length
   });
@@ -738,6 +747,68 @@ function getRawBookings() {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     return a.time.localeCompare(b.time);
   });
+}
+
+/**
+ * Supabase から WEB予約（reserve.html経由）を取得して GAS形式に変換。
+ * source='WEB' かつ 今日以降のみ。Service Role KeyでRLSをバイパス。
+ * 失敗してもエラーは投げず空配列を返す（GAS全体の停止を防ぐ）。
+ */
+function getWebBookingsFromSupabase() {
+  const props = PropertiesService.getScriptProperties();
+  const url = props.getProperty('SUPABASE_URL');
+  const key = props.getProperty('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) {
+    Logger.log('Supabase WEB予約取得スキップ: SUPABASE_URL/KEY が未設定');
+    return [];
+  }
+
+  try {
+    const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+    const endpoint = url + '/rest/v1/bookings?source=eq.WEB&date=gte.' + today + '&select=*&order=date.asc';
+    const resp = UrlFetchApp.fetch(endpoint, {
+      method: 'get',
+      headers: { 'Authorization': 'Bearer ' + key, 'apikey': key },
+      muteHttpExceptions: true
+    });
+
+    const code = resp.getResponseCode();
+    if (code >= 400) {
+      Logger.log('Supabase WEB予約取得エラー (HTTP ' + code + '): ' + resp.getContentText().substring(0, 200));
+      return [];
+    }
+
+    const data = JSON.parse(resp.getContentText());
+    if (!Array.isArray(data)) return [];
+
+    // Supabase形式 → GAS形式に変換
+    return data.map(function(b) {
+      return {
+        id: b.id || b.reservation_id,
+        reservationId: b.reservation_id || b.id,
+        source: 'WEB',
+        date: b.date,
+        time: b.time,
+        name: b.name,
+        email: b.email || '',
+        tel: b.tel || '',
+        plan: b.plan || 'ベーシック',
+        people: b.people || '',
+        options: b.options || [],
+        total: b.total || 0,
+        payment: b.payment || '',
+        remarks: b.remarks || '',
+        visitChargeId: b.charge_id || '',
+        visitStatus: b.visit_status || 'confirmed',
+        channel: b.channel || 'WEB',
+        createdAt: b.created_at || new Date().toISOString(),
+        bookingStatus: 'ウェブ予約'
+      };
+    });
+  } catch(e) {
+    Logger.log('Supabase WEB予約取得例外: ' + e.message);
+    return [];
+  }
 }
 
 // テスト・dailySync用（キャンセル除外済み）
@@ -2411,7 +2482,7 @@ https://script.google.com/home`;
 // ── キャッシュ管理 ─────────────────────────────────────────────
 // =============================================================
 function getCachedBookings() {
-  try { const c = CacheService.getScriptCache().get('bookings_v1'); return c ? JSON.parse(c) : null; }
+  try { const c = CacheService.getScriptCache().get('bookings_v2'); return c ? JSON.parse(c) : null; }
   catch(e) { return null; }
 }
 function setCachedBookings(b) {
@@ -2420,14 +2491,14 @@ function setCachedBookings(b) {
   try {
     const s = JSON.stringify(b);
     if (s.length < 90000) {
-      CacheService.getScriptCache().put('bookings_v1', s, 1800); // 30分TTL（旧：1時間）
+      CacheService.getScriptCache().put('bookings_v2', s, 1800); // 30分TTL（旧：1時間）
     } else {
       Logger.log('キャッシュサイズ超過: ' + s.length + ' bytes — キャッシュをスキップ');
       notifyAdminError('setCachedBookings', 'キャッシュサイズ超過: ' + s.length + ' bytes（上限90KB）— 予約件数が増えすぎている可能性があります');
     }
   } catch(e) {}
 }
-function clearCache() { CacheService.getScriptCache().remove('bookings_v1'); Logger.log('キャッシュクリア'); }
+function clearCache() { CacheService.getScriptCache().remove('bookings_v2'); Logger.log('キャッシュクリア'); }
 
 // =============================================================
 // ── 自動同期トリガー ──────────────────────────────────────────
