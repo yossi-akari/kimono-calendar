@@ -63,6 +63,14 @@
 3. ローテーション直後に `dailyHealthCheck` を手動実行して全エンドポイントが通ることを確認
 4. **コミット例外**: 4/5のローテーション時、Xserver版の更新を忘れて12日間予約が静かに止まった事故あり
 
+## Supabase Edge Functions 作業時の必須チェック
+
+`supabase/functions/` を編集・デプロイする時は以下を毎回確認：
+
+1. **JWT検証フラグ**: 顧客向け関数（reserve.html等から呼ばれる）は `--no-verify-jwt` で デプロイし、`config.toml` の `[functions.<name>] verify_jwt = false` に明記する。再デプロイで飛んで `Invalid JWT` 全失敗になる事故あり（4/18）
+2. **日付の曜日計算**: `new Date(dateStr + 'T00:00:00+09:00').getDay()` は **NG**（Deno=UTCで前日が返る）。`getDayOfWeekFromDateStr()` ヘルパー（save-booking/index.ts内に定義）を使う
+3. **新規データの読み取り口**: Supabaseに新しく保存するテーブル/カラムは、必ず `getRawBookings()` 等のGAS側読み取り関数からも見えるか確認
+
 ## 失敗ログ（このプロジェクト固有）
 
 ### [2026-04-17] ACCESS_KEYローテーションでXserver版が予約不能に
@@ -70,3 +78,12 @@
 - **原因**: ローテーション時に「キーが埋め込まれている全箇所の洗い出し」を行わなかった
 - **正しい対処**: 上記「機密情報の取り扱い」手順を必ず踏む。`dailyHealthCheck` で再発検知可能になった
 - **適用範囲**: ACCESS_KEY・OTP_SECRET・PAY.JP_SECRET 等あらゆる機密のローテーション時
+
+### [2026-04-18] save-booking 連鎖インシデント（タイムゾーン+JWT+読み取り口）
+- **何が起きたか**: 4/30(木)を選んだお客様に「水曜日は定休日」エラー。修正のため再デプロイしたら今度はJWT検証が有効に戻り全予約失敗。さらに修正後、WEB予約は成立するがkimono-calendarに表示されない3段階の連鎖
+- **原因**:
+  1. `getDay()`がDeno(UTC)で前日を返す（JST midnight=UTC前日15:00）
+  2. `--no-verify-jwt` フラグなしの再デプロイでJWT必須に戻った
+  3. `getRawBookings()`がGmail/シートからしか読まず、Supabase only保存のWEB予約が見えなかった（4/14のSupabase移行時の潜在ギャップ）
+- **正しい対処**: 上記「Supabase Edge Functions 作業時の必須チェック」3点を毎回確認
+- **適用範囲**: Supabase Edge Functions の編集・デプロイ全般
