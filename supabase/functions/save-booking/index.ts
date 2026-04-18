@@ -28,11 +28,26 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// 日付文字列(YYYY-MM-DD)から曜日番号を取得（0=日, 1=月, ..., 6=土）
+// タイムゾーン非依存。Date.UTCで構築してUTC基準で曜日を取るため、
+// サーバーがUTCでもJSTでも同じ結果を返す。
+function getDayOfWeekFromDateStr(dateStr: string): number {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+// JST基準の今日の日付文字列を取得（YYYY-MM-DD）
+function getJstTodayStr(): string {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return jst.toISOString().split('T')[0];
+}
+
 // 日付フォーマット: "2026-03-15" → "2026年3月15日（日）"
 function formatBookingDate(dateStr: string): string {
   const DAY_JA = ['日', '月', '火', '水', '木', '金', '土'];
-  const d = new Date(dateStr + 'T00:00:00');
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${DAY_JA[d.getDay()]}）`;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return `${y}年${m}月${d}日（${DAY_JA[getDayOfWeekFromDateStr(dateStr)]}）`;
 }
 
 // オプション文字列化
@@ -412,11 +427,8 @@ serve(async (req) => {
       return errorResponse('時間が不正です', 400, 'VALIDATION');
     }
 
-    // 過去の日付チェック（JST基準）
-    const bookingDate = new Date(booking.date + 'T00:00:00+09:00');
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (bookingDate < today) {
+    // 過去の日付チェック（JST基準・YYYY-MM-DD文字列比較で安全に）
+    if (booking.date < getJstTodayStr()) {
       return errorResponse('過去の日付は指定できません', 400, 'VALIDATION');
     }
 
@@ -432,8 +444,7 @@ serve(async (req) => {
       .substring(0, 30);
 
     // ── 定休日チェック ────────────────────────────
-    const bookingDow = new Date(booking.date + 'T00:00:00+09:00').getDay();
-    if (bookingDow === 3) {
+    if (getDayOfWeekFromDateStr(booking.date) === 3) {
       return errorResponse('水曜日は定休日のため予約できません', 400, 'VALIDATION');
     }
 

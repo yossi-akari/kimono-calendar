@@ -401,3 +401,19 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# ── 顧客向けEdge Functions: JWT検証を無効化 ──────────────────
+# reserve.html / my-reservation.html はpublishable APIキーで呼ぶため、
+# サーバーサイドでJWT検証は不要（service_roleキーで内部処理する設計）。
+# 再デプロイ時にverify_jwt=trueに戻ってしまわないよう明示する。
+[functions.check-slot]
+verify_jwt = false
+
+[functions.send-otp]
+verify_jwt = false
+
+[functions.save-booking]
+verify_jwt = false
+
+[functions.config]
+verify_jwt = false
