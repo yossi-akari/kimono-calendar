@@ -2968,11 +2968,159 @@ function getPendingRequestForBooking(bookingId) {
   return null;
 }
 
-// 申請一覧取得
+// =============================================================
+// ── Supabase booking_requests 連携 ─────────────────────────────
+// my-reservation.html (Supabase版) からの申請は booking_requests テーブルに
+// 入る。この関数群で GAS sheet と同様に取り扱えるようにする。
+// =============================================================
+
+/**
+ * Supabaseから申請一覧を取得（GAS sheet形式に変換）
+ * 失敗時は空配列を返す（管理画面全体の停止を防ぐ）
+ */
+function getSupabaseRequestsList(statusFilter) {
+  const props = PropertiesService.getScriptProperties();
+  const url = props.getProperty('SUPABASE_URL');
+  const key = props.getProperty('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return [];
+  try {
+    var query = '/rest/v1/booking_requests?select=*&order=submitted_at.desc';
+    if (statusFilter && statusFilter !== 'all') {
+      query += '&status=eq.' + encodeURIComponent(statusFilter);
+    }
+    const resp = UrlFetchApp.fetch(url + query, {
+      method: 'get',
+      headers: { 'Authorization': 'Bearer ' + key, 'apikey': key },
+      muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() >= 400) {
+      Logger.log('Supabase申請取得エラー: ' + resp.getContentText().substring(0, 200));
+      return [];
+    }
+    const rows = JSON.parse(resp.getContentText());
+    if (!Array.isArray(rows)) return [];
+    return rows.map(function(r) {
+      return {
+        requestId:   String(r.request_id),
+        bookingId:   String(r.booking_id),
+        bookingName: String(r.booking_name || ''),
+        type:        String(r.type),
+        status:      String(r.status),
+        newDate:     r.new_date ? String(r.new_date) : '',
+        newTime:     r.new_time ? String(r.new_time) : '',
+        message:     String(r.message || ''),
+        submittedAt: String(r.submitted_at || ''),
+        processedAt: r.processed_at ? String(r.processed_at) : '',
+        adminNote:   String(r.admin_note || '')
+      };
+    });
+  } catch(e) {
+    Logger.log('Supabase申請取得例外: ' + e.message);
+    return [];
+  }
+}
+
+/**
+ * Supabase の特定申請を承認/却下し、関連する booking も更新する。
+ * 該当requestがSupabaseに存在する場合のみ処理（処理した場合は true を返す）。
+ */
+function processSupabaseRequest(requestId, decision, adminNote) {
+  const props = PropertiesService.getScriptProperties();
+  const url = props.getProperty('SUPABASE_URL');
+  const key = props.getProperty('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return false;
+  try {
+    // 申請を取得
+    const headers = { 'Authorization': 'Bearer ' + key, 'apikey': key };
+    const fetchResp = UrlFetchApp.fetch(
+      url + '/rest/v1/booking_requests?request_id=eq.' + encodeURIComponent(requestId) + '&select=*&limit=1',
+      { method: 'get', headers: headers, muteHttpExceptions: true }
+    );
+    if (fetchResp.getResponseCode() >= 400) return false;
+    const rows = JSON.parse(fetchResp.getContentText());
+    if (!Array.isArray(rows) || rows.length === 0) return false; // Supabaseには無い→GAS処理に委ねる
+    const req = rows[0];
+    const bookingId = String(req.booking_id);
+    const type      = String(req.type);
+    const newDate   = req.new_date ? String(req.new_date) : '';
+    const newTime   = req.new_time ? String(req.new_time) : '';
+
+    // 承認時: 関連bookingを更新
+    if (decision === 'approve') {
+      if (type === 'cancel') {
+        // bookingsのvisit_statusを'free-cancel'に
+        UrlFetchApp.fetch(
+          url + '/rest/v1/bookings?reservation_id=eq.' + encodeURIComponent(bookingId),
+          {
+            method: 'patch',
+            headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }),
+            payload: JSON.stringify({ visit_status: 'free-cancel', status_updated_at: new Date().toISOString() }),
+            muteHttpExceptions: true
+          }
+        );
+      } else if (type === 'change' && newDate) {
+        const patch = { date: newDate, status_updated_at: new Date().toISOString() };
+        if (newTime) patch.time = newTime;
+        UrlFetchApp.fetch(
+          url + '/rest/v1/bookings?reservation_id=eq.' + encodeURIComponent(bookingId),
+          {
+            method: 'patch',
+            headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }),
+            payload: JSON.stringify(patch),
+            muteHttpExceptions: true
+          }
+        );
+      }
+    }
+
+    // 申請ステータス更新
+    UrlFetchApp.fetch(
+      url + '/rest/v1/booking_requests?request_id=eq.' + encodeURIComponent(requestId),
+      {
+        method: 'patch',
+        headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }),
+        payload: JSON.stringify({
+          status: decision === 'approve' ? 'approved' : 'rejected',
+          admin_note: adminNote || '',
+          processed_at: new Date().toISOString()
+        }),
+        muteHttpExceptions: true
+      }
+    );
+
+    // 顧客に結果メール（bookingsから情報取得）
+    try {
+      const bResp = UrlFetchApp.fetch(
+        url + '/rest/v1/bookings?reservation_id=eq.' + encodeURIComponent(bookingId) + '&select=*&limit=1',
+        { method: 'get', headers: headers, muteHttpExceptions: true }
+      );
+      if (bResp.getResponseCode() < 400) {
+        const bArr = JSON.parse(bResp.getContentText());
+        if (Array.isArray(bArr) && bArr.length > 0) {
+          const b = bArr[0];
+          const bookingForEmail = {
+            id: String(b.reservation_id), name: String(b.name || ''), email: String(b.email || ''),
+            date: String(b.date), time: String(b.time), plan: String(b.plan || ''), people: String(b.people || '')
+          };
+          if (bookingForEmail.email) {
+            sendRequestResultEmail(bookingForEmail, type, decision, newDate, newTime, adminNote || '');
+          }
+        }
+      }
+    } catch(e) { Logger.log('Supabase申請: 顧客通知失敗 ' + e.message); }
+
+    return true;
+  } catch(e) {
+    Logger.log('processSupabaseRequest例外: ' + e.message);
+    return false;
+  }
+}
+
+// 申請一覧取得（GAS sheet + Supabase booking_requests のマージ）
 function getRequestsList(statusFilter) {
+  // GAS sheet 由来
   const data = getRequestsSheet().getDataRange().getValues();
-  if (data.length <= 1) return [];
-  return data.slice(1)
+  const sheetRequests = data.length <= 1 ? [] : data.slice(1)
     .filter(row => row[0] && (statusFilter === 'all' || String(row[4]) === statusFilter))
     .map(row => ({
       requestId:   String(row[0]),
@@ -2986,12 +3134,26 @@ function getRequestsList(statusFilter) {
       submittedAt: String(row[8]),
       processedAt: String(row[9]),
       adminNote:   String(row[10])
-    }))
-    .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+    }));
+
+  // Supabase 由来（my-reservation.html Supabase版から）
+  const supabaseRequests = getSupabaseRequestsList(statusFilter);
+
+  // 重複排除（同じrequestIdが両方にあれば Supabase優先）
+  const supabaseIds = new Set(supabaseRequests.map(r => r.requestId));
+  const merged = supabaseRequests.concat(sheetRequests.filter(r => !supabaseIds.has(r.requestId)));
+
+  return merged.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 }
 
 // 申請を承認または却下
 function processRequestById(requestId, decision, adminNote) {
+  // まず Supabase 由来の申請かチェック（my-reservation.html Supabase版から）
+  if (processSupabaseRequest(requestId, decision, adminNote)) {
+    return; // Supabase側で処理完了
+  }
+
+  // Supabaseに無ければ GAS sheet で処理（既存ロジック）
   const sheet = getRequestsSheet();
   const data  = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {

@@ -417,3 +417,9 @@ verify_jwt = false
 
 [functions.config]
 verify_jwt = false
+
+[functions.get-booking-customer]
+verify_jwt = false
+
+[functions.submit-request]
+verify_jwt = false

@@ -212,29 +212,39 @@ select {
 </div>
 
 <script>
-const GAS_URL    = 'https://script.google.com/macros/s/AKfycbyUjRWMu_ZgGroCakrRfIxuobAjJvl_So1HVzK2s5wEYY-ToZUjo89jwRgy5GQwb6Si/exec';
-const ACCESS_KEY = 'b62260ea88bfe062108c3b7e6ba90187';
-const DAY_JA     = ['日','月','火','水','木','金','土'];
+// Supabase Edge Functions エンドポイント
+const API_URL = 'https://ovaauspaumntorumuvrs.supabase.co/functions/v1';
+const SUPABASE_ANON_KEY = 'sb_publishable_YbKqHzrsx5urxzqQN1dp0g_cxEiZkJ1';
+const DAY_JA = ['日','月','火','水','木','金','土'];
 
-// GAS Web AppへのPOSTリクエスト（iOS Safari 302リダイレクト問題対策付き）
-async function gasPost(body, retries) {
+// Supabase Edge FunctionsへのPOSTリクエスト
+async function apiPost(endpoint, body, retries, timeoutMs) {
   retries = retries || 2;
+  timeoutMs = timeoutMs || 30000;
   for (let i = 0; i <= retries; i++) {
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      redirect: 'follow',
-      body: JSON.stringify(body)
-    });
-    const ct = res.headers.get('content-type') || '';
-    if (ct.indexOf('application/json') !== -1 || ct.indexOf('text/json') !== -1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(API_URL + endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+          'apikey': SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+      clearTimeout(timer);
       return await res.json();
+    } catch(e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') throw new Error('TIMEOUT');
+      if (i >= retries) throw e;
     }
-    const text = await res.text();
-    try { return JSON.parse(text); } catch(e) { /* HTMLが返った */ }
     if (i < retries) await new Promise(r => setTimeout(r, 500));
   }
-  throw new Error('GAS応答がJSON形式ではありません');
+  throw new Error('API応答が取得できません');
 }
 
 let currentBooking = null;
@@ -249,10 +259,12 @@ function esc(str) {
   return d.innerHTML;
 }
 
-// ── GASから店舗設定を取得 ──
+// ── Supabaseから店舗設定を取得 ──
 (async function loadConfig() {
   try {
-    const res = await fetch(`${GAS_URL}?key=${ACCESS_KEY}&action=getConfig`);
+    const res = await fetch(API_URL + '/config', {
+      headers: { 'Authorization': 'Bearer ' + SUPABASE_ANON_KEY, 'apikey': SUPABASE_ANON_KEY }
+    });
     const data = await res.json();
     if (!data.success || !data.config) return;
     const c = data.config;
@@ -292,10 +304,12 @@ function showScreen(id) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// ── 日付フォーマット ──────────────────────────────
+// ── 日付フォーマット（タイムゾーン非依存）──────────
 function fmtDate(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
-  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${DAY_JA[d.getDay()]}）`;
+  if (!dateStr) return '';
+  const [y, m, d] = String(dateStr).split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return `${y}年${m}月${d}日（${DAY_JA[dow]}）`;
 }
 
 // ── 予約照会 ──────────────────────────────────────
@@ -309,7 +323,7 @@ async function lookupBooking() {
   const btn = document.getElementById('lookupBtn');
   btn.disabled = true; btn.textContent = '確認中...';
   try {
-    const data = await gasPost({ key: ACCESS_KEY, action: 'getBookingForCustomer', id, email });
+    const data = await apiPost('/get-booking-customer', { id, email });
     if (!data.success) { errEl.textContent = data.error || '予約が見つかりません'; return; }
     currentBooking = data.booking;
     renderDetail(data.booking, data.pendingRequest);
@@ -403,7 +417,7 @@ async function submitChange() {
   const btn = document.getElementById('changeSubmitBtn');
   btn.disabled = true; btn.textContent = '送信中...';
   try {
-    const data = await gasPost({ key: ACCESS_KEY, action: 'submitRequest', id: b.id, email: b.email, type: 'change', newDate, newTime, message });
+    const data = await apiPost('/submit-request', { id: b.id, email: b.email, type: 'change', newDate, newTime, message });
     if (!data.success) { errEl.textContent = data.error || '送信に失敗しました'; return; }
     showDone('change');
   } catch(e) {
@@ -439,7 +453,7 @@ async function submitCancel() {
   const btn = document.getElementById('cancelSubmitBtn');
   btn.disabled = true; btn.textContent = '送信中...';
   try {
-    const data = await gasPost({ key: ACCESS_KEY, action: 'submitRequest', id: b.id, email: b.email, type: 'cancel', message });
+    const data = await apiPost('/submit-request', { id: b.id, email: b.email, type: 'cancel', message });
     if (!data.success) { errEl.textContent = data.error || '送信に失敗しました'; return; }
     showDone('cancel');
   } catch(e) {
