@@ -2385,7 +2385,12 @@ function processBookingStatusUpdate(bookingId, newStatus) {
       break;
     }
   }
-  if (rowIndex === -1) throw new Error('予約が見つかりません: ' + bookingId);
+  // GAS sheetに無ければ Supabase のWEB予約として処理（reserve.html 経由の予約）
+  if (rowIndex === -1) {
+    const result = processSupabaseBookingStatusUpdate(bookingId, newStatus);
+    if (result) return result;
+    throw new Error('予約が見つかりません: ' + bookingId);
+  }
 
   const row = data[rowIndex];
   const payment = String(row[9]);
@@ -3017,6 +3022,68 @@ function getSupabaseRequestsList(statusFilter) {
   } catch(e) {
     Logger.log('Supabase申請取得例外: ' + e.message);
     return [];
+  }
+}
+
+/**
+ * Supabase の WEB予約のステータス更新（来店済み/有料・無料キャンセル）。
+ * GAS sheetに無いWEB予約 (reserve.html 経由) のみが対象。
+ * 成功時は { status, charged, chargeId, refunded } を返す（失敗時はnull）。
+ */
+function processSupabaseBookingStatusUpdate(bookingId, newStatus) {
+  const props = PropertiesService.getScriptProperties();
+  const url = props.getProperty('SUPABASE_URL');
+  const key = props.getProperty('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return null;
+  try {
+    const headers = { 'Authorization': 'Bearer ' + key, 'apikey': key };
+    // 該当予約取得
+    const fetchResp = UrlFetchApp.fetch(
+      url + '/rest/v1/bookings?reservation_id=eq.' + encodeURIComponent(bookingId) + '&select=*&limit=1',
+      { method: 'get', headers: headers, muteHttpExceptions: true }
+    );
+    if (fetchResp.getResponseCode() >= 400) return null;
+    const rows = JSON.parse(fetchResp.getContentText());
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    const b = rows[0];
+
+    const payment = String(b.payment || '');
+    const existingChargeId = String(b.charge_id || '');
+    let refunded = false;
+
+    // 無料キャンセル + カード決済済み → 返金
+    if (newStatus === 'free-cancel' && payment === 'card' && existingChargeId) {
+      try {
+        refundChargePayjp(existingChargeId);
+        refunded = true;
+        Logger.log('Supabase WEB予約 無料キャンセル返金: ' + existingChargeId);
+      } catch(e) {
+        Logger.log('返金エラー: ' + e.message);
+        notifyAdminError('FREE_CANCEL_REFUND_SUPABASE', e.message, bookingId + ' / charge=' + existingChargeId);
+      }
+    }
+
+    // ステータス更新
+    UrlFetchApp.fetch(
+      url + '/rest/v1/bookings?reservation_id=eq.' + encodeURIComponent(bookingId),
+      {
+        method: 'patch',
+        headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }),
+        payload: JSON.stringify({
+          visit_status: newStatus,
+          status_updated_at: new Date().toISOString()
+        }),
+        muteHttpExceptions: true
+      }
+    );
+
+    // 監査ログ
+    logAudit('STATUS_UPDATE_SUPABASE', { bookingId: bookingId, newStatus: newStatus, refunded: refunded });
+
+    return { status: newStatus, charged: false, chargeId: existingChargeId, refunded: refunded };
+  } catch(e) {
+    Logger.log('processSupabaseBookingStatusUpdate例外: ' + e.message);
+    return null;
   }
 }
 
