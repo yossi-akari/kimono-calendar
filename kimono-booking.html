@@ -269,7 +269,7 @@ body { background: var(--bg); color: var(--ink); font-family: 'Noto Sans JP', sa
       // 「この端末を信頼する」がONなら30日トークン発行を要求
       const rememberDevice=!!document.getElementById('rememberDeviceB')?.checked;
       const deviceId=getDeviceId();
-      const res=await fetch(GAS,{method:'POST',body:JSON.stringify({action:'auth',step:'otp',otp,rememberDevice,deviceId})});
+      const res=await fetch(GAS,{method:'POST',body:JSON.stringify({action:'auth',step:'otp',otp,rememberDevice,deviceId,userAgent:navigator.userAgent})});
       const data=await res.json();
       if(data.success && data.token){ localStorage.setItem('akariAdminToken',data.token); screen.style.display='none'; }
       else if(data.expired){ err.textContent='コードが期限切れです。最初からやり直してください。'; setTimeout(showPin,2000); }

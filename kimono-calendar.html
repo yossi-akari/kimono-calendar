@@ -1324,7 +1324,7 @@ async function verifyOtp(otp) {
     // 「この端末を信頼する」がONなら30日トークン発行を要求
     const rememberDevice = !!document.getElementById('rememberDevice')?.checked;
     const deviceId = getDeviceId();
-    const data = await gasPost({ action: 'auth', step: 'otp', otp, rememberDevice, deviceId });
+    const data = await gasPost({ action: 'auth', step: 'otp', otp, rememberDevice, deviceId, userAgent: navigator.userAgent });
     if (data.success && data.token) {
       localStorage.setItem('akariAdminToken', data.token);
       localStorage.setItem('akariUserRole', 'admin');

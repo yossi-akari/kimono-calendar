@@ -38,6 +38,69 @@ function getStaffPin() {
 const MAX_ADMIN_SESSIONS = 10; // 同時セッション上限
 const ADMIN_TOKEN_TTL_MS        = 8 * 60 * 60 * 1000;       // 通常: 8時間
 const ADMIN_TRUSTED_TTL_MS      = 30 * 24 * 60 * 60 * 1000; // 信頼済み端末: 30日
+const MAX_TRUSTED_DEVICES        = 50; // 信頼済み端末リストの上限
+
+// =============================================================
+// ── 信頼済み端末リスト管理 ─────────────────────────────────────
+// rememberDevice=true でログインした deviceId を永続化。
+// admin_sessions と異なりトークン期限切れ後も残るので、
+// 久しぶりに開いた時の「新しい端末」誤検知を防ぐ。
+// =============================================================
+function getTrustedDevices() {
+  try {
+    return JSON.parse(PropertiesService.getScriptProperties().getProperty('trusted_devices') || '[]');
+  } catch(e) { return []; }
+}
+function isTrustedDevice(deviceId) {
+  if (!deviceId) return false;
+  return getTrustedDevices().some(function(d) { return d.deviceId === deviceId; });
+}
+function addTrustedDevice(deviceId) {
+  if (!deviceId) return;
+  let list = getTrustedDevices();
+  if (list.some(function(d) { return d.deviceId === deviceId; })) return; // 既に登録済
+  list.unshift({ deviceId: deviceId, firstSeen: new Date().toISOString() });
+  if (list.length > MAX_TRUSTED_DEVICES) list = list.slice(0, MAX_TRUSTED_DEVICES);
+  PropertiesService.getScriptProperties().setProperty('trusted_devices', JSON.stringify(list));
+}
+// 管理用: 信頼済み端末リストを全クリア（GASエディタで手動実行）
+function clearTrustedDevices() {
+  PropertiesService.getScriptProperties().deleteProperty('trusted_devices');
+  Logger.log('信頼済み端末リストをクリアしました');
+}
+
+/**
+ * 新規端末（信頼済みリストに無い）からのログイン時に管理者へ通知
+ */
+function notifyNewDeviceLogin(deviceId, rememberDevice, userAgent) {
+  const time = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+  const trustLabel = rememberDevice
+    ? '信頼デバイスとして登録（30日トークン）'
+    : '一時ログインのみ（8時間トークン）';
+  const idShort = deviceId
+    ? deviceId.substring(0, 8) + '...' + deviceId.substring(deviceId.length - 6)
+    : '(なし)';
+  const subject = '[管理画面] 新しい端末からログインがありました';
+  const body = [
+    '管理画面 (kimono-calendar / kimono-booking) に新しい端末からログインがありました。',
+    'ヒロシ自身の操作（機種変更等）で無ければ、不正アクセスの可能性があります。',
+    '',
+    '────────────────────────',
+    '時刻　　：' + time,
+    '端末ID　：' + idShort,
+    '区分　　：' + trustLabel,
+    '端末情報：',
+    '  ' + (userAgent || '(取得不可)'),
+    '────────────────────────',
+    '',
+    '【お心当たりがない場合】',
+    '・ ADMIN_PIN を変更（GAS Script Properties）',
+    '・ admin_sessions と trusted_devices を全クリア',
+    '  （GASエディタで clearTrustedDevices() を実行）',
+    '・ ローテーション後、ご自身の端末で再ログイン'
+  ].join('\n');
+  GmailApp.sendEmail(getAdminEmail(), subject, body);
+}
 
 /**
  * 管理者トークンを発行
@@ -1855,8 +1918,20 @@ function doPost(e) {
         const result = verifyOtpCode(data.otp || '');
         if (result.valid) {
           clearPinAttempts();
+          // 新規端末（信頼済みリストに無い）からのログインは通知メール送信
+          const isNewDevice = !!data.deviceId && !isTrustedDevice(data.deviceId);
           // 信頼済み端末は30日、通常は8時間有効のトークンを発行
           const token = generateAdminToken(data.rememberDevice === true, data.deviceId || null);
+          // 信頼として登録（次回からは通知不要に）
+          if (data.rememberDevice === true && data.deviceId) {
+            addTrustedDevice(data.deviceId);
+          }
+          // 新規端末通知（信頼登録の有無に関わらず、初回ログインは通知）
+          if (isNewDevice) {
+            try {
+              notifyNewDeviceLogin(data.deviceId, data.rememberDevice === true, data.userAgent || '');
+            } catch(e) { Logger.log('新規端末通知失敗: ' + e.message); }
+          }
           output.setContent(JSON.stringify({ success: true, token: token }));
         } else {
           output.setContent(JSON.stringify({ success: false, error: result.error, expired: result.expired || false }));
