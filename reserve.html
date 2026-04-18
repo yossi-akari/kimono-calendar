@@ -448,6 +448,18 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       <div class="photo-required-grid" id="photoRequiredGrid"></div>
       <div class="photo-req-error" id="photoReqError">撮影プランをいずれか1つ選択してください</div>
     </div>
+    <!-- 成人式/卒業式: 振袖・袴選択 -->
+    <div class="photo-required-section" id="kimonoChoiceSection">
+      <div class="photo-required-label" id="kimonoChoiceLabel">振袖・袴の用意</div>
+      <div class="photo-required-grid" id="kimonoChoiceGrid"></div>
+      <div class="photo-req-error" id="kimonoChoiceError">いずれか1つを選択してください</div>
+    </div>
+    <!-- 成人式/卒業式: 撮影内容選択 -->
+    <div class="photo-required-section" id="ceremonyPhotoSection">
+      <div class="photo-required-label" id="ceremonyPhotoLabel">撮影内容</div>
+      <div class="photo-required-grid" id="ceremonyPhotoGrid"></div>
+      <div class="photo-req-error" id="ceremonyPhotoError">撮影内容をいずれか1つ選択してください</div>
+    </div>
     <div class="form-block" id="kimonoGradeSection" style="display:none;border:2px solid var(--accent);border-radius:4px;padding:18px 16px;">
       <div class="section-label" style="color:var(--accent);font-weight:400;">+ 女性の着物を選択してください（必須）</div>
       <div id="kimonoGradeGrid" class="options-grid"></div>
@@ -1003,14 +1015,21 @@ let PLAN_DEFS = [
     ja: { displayName: '加賀友禅',    note: '伝統工芸・加賀友禅の<br>本物の美しさを体感' },
     en: { displayName: 'Kaga Yuzen',  note: 'Experience the authentic beauty of Kaga Yuzen traditional craft.' },
     zh: { displayName: '加賀友禅',   note: '親身體驗加賀友禅這項傳統工藝之美。' } },
-  { name: '成人式下見',  price: 0,     isEstimate: true,  badge: 'SEIJIN-SHIKI',  badgeClass: 'badge-green',
-    ja: { displayName: '成人式下見',  note: '振袖をじっくり<br>ご試着いただけます' },
-    en: { displayName: 'Coming-of-Age Preview', note: 'Try on furisode at your leisure to find your perfect style.' },
-    zh: { displayName: '成人式試穿',  note: '請從容地試穿振袖，找到您最喜歡的款式。' } },
-  { name: '卒業式下見',  price: 0,     isEstimate: true,  badge: 'SOTSUGYOU-SHIKI', badgeClass: 'badge-green',
-    ja: { displayName: '卒業式下見',  note: '袴・着物コーディネートを<br>ご提案いたします' },
-    en: { displayName: 'Graduation Preview', note: "We'll help coordinate your hakama or kimono ensemble." },
-    zh: { displayName: '畢業式試穿',  note: '我們將為您提供袴・和服的搭配建議。' } },
+  { name: '成人式プラン',  price: 0,   isEstimate: true,  badge: 'SEIJIN-SHIKI',  badgeClass: 'badge-green',
+    consultDateLabel: true, ceremony: true,
+    ja: { displayName: '成人式プラン',  note: '振袖選定・撮影内容のご相談<br>※ご予約日時は事前打ち合わせの日時です' },
+    en: { displayName: 'Coming-of-Age Plan', note: 'Furisode selection consultation. The booking time is for the consultation.' },
+    zh: { displayName: '成人式方案',  note: '振袖選定諮詢。預約日期為事前商討日。' } },
+  { name: '成人式前撮りプラン', price: 0, isEstimate: true, badge: 'SEIJIN-PHOTO', badgeClass: 'badge-green',
+    consultDateLabel: true, ceremony: true, requireKimonoChoice: true, requireCeremonyPhoto: true,
+    ja: { displayName: '成人式前撮りプラン', note: '振袖姿の前撮り撮影<br>※ご予約日時は事前打ち合わせの日時です' },
+    en: { displayName: 'Coming-of-Age Photoshoot', note: 'Pre-ceremony furisode photoshoot. The booking time is for the consultation.' },
+    zh: { displayName: '成人式前攝方案', note: '振袖前攝影。預約日期為事前商討日。' } },
+  { name: '卒業式プラン',  price: 0,   isEstimate: true,  badge: 'SOTSUGYOU-SHIKI', badgeClass: 'badge-green',
+    consultDateLabel: true, ceremony: true,
+    ja: { displayName: '卒業式プラン',  note: '袴選定・撮影内容のご相談<br>※ご予約日時は事前打ち合わせの日時です' },
+    en: { displayName: 'Graduation Plan', note: 'Hakama selection consultation. The booking time is for the consultation.' },
+    zh: { displayName: '畢業式方案',  note: '袴選定諮詢。預約日期為事前商討日。' } },
   { name: '期間限定',    price: 2970,  isEstimate: false, badge: 'LIMITED',        badgeClass: 'badge-red',
     ja: { displayName: '期間限定プラン', note: '期間限定キャンペーンでお得に着物レンタル' },
     en: { displayName: 'Limited Time', note: 'A special limited-time campaign for budget-friendly kimono rental.' },
@@ -1402,7 +1421,28 @@ function selectPlan(el, name, price, isEstimate) {
   updateHairAccessoryVisibility();
   checkTuesdayRestriction();
   updateTimeOptions();
+  updateDateLabelsForPlan();
   updateSummary();
+}
+
+// 成人式・卒業式系プラン選択時、日時ラベルを「打ち合わせ日時」に切替
+function updateDateLabelsForPlan() {
+  const pd = PLAN_DEFS.find(p => p.name === plan.name);
+  const isConsult = !!(pd && pd.consultDateLabel);
+  const sectionLbl = document.getElementById('dateSectionLabel');
+  const dateLbl    = document.getElementById('visitDateLabel');
+  const s4DateLbl  = document.getElementById('s4DateLbl');
+  const timeLbl    = document.querySelector('label[for="visitTime"]');
+  if (isConsult) {
+    if (sectionLbl) sectionLbl.textContent = '打ち合わせ日時';
+    if (dateLbl)    dateLbl.textContent    = '打ち合わせ日';
+    if (s4DateLbl)  s4DateLbl.textContent  = '打ち合わせ日時';
+  } else {
+    // 通常プラン: 翻訳ファイルから既定ラベルに戻す
+    if (sectionLbl) sectionLbl.textContent = t.dateSectionLabel;
+    if (dateLbl)    dateLbl.textContent    = t.visitDate;
+    if (s4DateLbl)  s4DateLbl.textContent  = t.s4DateLbl;
+  }
 }
 
 // ── 日付変更ハンドラ ──────────────────────────────────
@@ -1465,16 +1505,19 @@ function updatePeople() {
 function buildOptCard(opt) {
   optQty[opt.name] = 0;
   const div = document.createElement('div');
-  div.className = 'option-item' + (opt.photoRequired ? ' photo-req' : '');
+  const isRadio = opt.photoRequired || opt.kimonoChoice || opt.ceremonyPhotoChoice;
+  div.className = 'option-item' + (isRadio ? ' photo-req' : '');
   div.id = 'opt_' + opt.name;
   div.dataset.optName = opt.name;  // 内部キー（常に日本語）
   if (opt.maleOnly) div.dataset.maleOnly = '1';
   if (opt.kagaOnly) div.dataset.kagaOnly = '1';
   if (opt.wide)     div.classList.add('wide');
 
-  const onclick = opt.photoRequired
-    ? `selectPhotoOpt('${opt.name}',${opt.price})`
-    : `toggleOpt('${opt.name}',${opt.price})`;
+  let onclick;
+  if (opt.kimonoChoice)            onclick = `selectKimonoChoice('${opt.name}',${opt.price})`;
+  else if (opt.ceremonyPhotoChoice) onclick = `selectCeremonyPhoto('${opt.name}',${opt.price})`;
+  else if (opt.photoRequired)       onclick = `selectPhotoOpt('${opt.name}',${opt.price})`;
+  else                              onclick = `toggleOpt('${opt.name}',${opt.price})`;
 
   const dispName = optName(opt);
   const note     = optNote(opt);
@@ -1493,7 +1536,7 @@ function buildOptCard(opt) {
       </div>
       <span class="option-price">¥${opt.price.toLocaleString()}${unit}</span>
     </div>
-    <div class="option-qty-row" ${opt.photoRequired ? 'style="display:none!important"' : ''}>
+    <div class="option-qty-row" ${isRadio ? 'style="display:none!important"' : ''}>
       <button class="qty-btn" type="button" onclick="changeQty('${opt.name}',${opt.price},-1)">−</button>
       <span class="qty-val" id="qty_${opt.name}">1</span>
       <span class="qty-label">${qtyU}</span>
@@ -1507,23 +1550,98 @@ function buildOptCard(opt) {
 let selectedBenefit = null; // 選択中の特典名
 
 function buildOptions() {
-  const grid    = document.getElementById('optionsGrid');
-  const reqGrid = document.getElementById('photoRequiredGrid');
+  const grid              = document.getElementById('optionsGrid');
+  const reqGrid           = document.getElementById('photoRequiredGrid');
+  const kimonoChoiceGrid  = document.getElementById('kimonoChoiceGrid');
+  const ceremonyPhotoGrid = document.getElementById('ceremonyPhotoGrid');
   grid.innerHTML = '';
   reqGrid.innerHTML = '';
+  kimonoChoiceGrid.innerHTML = '';
+  ceremonyPhotoGrid.innerHTML = '';
   options = {};
   optQty  = {};
   selectedBenefit = null;
+
+  // 現在のプランが ceremony タイプか判定
+  const planDef = PLAN_DEFS.find(pd => pd.name === plan.name);
+  const isCeremony = !!(planDef && planDef.ceremony);
+
   OPT_DEFS.forEach(opt => {
     if (opt.gradeOnly) return; // 着物グレードはkimonoGradeSectionで管理
+
+    // ── プランフィルタ ──
+    // ceremony プラン: forPlans が現在のプラン名を含むオプションのみ表示
+    // 通常プラン: forPlans 指定が無いオプションのみ表示（=既存の汎用オプション）
+    if (isCeremony) {
+      if (!opt.forPlans || opt.forPlans.indexOf(plan.name) === -1) return;
+    } else {
+      if (opt.forPlans) return; // ceremony専用オプションは通常プランで非表示
+    }
+
     const div = buildOptCard(opt);
-    if (opt.photoRequired) reqGrid.appendChild(div);
-    else                   grid.appendChild(div);
+    if (opt.kimonoChoice)              kimonoChoiceGrid.appendChild(div);
+    else if (opt.ceremonyPhotoChoice)  ceremonyPhotoGrid.appendChild(div);
+    else if (opt.photoRequired)        reqGrid.appendChild(div);
+    else                               grid.appendChild(div);
   });
+
   updatePhotoOnlyVisibility();
   updateMaleOnlyVisibility();
+  updateCeremonyVisibility();
   buildBenefitSection();
   buildKimonoGradeSection();
+}
+
+// ── 成人式・卒業式系プラン: セクション可視性管理 ──
+function updateCeremonyVisibility() {
+  const planDef = PLAN_DEFS.find(pd => pd.name === plan.name);
+  const isCeremony = !!(planDef && planDef.ceremony);
+  const kimonoSec   = document.getElementById('kimonoChoiceSection');
+  const photoSec    = document.getElementById('ceremonyPhotoSection');
+  // ceremonyプラン以外では非表示
+  kimonoSec.classList.toggle('visible', isCeremony && (planDef.requireKimonoChoice || planDef.ceremony));
+  photoSec.classList.toggle('visible', isCeremony);
+  // ラベル更新
+  if (isCeremony) {
+    const isSeijin = plan.name === '成人式プラン' || plan.name === '成人式前撮りプラン';
+    const reqMark  = planDef.requireKimonoChoice ? '（必須）' : '（任意）';
+    const photoMark = planDef.requireCeremonyPhoto ? '（必須）' : '（任意）';
+    document.getElementById('kimonoChoiceLabel').textContent = (isSeijin ? '振袖の用意' : '袴の用意') + reqMark;
+    document.getElementById('ceremonyPhotoLabel').textContent = '撮影内容' + photoMark;
+  }
+  // エラー表示クリア
+  document.getElementById('kimonoChoiceError').classList.remove('show');
+  document.getElementById('ceremonyPhotoError').classList.remove('show');
+}
+
+// ── 振袖・袴選択：1択ラジオ ────────────────────────────
+function selectKimonoChoice(name, price) {
+  OPT_DEFS.filter(o => o.kimonoChoice).forEach(o => {
+    const el = document.getElementById('opt_' + o.name);
+    if (el) el.classList.remove('checked');
+    delete options[o.name];
+    optQty[o.name] = 0;
+  });
+  document.getElementById('opt_' + name).classList.add('checked');
+  options[name] = price;
+  optQty[name]  = 1;
+  document.getElementById('kimonoChoiceError').classList.remove('show');
+  updateSummary();
+}
+
+// ── 撮影内容選択（成人式・卒業式）：1択ラジオ ─────────
+function selectCeremonyPhoto(name, price) {
+  OPT_DEFS.filter(o => o.ceremonyPhotoChoice).forEach(o => {
+    const el = document.getElementById('opt_' + o.name);
+    if (el) el.classList.remove('checked');
+    delete options[o.name];
+    optQty[o.name] = 0;
+  });
+  document.getElementById('opt_' + name).classList.add('checked');
+  options[name] = price;
+  optQty[name]  = 1;
+  document.getElementById('ceremonyPhotoError').classList.remove('show');
+  updateSummary();
 }
 
 // ── 着物グレード選択（撮影付きプラン用）──────────────────
@@ -1852,6 +1970,18 @@ function goStep(n) {
     if (gradeTotal !== people.female) {
       document.getElementById('kimonoGradeError').classList.add('show');
       return;
+    }
+  }
+  // 成人式・卒業式系プランの必須項目チェック
+  if (n === 4) {
+    const pd = PLAN_DEFS.find(p => p.name === plan.name);
+    if (pd && pd.requireKimonoChoice) {
+      const hasKimono = OPT_DEFS.filter(o => o.kimonoChoice && (o.forPlans || []).indexOf(plan.name) >= 0).some(o => options[o.name]);
+      if (!hasKimono) { document.getElementById('kimonoChoiceError').classList.add('show'); return; }
+    }
+    if (pd && pd.requireCeremonyPhoto) {
+      const hasPhoto = OPT_DEFS.filter(o => o.ceremonyPhotoChoice && (o.forPlans || []).indexOf(plan.name) >= 0).some(o => options[o.name]);
+      if (!hasPhoto) { document.getElementById('ceremonyPhotoError').classList.add('show'); return; }
     }
   }
   if (n === 4) {
