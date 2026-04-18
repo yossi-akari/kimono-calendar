@@ -63,6 +63,27 @@
 3. ローテーション直後に `dailyHealthCheck` を手動実行して全エンドポイントが通ることを確認
 4. **コミット例外**: 4/5のローテーション時、Xserver版の更新を忘れて12日間予約が静かに止まった事故あり
 
+## Ceremony プラン構成（成人式・卒業式系）
+
+2026-04-18追加。`ceremony: true` フラグが付いたプランは「街歩き系オプション全部非表示・専用オプションのみ表示」のexclusiveモードで動く。
+
+### 現在のプラン
+- 成人式プラン: 下見・振袖選定の打ち合わせ用（要件すべて任意）
+- 成人式前撮りプラン: 撮影本番に向けた打ち合わせ用（振袖選択・撮影内容が必須）
+- 卒業式プラン: 下見・袴選定の打ち合わせ用（要件すべて任意）
+
+### 関連フラグ
+- プラン側: `ceremony: true`, `consultDateLabel: true` (日時=打ち合わせ日), `requireKimonoChoice: true`, `requireCeremonyPhoto: true`, `isEstimate: true`
+- オプション側: `forPlans: ['プラン名',...]`, `kimonoChoice: true` (振袖/袴選択ラジオ), `ceremonyPhotoChoice: true` (撮影内容ラジオ), `estimatePrice: true` (価格不確定。選択時のみ「お見積もり」モード)
+
+### 動的見積もり判定
+`isCurrentlyEstimate()` 関数: `plan.isEstimate AND estimatePriceオプション選択中` の時のみ見積もりモード。例:
+- 振袖**レンタル**(¥55,000〜・estimatePrice) → 見積もりモード・現地決済固定
+- 振袖**持ち込み**(¥15,400・固定) + 撮影 + ヘアメイク → 合計確定・事前決済可能
+
+### 日時表示の強調
+ceremonyプラン選択時、日時セクションラベルを「打ち合わせ日時」に変更し、赤枠警告ボックスで「📅 こちらは「打ち合わせ」の日時です ※ ○○式当日の日時ではありません」を表示（成人式/卒業式で文言切替）。
+
 ## Supabase Edge Functions 作業時の必須チェック
 
 `supabase/functions/` を編集・デプロイする時は以下を毎回確認：
