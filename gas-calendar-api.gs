@@ -18,13 +18,13 @@ const CUSTOMER_EMAIL_FROM = 'reserve@akari-kanazawa.jp';
 function getAccessKey() {
   return PropertiesService.getScriptProperties().getProperty('ACCESS_KEY') || '';
 }
-// ⚠️ 暫定: 旧Xserver reserve.htmlに残っている旧キーも一時的に許可（2026-04-17〜）
-// 4/5の ACCESS_KEY ローテーションでXserver側の予約が壊れていたため、
-// 畠中さんによるリダイレクト設定が反映されるまでの応急措置。反映確認後に LEGACY_KEYS を空配列に戻すこと。
+// ACCESS_KEY検証。LEGACY_KEYS は通常空。
+// 機密ローテーションで一時的な互換性が必要な場合のみ、ここに旧キーを追加する。
+// （詳細はCLAUDE.mdの「機密情報の取り扱い」を参照）
 function isValidAccessKey(key) {
   if (!key) return false;
   if (key === getAccessKey()) return true;
-  const LEGACY_KEYS = ['34563456'];
+  const LEGACY_KEYS = [];
   return LEGACY_KEYS.indexOf(key) !== -1;
 }
 function getAdminPin() {
