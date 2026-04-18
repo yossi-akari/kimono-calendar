@@ -378,6 +378,13 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   <div id="sc2" style="display:none;">
     <div class="form-block">
       <div class="section-label" id="dateSectionLabel">ご来店日時</div>
+      <div id="consultDateWarning" style="display:none;background:#fff8e1;border:2px solid var(--accent);border-radius:4px;padding:14px 16px;margin-bottom:14px;">
+        <div style="font-size:1.05rem;font-weight:500;color:var(--accent);margin-bottom:6px;">📅 こちらは「打ち合わせ」の日時です</div>
+        <div style="font-size:0.85rem;color:var(--ink);line-height:1.6;" id="consultDateWarningText">
+          ※ 成人式・卒業式当日の日時ではありません。<br>
+          撮影日は打ち合わせ当日にご相談の上、後日改めてご予約いただきます。
+        </div>
+      </div>
       <div class="form-row">
         <div class="field">
           <label id="visitDateLabel">ご来店日</label>
@@ -1425,23 +1432,49 @@ function selectPlan(el, name, price, isEstimate) {
   updateSummary();
 }
 
-// 成人式・卒業式系プラン選択時、日時ラベルを「打ち合わせ日時」に切替
+// 成人式・卒業式系プラン選択時、日時ラベルを「打ち合わせ日時」に切替＋警告表示
 function updateDateLabelsForPlan() {
   const pd = PLAN_DEFS.find(p => p.name === plan.name);
   const isConsult = !!(pd && pd.consultDateLabel);
-  const sectionLbl = document.getElementById('dateSectionLabel');
-  const dateLbl    = document.getElementById('visitDateLabel');
-  const s4DateLbl  = document.getElementById('s4DateLbl');
-  const timeLbl    = document.querySelector('label[for="visitTime"]');
+  const sectionLbl  = document.getElementById('dateSectionLabel');
+  const dateLbl     = document.getElementById('visitDateLabel');
+  const s4DateLbl   = document.getElementById('s4DateLbl');
+  const warnEl      = document.getElementById('consultDateWarning');
+  const warnTextEl  = document.getElementById('consultDateWarningText');
+
   if (isConsult) {
-    if (sectionLbl) sectionLbl.textContent = '打ち合わせ日時';
+    // 打ち合わせ日時として大きく強調
+    if (sectionLbl) {
+      sectionLbl.innerHTML = '打ち合わせ日時';
+      sectionLbl.style.fontSize = '1.1rem';
+      sectionLbl.style.color = 'var(--accent)';
+      sectionLbl.style.fontWeight = '500';
+      sectionLbl.style.letterSpacing = '0.1em';
+    }
     if (dateLbl)    dateLbl.textContent    = '打ち合わせ日';
     if (s4DateLbl)  s4DateLbl.textContent  = '打ち合わせ日時';
+    if (warnEl)     warnEl.style.display   = 'block';
+
+    // 卒業式プランなら警告文を「成人式」→「卒業式」に切替
+    if (warnTextEl) {
+      const isSotsugyou = plan.name === '卒業式プラン';
+      const eventName = isSotsugyou ? '卒業式' : '成人式';
+      warnTextEl.innerHTML =
+        `※ ${eventName}当日の日時ではありません。<br>` +
+        `撮影日は打ち合わせ当日にご相談の上、後日改めてご予約いただきます。`;
+    }
   } else {
-    // 通常プラン: 翻訳ファイルから既定ラベルに戻す
-    if (sectionLbl) sectionLbl.textContent = t.dateSectionLabel;
+    // 通常プラン: 既定ラベル + スタイル復元
+    if (sectionLbl) {
+      sectionLbl.textContent = t.dateSectionLabel;
+      sectionLbl.style.fontSize = '';
+      sectionLbl.style.color = '';
+      sectionLbl.style.fontWeight = '';
+      sectionLbl.style.letterSpacing = '';
+    }
     if (dateLbl)    dateLbl.textContent    = t.visitDate;
     if (s4DateLbl)  s4DateLbl.textContent  = t.s4DateLbl;
+    if (warnEl)     warnEl.style.display   = 'none';
   }
 }
 
@@ -1886,9 +1919,20 @@ function changeQty(name, price, dir) {
   updateHairAccessoryVisibility();
 }
 
+// 動的な見積もり判定: estimatePrice flagの付いたオプションが選択されているか
+// （振袖レンタル等の価格不確定なオプション選択時のみ「お見積もり」モードに）
+function isCurrentlyEstimate() {
+  // 通常プラン（撮影付き等）はそもそも見積もりではない
+  if (!plan.isEstimate) return false;
+  // ceremonyプランで estimatePrice オプションが選ばれていれば見積もりモード
+  return OPT_DEFS.some(o => o.estimatePrice && options[o.name]);
+}
+
 // ── 金額計算・サマリー更新 ────────────────────────────
 function calcBase() {
-  if (plan.isEstimate) return null;
+  if (isCurrentlyEstimate()) return null;
+  // ceremonyプランで estimatePrice 未選択 = base 0（オプション合算のみ）
+  if (plan.isEstimate) return 0;
   return plan.price * people.female + MALE_PRICE * people.male + CHILD_PRICE * people.child + calcKimonoGradeSurcharge();
 }
 
@@ -1998,7 +2042,7 @@ function goStep(n) {
     if (i < n)  step.classList.add('done');
   }
   document.getElementById('estimateNotice').style.display =
-    (n === 4 && plan.isEstimate) ? 'block' : 'none';
+    (n === 4 && isCurrentlyEstimate()) ? 'block' : 'none';
   updateSummary();
   if (n === 4) updatePaymentUI();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -2046,7 +2090,7 @@ function updateCancelPolicy() {
   const t = tl();
   const cp = document.getElementById('cancelPolicyNotice');
   if (!t.cancelPolicyNotice) { cp.style.display = 'none'; return; }
-  const isCard = selectedPaymentMethod === 'card' && !plan.isEstimate;
+  const isCard = selectedPaymentMethod === 'card' && !isCurrentlyEstimate();
   const lines = t.cancelPolicyNotice.split('\n');
   const title = lines[0] || '';
   const body  = lines.slice(1).join('<br>');
@@ -2059,7 +2103,7 @@ function updateCancelPolicy() {
 
 function updatePaymentUI() {
   const isJa = currentLang === 'ja';
-  const isEst = plan.isEstimate;
+  const isEst = isCurrentlyEstimate();
   document.getElementById('paymentBlock').style.display = isEst ? 'none' : '';
   if (isEst) { selectedPaymentMethod = 'onsite'; return; }
   document.getElementById('pm-paypay').style.display = isJa ? '' : 'none';
@@ -2127,7 +2171,7 @@ async function submitForm() {
       channel: currentLang === 'en' ? 'ウェブサイト(EN)' : currentLang === 'zh' ? 'ウェブサイト(繁中)' : 'ウェブサイト',
       date, time, name: `${ln} ${fn}`, plan: plan.name, people: peopleSaved,
       options: selectedOpts, total,
-      payment: plan.isEstimate ? '未定' :
+      payment: isCurrentlyEstimate() ? '未定' :
                selectedPaymentMethod === 'card'   ? '事前決済（クレジットカード）' :
                selectedPaymentMethod === 'paypay' ? '事前決済（PayPay）' : '現地決済（現金）',
       paymentMethod: selectedPaymentMethod,
