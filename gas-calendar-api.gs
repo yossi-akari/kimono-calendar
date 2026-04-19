@@ -861,11 +861,21 @@ function getRawBookings() {
     Logger.log('Supabase WEB予約: ' + webBookings.length + '件');
   }
 
-  const merged = [...gmailBookings, ...recovered, ...webBookings];
+  // ── reservationId ベースで重複排除 ──
+  // 同一予約が GAS sheet と Supabase の両方に存在するケース（4/14のSupabase
+  // 移行以前のWEB予約等）で、時刻フォーマット違い等による重複表示を防ぐ。
+  // 後勝ち = webBookings（Supabase=真実の置き場）優先。
+  const dedupMap = new Map();
+  [...gmailBookings, ...recovered, ...webBookings].forEach(function(b) {
+    if (b && b.reservationId) dedupMap.set(b.reservationId, b);
+  });
+  const merged = Array.from(dedupMap.values());
+  const dupCount = (gmailBookings.length + recovered.length + webBookings.length) - merged.length;
   logAudit('SYNC', {
     gmail: gmailBookings.length,
     recovered: recovered.length,
     web: webBookings.length,
+    duplicates_removed: dupCount,
     total: merged.length,
     count: merged.length
   });
@@ -910,12 +920,14 @@ function getWebBookingsFromSupabase() {
 
     // Supabase形式 → GAS形式に変換
     return data.map(function(b) {
+      // Supabase TIME型は "HH:mm:ss" を返すので "HH:mm" に正規化（GAS sheetと統一）
+      const timeStr = String(b.time || '').substring(0, 5);
       return {
         id: b.id || b.reservation_id,
         reservationId: b.reservation_id || b.id,
         source: 'WEB',
         date: b.date,
-        time: b.time,
+        time: timeStr,
         name: b.name,
         email: b.email || '',
         tel: b.tel || '',
@@ -2273,7 +2285,12 @@ function doPost(e) {
         const manualBookings   = getManualSheetBookingsForMonth(reqYear, reqMonth);
         const cancelledIds     = getCancelledIds();
         const filtered         = externalBookings.filter(function(b) { return !cancelledIds.has(b.reservationId); });
-        allBookings = [...filtered, ...manualBookings].sort(function(a, b) {
+        // reservationId ベースで重複排除（先勝ち＝externalBookings優先）
+        const _dedup = new Map();
+        [...filtered, ...manualBookings].forEach(function(b) {
+          if (b && b.reservationId && !_dedup.has(b.reservationId)) _dedup.set(b.reservationId, b);
+        });
+        allBookings = Array.from(_dedup.values()).sort(function(a, b) {
           if (a.date !== b.date) return a.date.localeCompare(b.date);
           return a.time.localeCompare(b.time);
         });
@@ -2300,7 +2317,14 @@ function doPost(e) {
         const cancelledIds = getCancelledIds();
         const filtered = bookings.filter(function(b) { return !cancelledIds.has(b.reservationId); });
         const manualBookings = getManualSheetBookings(true);
-        allBookings = [...filtered, ...manualBookings].sort(function(a, b) {
+        // reservationId ベースで重複排除（先勝ち＝Supabase等から取得済の filtered 優先）
+        // 4/14のSupabase移行以前のWEB予約が GAS sheet と Supabase 両方に存在し、
+        // 時刻フォーマット違い（HH:mm vs HH:mm:ss）等で重複表示される問題への対処
+        const _dedupMap = new Map();
+        [...filtered, ...manualBookings].forEach(function(b) {
+          if (b && b.reservationId && !_dedupMap.has(b.reservationId)) _dedupMap.set(b.reservationId, b);
+        });
+        allBookings = Array.from(_dedupMap.values()).sort(function(a, b) {
           if (a.date !== b.date) return a.date.localeCompare(b.date);
           return a.time.localeCompare(b.time);
         });
@@ -2626,7 +2650,7 @@ https://script.google.com/home`;
 // ── キャッシュ管理 ─────────────────────────────────────────────
 // =============================================================
 function getCachedBookings() {
-  try { const c = CacheService.getScriptCache().get('bookings_v2'); return c ? JSON.parse(c) : null; }
+  try { const c = CacheService.getScriptCache().get('bookings_v3'); return c ? JSON.parse(c) : null; }
   catch(e) { return null; }
 }
 function setCachedBookings(b) {
@@ -2635,14 +2659,14 @@ function setCachedBookings(b) {
   try {
     const s = JSON.stringify(b);
     if (s.length < 90000) {
-      CacheService.getScriptCache().put('bookings_v2', s, 1800); // 30分TTL（旧：1時間）
+      CacheService.getScriptCache().put('bookings_v3', s, 1800); // 30分TTL（旧：1時間）
     } else {
       Logger.log('キャッシュサイズ超過: ' + s.length + ' bytes — キャッシュをスキップ');
       notifyAdminError('setCachedBookings', 'キャッシュサイズ超過: ' + s.length + ' bytes（上限90KB）— 予約件数が増えすぎている可能性があります');
     }
   } catch(e) {}
 }
-function clearCache() { CacheService.getScriptCache().remove('bookings_v2'); Logger.log('キャッシュクリア'); }
+function clearCache() { CacheService.getScriptCache().remove('bookings_v3'); Logger.log('キャッシュクリア'); }
 
 // =============================================================
 // ── 自動同期トリガー ──────────────────────────────────────────
