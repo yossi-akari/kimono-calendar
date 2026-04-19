@@ -114,4 +114,12 @@ ceremonyプラン選択時、日時セクションラベルを「打ち合わせ
 - **追加した関数（GAS）**:
   - `getSupabaseRequestsList()` / `processSupabaseRequest()` — booking_requests連携
   - `processSupabaseBookingStatusUpdate()` — bookings.visit_status更新+PAY.JP返金
+  - `deleteSupabaseBooking()` — 削除ボタンのフォールバック
+  - `getWebBookingsFromSupabase()` で取得時 `b.time.substring(0,5)` でHH:mmに正規化
+  - `getRawBookings()` と `getBookings`ハンドラで reservationId ベースdedup
 - **適用範囲**: Supabase化作業時は読み取り(getXxx)だけでなく書き込み(processXxx, deleteXxx, updateXxx)も全部チェック
+
+### 既知の制約: 管理画面「この予約を編集」ボタンはWEB予約に対して事実上動かない
+- **現象**: WEB予約（Supabase only）の編集ボタンを押すと kimono-booking.html に遷移し saveManualToSheet で GAS sheet に新規行が appendRow される。Supabase 側は更新されないため、dedup で Supabase 版が表示され編集反映されないように見える
+- **当面の運用回避**: WEB予約の変更は管理画面で編集せず、お客様に my-reservation.html から「変更申請」を出してもらい、管理画面で承認する。Supabase が正しく更新される
+- **根本対応**: saveManualToSheet が HP- prefix を検出したら Supabase 側を update するよう改修（未着手）
