@@ -1505,8 +1505,53 @@ function deleteManualFromSheet(id) {
   for (let i = data.length - 1; i >= 1; i--) {
     if (String(data[i][0]) === String(id)) {
       sheet.deleteRow(i + 1);
-      return;
+      return true;
     }
+  }
+  return false;
+}
+
+/**
+ * Supabase bookingsテーブルから予約を削除（管理画面の「削除」ボタン用）。
+ * GAS sheetに無いWEB予約 (reserve.html 経由で Supabase only に保存) のフォールバック。
+ * 成功時 true、見つからない時 false。
+ */
+function deleteSupabaseBooking(reservationId) {
+  const props = PropertiesService.getScriptProperties();
+  const url = props.getProperty('SUPABASE_URL');
+  const key = props.getProperty('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return false;
+  try {
+    const headers = { 'Authorization': 'Bearer ' + key, 'apikey': key };
+    // 該当予約取得（カード決済済みなら返金が必要かログだけ残す）
+    const fetchResp = UrlFetchApp.fetch(
+      url + '/rest/v1/bookings?reservation_id=eq.' + encodeURIComponent(reservationId) + '&select=charge_id,payment&limit=1',
+      { method: 'get', headers: headers, muteHttpExceptions: true }
+    );
+    if (fetchResp.getResponseCode() >= 400) return false;
+    const rows = JSON.parse(fetchResp.getContentText());
+    if (!Array.isArray(rows) || rows.length === 0) return false;
+    const row = rows[0];
+    if (row.charge_id && row.payment === 'card') {
+      Logger.log('警告: 削除しようとしているSupabase予約はカード決済済み (charge=' + row.charge_id + ')。返金は実行されません。');
+      notifyAdminError('DELETE_PAID_BOOKING',
+        '削除されたSupabase予約にカード決済(charge=' + row.charge_id + ')あり。手動で返金確認してください。',
+        reservationId);
+    }
+    // 削除実行
+    const delResp = UrlFetchApp.fetch(
+      url + '/rest/v1/bookings?reservation_id=eq.' + encodeURIComponent(reservationId),
+      { method: 'delete', headers: headers, muteHttpExceptions: true }
+    );
+    if (delResp.getResponseCode() >= 400) {
+      Logger.log('Supabase予約削除エラー: ' + delResp.getContentText().substring(0, 200));
+      return false;
+    }
+    logAudit('DELETE_SUPABASE_BOOKING', { reservationId: reservationId });
+    return true;
+  } catch(e) {
+    Logger.log('deleteSupabaseBooking例外: ' + e.message);
+    return false;
   }
 }
 
@@ -2372,7 +2417,15 @@ function doPost(e) {
     }
     // 予約の非表示（削除）
     if (data.action === 'delete') {
-      deleteManualFromSheet(data.id);
+      // GAS sheet にあれば削除、無ければ Supabase WEB予約として削除を試みる
+      const deletedFromSheet = deleteManualFromSheet(data.id);
+      if (!deletedFromSheet) {
+        const deletedFromSupabase = deleteSupabaseBooking(data.id);
+        if (!deletedFromSupabase) {
+          output.setContent(JSON.stringify({ success: false, error: '予約が見つかりません: ' + data.id }));
+          return output;
+        }
+      }
       output.setContent(JSON.stringify({ success: true }));
       return output;
     }
@@ -2713,13 +2766,21 @@ function hourlySync() {
     const twoHours = 2 * 60 * 60 * 1000;
     let b;
     if (lastSyncTs && (now - parseInt(lastSyncTs)) < twoHours) {
-      // Gmailスキップ: 外部予約シートからキャッシュ再構築
+      // Gmailスキップ: 外部予約シート + Supabase WEB予約からキャッシュ再構築
+      // ※ Supabase WEB予約も含めないと、reserve.html経由の新規予約が
+      //   最大2時間管理画面に反映されない問題が発生する
       const sheetBookings = getExternalSheetBookings();
+      const webBookings   = getWebBookingsFromSupabase();
       const cancelledIds  = getCancelledIds();
-      b = sheetBookings.filter(bk => !cancelledIds.has(bk.reservationId));
+      // reservationIdベースでdedup（後勝ち = Supabase優先）
+      const _dedup = new Map();
+      [...sheetBookings, ...webBookings].forEach(function(bk) {
+        if (bk && bk.reservationId) _dedup.set(bk.reservationId, bk);
+      });
+      b = Array.from(_dedup.values()).filter(bk => !cancelledIds.has(bk.reservationId));
       const elapsed = Math.round((now - parseInt(lastSyncTs)) / 60000);
-      Logger.log('hourlySync: Gmailスキップ（前回Gmail同期から' + elapsed + '分）, シートから' + b.length + '件');
-      logAudit('HOURLY_SYNC_SHEET_ONLY', { count: b.length, minutesSinceGmail: elapsed });
+      Logger.log('hourlySync: Gmailスキップ（前回Gmail同期から' + elapsed + '分）, シート+Supabaseから' + b.length + '件');
+      logAudit('HOURLY_SYNC_SHEET_ONLY', { count: b.length, web: webBookings.length, minutesSinceGmail: elapsed });
     } else {
       // Gmail呼び出し + シート永続化
       b = getRawBookings();
