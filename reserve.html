@@ -1419,7 +1419,10 @@ function updateTimeOptions() {
   const summaryEl = document.getElementById('slotSummary');
   const hasData = Object.keys(slotAvailability).length > 0;
   if (sameDayCutoff) {
-    summaryEl.textContent = '本日のWEB予約受付は終了しました（朝8:29まで）。お電話（076-201-8119）でお問い合わせください。';
+    summaryEl.innerHTML =
+      '本日のWEB予約受付は終了しました（朝8:29まで）<br>' +
+      '当日のご予約はお電話で受付可能です<br>' +
+      '<a href="tel:076-201-8119" style="color:var(--accent);text-decoration:underline;font-weight:500;">076-201-8119</a>';
     summaryEl.style.color = 'var(--accent)';
     summaryEl.style.display = '';
   } else if (hasData) {
