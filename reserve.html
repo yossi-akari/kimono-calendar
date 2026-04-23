@@ -1378,8 +1378,21 @@ function updateTimeOptions() {
   const select   = document.getElementById('visitTime');
   const currentVal = select.value;
   const photo = isPhotoPlan();
+
+  // 当日予約 + 朝8:30以降なら全スロット無効化（当日予約締切ルール）
+  const dateVal = document.getElementById('visitDate').value;
+  const todayJst = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
+  const nowJst   = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
+  const [jh, jm] = nowJst.split(':').map(Number);
+  const sameDayCutoff = (dateVal === todayJst) && (jh > 8 || (jh === 8 && jm >= 30));
+
   [...select.options].forEach(opt => {
     if (!opt.value) return;
+    if (sameDayCutoff) {
+      opt.disabled = true;
+      opt.textContent = `${opt.value}　受付終了`;
+      return;
+    }
     const slot = slotAvailability[opt.value];
     if (!slot) { opt.disabled = false; opt.textContent = opt.value; return; }
     if (slot.blocked) {
@@ -1405,7 +1418,11 @@ function updateTimeOptions() {
   // 空き枠サマリーを更新
   const summaryEl = document.getElementById('slotSummary');
   const hasData = Object.keys(slotAvailability).length > 0;
-  if (hasData) {
+  if (sameDayCutoff) {
+    summaryEl.textContent = '本日のWEB予約受付は終了しました（朝8:29まで）。お電話（076-201-8119）でお問い合わせください。';
+    summaryEl.style.color = 'var(--accent)';
+    summaryEl.style.display = '';
+  } else if (hasData) {
     const availCount = Object.values(slotAvailability).filter(s => !s.blocked && s.remaining > 0).length;
     summaryEl.textContent = t.slotRemaining.replace('{n}', availCount);
     summaryEl.style.color = availCount <= 2 ? 'var(--accent)' : 'var(--green)';

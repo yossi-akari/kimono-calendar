@@ -432,6 +432,18 @@ serve(async (req) => {
       return errorResponse('過去の日付は指定できません', 400, 'VALIDATION');
     }
 
+    // 当日予約は朝8:29まで受付（8:30以降は終日不可）
+    if (booking.date === getJstTodayStr()) {
+      const now = new Date();
+      const jstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+      const jstHour = jstNow.getUTCHours();
+      const jstMin  = jstNow.getUTCMinutes();
+      const isAfterCutoff = jstHour > 8 || (jstHour === 8 && jstMin >= 30);
+      if (isAfterCutoff) {
+        return errorResponse('当日のご予約は朝8:29まで承っております。お急ぎの場合はお電話でお問い合わせください（076-201-8119）。', 400, 'VALIDATION');
+      }
+    }
+
     if (booking.email && !isValidEmail(booking.email)) {
       return errorResponse('メールアドレスが不正です', 400, 'VALIDATION');
     }
