@@ -592,7 +592,13 @@ serve(async (req) => {
       people: booking.people || null,
       options: booking.options || [],
       total: booking.total || 0,
-      payment: booking.paymentMethod || null,
+      // payment: 日本語ラベルで保存（管理画面はこのラベルで「現地決済」を識別する）
+      payment:
+        booking.payment ||  // クライアントから「事前決済（クレジットカード）」等の日本語が来ていればそれを優先
+        (booking.paymentMethod === 'card'   ? '事前決済（クレジットカード）' :
+         booking.paymentMethod === 'paypay' ? '事前決済（PayPay）' :
+         booking.paymentMethod === 'onsite' ? '現地決済（現金）' :
+         booking.paymentMethod || null),
       remarks: booking.remarks || null,
       charge_id: chargeId,
       payment_status: paymentStatus,

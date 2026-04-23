@@ -1454,6 +1454,20 @@ function esc(str) {
   return d.innerHTML;
 }
 
+// 支払方法の英語コードを日本語に変換
+// reserve.html (Supabase版) では英語コード('onsite'/'card'/'paypay')が
+// payment フィールドに保存されているため、表示時に日本語化する
+function localizePayment(p) {
+  if (!p) return '';
+  const map = {
+    'onsite':  '現地決済（現金）',
+    'card':    '事前決済（クレジットカード）',
+    'paypay':  '事前決済（PayPay）',
+    '未定':    '未定（来店時お見積もり）'
+  };
+  return map[p] || p; // 該当しなければ元の文字列を返す（既に日本語の場合）
+}
+
 // プランごとのチップカラー
 function chipClass(planName, source) {
   if (source === 'MANUAL') return 'chip-manual';
@@ -2235,7 +2249,7 @@ function openDetail(id) {
       <div class="detail-row"><span class="detail-label">人数</span><span class="detail-value">${esc(b.people)}</span></div>
       <div class="detail-row"><span class="detail-label">オプション</span><span class="detail-value">${optStr}</span></div>
       <div class="detail-row"><span class="detail-label">合計</span><span class="detail-value" style="color:var(--accent);font-family:'DM Mono',monospace;">${totalStr}</span></div>
-      ${b.payment ? `<div class="detail-row"><span class="detail-label">支払方法</span><span class="detail-value">${esc(b.payment)}</span></div>` : ''}
+      ${b.payment ? `<div class="detail-row"><span class="detail-label">支払方法</span><span class="detail-value">${esc(localizePayment(b.payment))}</span></div>` : ''}
       ${b.pointUsed > 0 ? `<div class="detail-row"><span class="detail-label">ポイント</span><span class="detail-value" style="color:var(--muted);">${b.pointUsed.toLocaleString()} pt 利用</span></div>` : ''}
       ${b.couponUsed > 0 ? `<div class="detail-row"><span class="detail-label">クーポン</span><span class="detail-value" style="color:var(--muted);">¥${b.couponUsed.toLocaleString()} 利用</span></div>` : ''}
       ${b.email ? `<div class="detail-row"><span class="detail-label">メール</span><span class="detail-value"><a href="mailto:${esc(b.email)}" style="color:inherit;">${esc(b.email)}</a></span></div>` : ''}
@@ -2787,7 +2801,7 @@ function printReceipt() {
         <div class="print-receipt-row"><span class="print-receipt-label">${t.people}</span><span class="print-receipt-value">${peopleStr}</span></div>
         <div class="print-receipt-row"><span class="print-receipt-label">${t.options}</span><span class="print-receipt-value"></span></div>
         ${optRows}
-        ${b.payment ? `<div class="print-receipt-row"><span class="print-receipt-label">${t.payment}</span><span class="print-receipt-value">${b.payment}</span></div>` : ''}
+        ${b.payment ? `<div class="print-receipt-row"><span class="print-receipt-label">${t.payment}</span><span class="print-receipt-value">${localizePayment(b.payment)}</span></div>` : ''}
         <div class="print-receipt-row"><span class="print-receipt-label">${t.remarks}</span><span class="print-receipt-value">${(b.remarks || '').replace(/アクティビティジャパン予約管理システムをご利用ください。?/g, '').trim()}</span></div>
         <div class="print-receipt-total">
           ${t.total}　${totalStr}
@@ -2898,7 +2912,7 @@ function openDailyReportModal() {
 
   // 現金売上を計算して保持（事務所持ち帰り自動計算用）
   const dayBks = bookings.filter(b => b.date === selectedDate);
-  const localB = dayBks.filter(b => b.source === 'MANUAL' || (b.payment && b.payment.includes('現地')));
+  const localB = dayBks.filter(b => b.source === 'MANUAL' || (b.payment && (b.payment.includes('現地') || b.payment === 'onsite')));
   const ajB    = dayBks.filter(b => b.source === 'AJ');
   const jaranB = dayBks.filter(b => b.source !== 'AJ' && b.source !== 'MANUAL');
   rpCashSale          = localB.reduce((s,b) => s + (b.total||0), 0);
@@ -3004,7 +3018,7 @@ function printDailyReport(manual = {}) {
   // ── 売上分類 ──
   const ajB      = dayBookings.filter(b => b.source === 'AJ');
   const jaranB   = dayBookings.filter(b => b.source !== 'AJ' && b.source !== 'MANUAL');
-  const localB   = dayBookings.filter(b => b.source === 'MANUAL' || (b.payment && b.payment.includes('現地')));
+  const localB   = dayBookings.filter(b => b.source === 'MANUAL' || (b.payment && (b.payment.includes('現地') || b.payment === 'onsite')));
 
   const ajTotal    = ajB.reduce((s, b) => s + (b.total || 0), 0);
   const jaranTotal = jaranB.reduce((s, b) => s + (b.total || 0), 0);
