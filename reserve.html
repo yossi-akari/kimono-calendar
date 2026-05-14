@@ -2073,6 +2073,95 @@ const PAYJP_PUBLIC_KEY = 'pk_live_3aaadf0965e5c97e86fddd76';
 let payjp = null, cardNumberEl = null, cardExpiryEl = null, cardCvcEl = null, payjpMounted = false;
 let selectedPaymentMethod = 'card';
 
+// ── EMV 3-Dセキュア リダイレクト状態保存 ─────────────────────────
+// PAY.JP管理画面で3DS有効化されたカードの場合、createToken後にPAY.JPの
+// 認証画面に画面遷移する。戻ってきた時に予約状態を復元するため、
+// 遷移前にsessionStorageに保存しておく。30分以上経過したら破棄。
+const TDS_STATE_KEY    = 'reserve_3ds_pending_v1';
+const TDS_STATE_TTL_MS = 30 * 60 * 1000;
+
+function save3DSState() {
+  if (!pendingBooking) return;
+  try {
+    sessionStorage.setItem(TDS_STATE_KEY, JSON.stringify({
+      pendingBooking: pendingBooking,
+      ts: Date.now()
+    }));
+  } catch(e) {}
+}
+function clear3DSState() {
+  try { sessionStorage.removeItem(TDS_STATE_KEY); } catch(e) {}
+}
+function load3DSState() {
+  try {
+    const s = sessionStorage.getItem(TDS_STATE_KEY);
+    if (!s) return null;
+    const d = JSON.parse(s);
+    if (!d || !d.pendingBooking || !d.ts) return null;
+    if (Date.now() - d.ts > TDS_STATE_TTL_MS) { clear3DSState(); return null; }
+    return d.pendingBooking;
+  } catch(e) { return null; }
+}
+
+// ── 3DS認証完了後の戻りハンドラ ──────────────────────────────
+// PAY.JPは3DSフロー完了後、登録済みリダイレクトURLにユーザーを戻す。
+// 戻ってきた時のクエリパラメータを検出して、保存していた予約状態を
+// 復元し、OTP送信ステップに進める。
+async function handle3DSReturn() {
+  // PAY.JPの戻りで付与され得るクエリパラメータ（複数のパターンに対応）
+  const params = new URLSearchParams(window.location.search);
+  const isReturn = !!(
+    params.get('payjp_resource_id') ||
+    params.get('payjp_token_id') ||
+    params.get('payjp_tds_id') ||
+    params.get('resource_id') ||
+    params.get('id')
+  );
+  if (!isReturn) return;
+
+  const restored = load3DSState();
+  if (!restored) {
+    // 状態が無い = タイムアウトまたは別ウィンドウ。何もしない
+    return;
+  }
+
+  // URLクリーン化
+  try { window.history.replaceState({}, '', window.location.pathname); } catch(e) {}
+
+  // 状態復元
+  pendingBooking = restored;
+  // トークンIDをパラメータから上書き（PAY.JPが新しいIDを発行する可能性に備えて）
+  const newTokenId =
+    params.get('payjp_resource_id') ||
+    params.get('payjp_token_id') ||
+    params.get('resource_id') ||
+    params.get('id');
+  if (newTokenId) pendingBooking.cardToken = newTokenId;
+  clear3DSState();
+
+  // OTP送信に進む（カード認証は完了している前提）
+  try {
+    const em = pendingBooking.booking.email;
+    const json = await apiPost('/send-otp', { email: em });
+    if (!json || !json.success) {
+      alert('カード認証後の確認コード送信に失敗しました。最初からやり直してください。');
+      pendingBooking = null;
+      return;
+    }
+    showOtpModal(em);
+  } catch(err) {
+    alert('カード認証後の処理でエラーが発生しました。最初からやり直してください。');
+    pendingBooking = null;
+  }
+}
+
+// ページ表示時に3DS戻り判定
+window.addEventListener('DOMContentLoaded', handle3DSReturn);
+window.addEventListener('pageshow', function(e) {
+  // bfcache復元時にも判定（モバイルSafari等）
+  if (e.persisted) handle3DSReturn();
+});
+
 function initPayjp() {
   if (payjpMounted) return;
   try {
@@ -2211,13 +2300,33 @@ async function submitForm() {
   // ── カード決済トークン生成 ─────────────────────────────────
   if (selectedPaymentMethod === 'card' && total > 0 && payjp) {
     btn.innerHTML = '<span class="spinner"></span>' + t.submitting;
+
+    // 3DSリダイレクトに備えて先に予約状態をsessionStorageに退避
+    // （リダイレクトが発生した場合、戻ってきた時に復元するため）
+    save3DSState();
+
     const tokenResult = await payjp.createToken(cardNumberEl);
     if (tokenResult.error) {
+      clear3DSState();
       alert(t.alertCardError + '\n' + (tokenResult.error.message || ''));
       btnRestore();
       pendingBooking = null;
       return;
     }
+
+    // EMV 3-Dセキュア対応: トークンが未認証なら3DSチャレンジへリダイレクト
+    const tdsStatus = tokenResult.card && tokenResult.card.three_d_secure_status;
+    if (tdsStatus === 'unverified') {
+      btn.innerHTML = '<span class="spinner"></span>カード認証中...';
+      // PAY.JPの3DS開始URLに遷移（完了後、PAY.JP管理画面で登録済みのリダイレクトURLに戻ってくる）
+      const tdsStartUrl = 'https://api.pay.jp/v1/tds/' + encodeURIComponent(tokenResult.id)
+        + '/start?publishable_key=' + encodeURIComponent(PAYJP_PUBLIC_KEY);
+      window.location.href = tdsStartUrl;
+      return; // 画面遷移するのでここで終了
+    }
+
+    // 3DS不要 or 既に verified → 通常フロー
+    clear3DSState();
     pendingBooking.cardToken = tokenResult.id;
   }
 
