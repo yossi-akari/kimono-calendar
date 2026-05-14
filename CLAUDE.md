@@ -2,6 +2,24 @@
 
 着物レンタル予約システム。お客様向けreserve.htmlとGAS管理画面の組み合わせ。
 
+## プロジェクト基本情報
+
+### 事業背景
+- 着物レンタルあかり（金沢市）の自社予約システム
+- Activity Japan依存からの脱却が目的（移行完了で月額約¥65,000削減）
+- 2026-04-14にSupabase Edge Functionsへ顧客向けAPIを移行
+
+### 対応言語
+- 日本語 / 英語 / 中国語の3言語対応
+- 翻訳テキストの同期漏れに注意（修正時は3言語セットで更新）
+
+### 決済
+- PAY.JP（都度課金・事前決済）
+- PayPay（事前決済）
+- 現地決済（見積もりモード・成人式系プラン）
+
+---
+
 ## アーキテクチャ概要
 
 | レイヤー | 担当 | 配信元 |
@@ -83,6 +101,37 @@
 
 ### 日時表示の強調
 ceremonyプラン選択時、日時セクションラベルを「打ち合わせ日時」に変更し、赤枠警告ボックスで「📅 こちらは「打ち合わせ」の日時です ※ ○○式当日の日時ではありません」を表示（成人式/卒業式で文言切替）。
+
+## EMV 3-Dセキュア（カード決済）
+
+PAY.JPの「トークン3Dセキュア」ライブモード**有効化済み**（2026-05-03）。
+カード決済は全件、PAY.JPの3DS認証を経由する。
+
+### フロー
+1. お客様カード入力 → `payjp.createToken()` 呼び出し
+2. トークンの `card.three_d_secure_status` を判定:
+   - `verified` / null → 通常進行（OTPモーダル表示）
+   - `unverified` → 3DSチャレンジ必要
+3. unverifiedの場合:
+   - 予約状態を `sessionStorage['reserve_3ds_pending_v1']` に保存（30分TTL）
+   - `https://api.pay.jp/v1/tds/{token_id}/start?publishable_key=...` にリダイレクト
+   - PAY.JP→カード会社認証ページ（Orico等）でOTP入力
+   - 完了後、PAY.JP管理画面で登録済みリダイレクトURL（reserve.html）に戻る
+4. `handle3DSReturn()` がページ読込時にクエリパラメータを検出
+5. sessionStorageから予約状態を復元、トークンIDを更新
+6. OTPメール送信→OTPモーダル表示で通常フローに合流
+
+### PAY.JP管理画面の登録
+- リダイレクトURL: `https://yossi-akari.github.io/kimono-calendar/reserve.html`
+- 識別子: `reserve-live` (ライブ), `reserve-test` (テスト)
+- トークン3Dセキュアモード: **ライブモードのみ**
+
+### 関連commit
+`196bdfb` feat: reserve.html に EMV 3-Dセキュア (token-3DS) 対応を追加
+
+### トラブルシューティング
+- カード認証が動かない → PAY.JP管理画面で3DSを**「無効」に戻す**だけで即復旧（防御的実装）
+- 3DSチャレンジで「OTP届かない」訴えはカード会社側の問題（Orico等）。当方では対応不可
 
 ## Supabase Edge Functions 作業時の必須チェック
 
