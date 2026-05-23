@@ -2438,10 +2438,25 @@ function doPost(e) {
     if (data.action === 'saveSettings') {
       const limit = (data.limit !== '' && data.limit !== undefined && data.limit !== null) ? parseInt(data.limit) : null;
       const photoLimit = (data.photoLimit !== '' && data.photoLimit !== undefined && data.photoLimit !== null) ? parseInt(data.photoLimit) : null;
-      const photoBlockedSlots = Array.isArray(data.photoBlockedSlots) ? data.photoBlockedSlots.join(',') : (data.photoBlockedSlots || '');
-      const blockedSlots = Array.isArray(data.blockedSlots) ? data.blockedSlots.join(',') : (data.blockedSlots || '');
-      Logger.log('saveSettings: date=' + data.date + ' limit=' + limit + ' closed=' + data.closed + ' photoLimit=' + photoLimit);
-      saveSettingsToSheet(data.date, limit, data.closed === true || data.closed === 'true', data.note || '', photoLimit, photoBlockedSlots, blockedSlots);
+      const photoBlockedArr = Array.isArray(data.photoBlockedSlots) ? data.photoBlockedSlots
+        : (typeof data.photoBlockedSlots === 'string' && data.photoBlockedSlots ? data.photoBlockedSlots.split(',').map(function(s){return s.trim();}).filter(Boolean) : []);
+      const blockedArr = Array.isArray(data.blockedSlots) ? data.blockedSlots
+        : (typeof data.blockedSlots === 'string' && data.blockedSlots ? data.blockedSlots.split(',').map(function(s){return s.trim();}).filter(Boolean) : []);
+      const isClosed = data.closed === true || data.closed === 'true';
+      Logger.log('saveSettings: date=' + data.date + ' limit=' + limit + ' closed=' + isClosed + ' photoLimit=' + photoLimit);
+      // 1) GASスプレッドシートに保存（CSV形式）
+      saveSettingsToSheet(data.date, limit, isClosed, data.note || '', photoLimit, photoBlockedArr.join(','), blockedArr.join(','));
+      // 2) Supabaseにも同期（check-slot Edge Function が読む側）
+      try {
+        upsertSettingsToSupabase(data.date, {
+          slot_limit: limit,
+          closed: isClosed,
+          note: data.note || '',
+          photo_limit: photoLimit,
+          photo_blocked_slots: photoBlockedArr,
+          blocked_slots: blockedArr
+        });
+      } catch(e) { Logger.log('Supabase settings同期エラー: ' + e.message); }
       // 保存後に読み返して確認
       const verify = getAllSettings();
       Logger.log('saveSettings verify: ' + JSON.stringify(verify[data.date]));
@@ -2451,6 +2466,9 @@ function doPost(e) {
     // 日付設定の削除
     if (data.action === 'deleteSettings') {
       deleteSettingsFromSheet(data.date);
+      // Supabaseからも削除
+      try { deleteSettingsFromSupabaseRow(data.date); }
+      catch(e) { Logger.log('Supabase settings削除エラー: ' + e.message); }
       output.setContent(JSON.stringify({ success: true }));
       return output;
     }
@@ -2473,6 +2491,9 @@ function doPost(e) {
     if (data.action === 'blockSlot') {
       if (!data.date || !data.time) throw new Error('date と time が必要です');
       blockSlotInSheet(data.date, data.time, data.reason || '管理者ブロック');
+      // Supabaseにも同期
+      try { upsertBlockedSlotToSupabase(data.date, data.time, data.reason || '管理者ブロック'); }
+      catch(e) { Logger.log('Supabase blocked_slots同期エラー: ' + e.message); }
       output.setContent(JSON.stringify({ success: true }));
       return output;
     }
@@ -2480,6 +2501,9 @@ function doPost(e) {
     if (data.action === 'unblockSlot') {
       if (!data.date || !data.time) throw new Error('date と time が必要です');
       unblockSlotInSheet(data.date, data.time);
+      // Supabaseからも解除
+      try { deleteBlockedSlotFromSupabase(data.date, data.time); }
+      catch(e) { Logger.log('Supabase blocked_slots削除エラー: ' + e.message); }
       output.setContent(JSON.stringify({ success: true }));
       return output;
     }
@@ -2885,6 +2909,152 @@ function syncBookingsToSupabase() {
   } catch(e) {
     Logger.log('Supabase同期エラー: ' + e.message);
   }
+}
+
+// =============================================================
+// ── Supabase: settings / blocked_slots 同期 ─────────────────
+// 2026-04-14のSupabase移行時、bookingsだけが同期対象になり、
+// 「臨時休業」(settings.closed) や「時間ブロック」(blocked_slots)は
+// GASスプレッドシートにのみ書かれていた。check-slot Edge Function は
+// Supabaseの settings / blocked_slots を読むので、管理画面の操作を
+// Supabase側にも反映しないとお客様画面で休業が認識されない。
+// =============================================================
+
+function _getSupabaseAdmin() {
+  const props = PropertiesService.getScriptProperties();
+  const url = props.getProperty('SUPABASE_URL');
+  const key = props.getProperty('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return null;
+  return { url: url, key: key };
+}
+
+// settingsテーブルへupsert（primary keyは date）
+function upsertSettingsToSupabase(date, fields) {
+  const sb = _getSupabaseAdmin();
+  if (!sb) { Logger.log('Supabase settings同期スキップ: SUPABASE_URL/KEY未設定'); return; }
+  const payload = Object.assign({ date: date }, fields);
+  try {
+    const resp = UrlFetchApp.fetch(sb.url + '/rest/v1/settings?on_conflict=date', {
+      method: 'post',
+      headers: {
+        'Authorization': 'Bearer ' + sb.key,
+        'apikey': sb.key,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      payload: JSON.stringify([payload]),
+      muteHttpExceptions: true
+    });
+    const code = resp.getResponseCode();
+    if (code >= 400) {
+      Logger.log('Supabase settings UPSERTエラー (' + code + '): ' + resp.getContentText().substring(0, 300));
+    }
+  } catch(e) {
+    Logger.log('Supabase settings UPSERT例外: ' + e.message);
+  }
+}
+
+// settingsテーブルから1行削除
+function deleteSettingsFromSupabaseRow(date) {
+  const sb = _getSupabaseAdmin();
+  if (!sb) return;
+  try {
+    const resp = UrlFetchApp.fetch(sb.url + '/rest/v1/settings?date=eq.' + encodeURIComponent(date), {
+      method: 'delete',
+      headers: { 'Authorization': 'Bearer ' + sb.key, 'apikey': sb.key },
+      muteHttpExceptions: true
+    });
+    const code = resp.getResponseCode();
+    if (code >= 400) {
+      Logger.log('Supabase settings DELETEエラー (' + code + '): ' + resp.getContentText().substring(0, 300));
+    }
+  } catch(e) {
+    Logger.log('Supabase settings DELETE例外: ' + e.message);
+  }
+}
+
+// blocked_slotsテーブルへupsert（unique制約は date+time）
+function upsertBlockedSlotToSupabase(date, time, reason) {
+  const sb = _getSupabaseAdmin();
+  if (!sb) return;
+  try {
+    const payload = { date: date, time: time, reason: reason || '' };
+    const resp = UrlFetchApp.fetch(sb.url + '/rest/v1/blocked_slots?on_conflict=date,time', {
+      method: 'post',
+      headers: {
+        'Authorization': 'Bearer ' + sb.key,
+        'apikey': sb.key,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates'
+      },
+      payload: JSON.stringify([payload]),
+      muteHttpExceptions: true
+    });
+    const code = resp.getResponseCode();
+    if (code >= 400) {
+      Logger.log('Supabase blocked_slots UPSERTエラー (' + code + '): ' + resp.getContentText().substring(0, 300));
+    }
+  } catch(e) {
+    Logger.log('Supabase blocked_slots UPSERT例外: ' + e.message);
+  }
+}
+
+// blocked_slotsテーブルから1行削除
+function deleteBlockedSlotFromSupabase(date, time) {
+  const sb = _getSupabaseAdmin();
+  if (!sb) return;
+  try {
+    const url = sb.url + '/rest/v1/blocked_slots?date=eq.' + encodeURIComponent(date) +
+                '&time=eq.' + encodeURIComponent(time);
+    const resp = UrlFetchApp.fetch(url, {
+      method: 'delete',
+      headers: { 'Authorization': 'Bearer ' + sb.key, 'apikey': sb.key },
+      muteHttpExceptions: true
+    });
+    const code = resp.getResponseCode();
+    if (code >= 400) {
+      Logger.log('Supabase blocked_slots DELETEエラー (' + code + '): ' + resp.getContentText().substring(0, 300));
+    }
+  } catch(e) {
+    Logger.log('Supabase blocked_slots DELETE例外: ' + e.message);
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// 初回バックフィル: 既存のシート設定を一括でSupabaseに反映
+// GASエディタから1回だけ手動実行する
+// ────────────────────────────────────────────────────────────
+function backfillSettingsAndBlockedSlotsToSupabase() {
+  // settingsシート → Supabase settings
+  const all = getAllSettings();
+  let sCnt = 0;
+  Object.keys(all).forEach(function(date) {
+    const s = all[date];
+    upsertSettingsToSupabase(date, {
+      slot_limit: (s.limit !== undefined && s.limit !== null && s.limit !== '') ? Number(s.limit) : null,
+      closed: s.closed === true,
+      note: s.note || '',
+      photo_limit: (s.photoLimit !== undefined && s.photoLimit !== null && s.photoLimit !== '') ? Number(s.photoLimit) : null,
+      photo_blocked_slots: Array.isArray(s.photoBlockedSlots) ? s.photoBlockedSlots : [],
+      blocked_slots: Array.isArray(s.blockedSlots) ? s.blockedSlots : []
+    });
+    sCnt++;
+  });
+  Logger.log('settingsバックフィル完了: ' + sCnt + '件');
+
+  // blocked_slotsシート → Supabase blocked_slots
+  const sheet = getBlockedSlotsSheet();
+  const data = sheet.getDataRange().getValues();
+  let bCnt = 0;
+  for (let i = 1; i < data.length; i++) {
+    const d = String(data[i][0] || '');
+    const t = String(data[i][1] || '');
+    const r = String(data[i][2] || '');
+    if (!d || !t) continue;
+    upsertBlockedSlotToSupabase(d, t, r);
+    bCnt++;
+  }
+  Logger.log('blocked_slotsバックフィル完了: ' + bCnt + '件');
 }
 
 // =============================================================
