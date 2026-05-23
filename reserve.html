@@ -311,7 +311,31 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
   .review-card { flex: 0 0 240px; padding: 16px; }
   .reviews-section { padding: 24px 12px 20px; }
 }
+
+/* flatpickr: 定休日・臨時休業日のスタイル
+   .flatpickr-disabled は flatpickr が disable指定された日付に自動で付与するクラス。
+   flatpickr標準のCSSが強いので !important で上書き */
+.flatpickr-calendar .flatpickr-day.flatpickr-disabled,
+.flatpickr-calendar .flatpickr-day.flatpickr-disabled:hover {
+  color: #c83535 !important;
+  background: #f5f0f0 !important;
+  text-decoration: line-through !important;
+  opacity: 0.7 !important;
+  cursor: not-allowed !important;
+}
+/* 凡例(カレンダー下に注記) */
+.fp-legend { font-size: 0.7rem; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+.fp-legend .fp-legend-mark {
+  display: inline-block; width: 10px; height: 10px;
+  background: #f5f0f0; border: 1px solid #c83535;
+  vertical-align: middle; margin-right: 4px;
+}
 </style>
+<!-- flatpickr: カスタム日付ピッカー（定休日・臨時休業日のグレーアウト用） -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/ja.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/l10n/zh-tw.js"></script>
 </head>
 <body>
 
@@ -388,7 +412,10 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
       <div class="form-row">
         <div class="field">
           <label id="visitDateLabel">ご来店日</label>
-          <input type="date" id="visitDate" onchange="onDateChange()">
+          <input type="text" id="visitDate" placeholder="日付を選択" readonly>
+          <div id="fpLegend" class="fp-legend" style="display:none;">
+            <span class="fp-legend-mark"></span><span id="fpLegendText">定休日（水曜）・臨時休業日は選択できません</span>
+          </div>
           <div id="dateError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;">水曜日は定休日のため選択できません</div>
           <div id="availError" style="display:none;font-size:0.72rem;color:#c83535;margin-top:5px;"></div>
         </div>
@@ -712,6 +739,8 @@ const I18N = {
     step1Next: '次へ — 日時・人数を選ぶ',
     dateSectionLabel: 'ご来店日時',
     visitDate: 'ご来店日', visitTime: 'ご来店時間',
+    datePlaceholder: '日付を選択',
+    fpLegend: '定休日（水曜）・臨時休業日は選択できません',
     timeSelect: '選択してください',
     slotBlocked: '受付不可', slotFull: '予約済', slotAvailable: '◎ 空き', slotRemaining: '残り{n}枠',
     reviewsTitle: 'お客様の声',
@@ -760,6 +789,9 @@ const I18N = {
     alertSelectPlan: 'プランを選択してください',
     alertDateTime: 'ご来店日時を入力してください',
     alertWednesday: '水曜日は定休日のため選択できません',
+    alertClosedDay: (note) => note
+      ? `この日は休業日のため選択できません（${note}）`
+      : 'この日は臨時休業日のため選択できません',
     alertPhotoReq: '撮影プランをいずれか1つ選択してください',
     alertName: 'お名前を入力してください',
     alertEmail: 'メールアドレスを入力してください',
@@ -810,6 +842,8 @@ const I18N = {
     step1Next: 'Next — Select Date & Guests',
     dateSectionLabel: 'Visit Date & Time',
     visitDate: 'Visit Date', visitTime: 'Visit Time',
+    datePlaceholder: 'Select date',
+    fpLegend: 'Wednesdays (closed) and special closure days cannot be selected',
     timeSelect: 'Please select',
     slotBlocked: 'Unavailable', slotFull: 'Fully Booked', slotAvailable: '◎ Available', slotRemaining: '{n} slots left',
     reviewsTitle: 'CUSTOMER REVIEWS',
@@ -858,6 +892,9 @@ const I18N = {
     alertSelectPlan: 'Please select a plan.',
     alertDateTime: 'Please enter your visit date and time.',
     alertWednesday: 'We are closed on Wednesdays. Please choose another day.',
+    alertClosedDay: (note) => note
+      ? `We are closed on this day (${note}). Please choose another day.`
+      : 'We are closed on this day. Please choose another day.',
     alertPhotoReq: 'Please select one photography plan.',
     alertName: 'Please enter your name.',
     alertEmail: 'Please enter your email address.',
@@ -911,6 +948,8 @@ const I18N = {
     step1Next: '下一步 — 選擇日期・人數',
     dateSectionLabel: '來店日期及時間',
     visitDate: '來店日期', visitTime: '來店時間',
+    datePlaceholder: '選擇日期',
+    fpLegend: '每週三公休及臨時休息日無法選擇',
     timeSelect: '請選擇',
     slotBlocked: '不可預約', slotFull: '已額滿', slotAvailable: '◎ 有空位', slotRemaining: '剩餘{n}個名額',
     reviewsTitle: '顧客評價',
@@ -959,6 +998,9 @@ const I18N = {
     alertSelectPlan: '請選擇方案。',
     alertDateTime: '請輸入來店日期和時間。',
     alertWednesday: '每週三休息，請選擇其他日期。',
+    alertClosedDay: (note) => note
+      ? `本日休息（${note}），請選擇其他日期。`
+      : '本日臨時休息，請選擇其他日期。',
     alertPhotoReq: '請選擇一個攝影方案。',
     alertName: '請輸入姓名。',
     alertEmail: '請輸入電子郵件。',
@@ -1186,6 +1228,8 @@ function setLang(lang) {
   buildPlanCards();
   buildOptions();
   updateSummary();
+  // 日付ピッカーを言語に合わせて再生成
+  if (typeof initDatePicker === 'function') initDatePicker();
   if (document.getElementById('sc4').style.display !== 'none') updatePaymentUI();
 }
 
@@ -1362,10 +1406,31 @@ function buildPlanCards() {
 async function fetchSlotAvailability(date) {
   try {
     const data = await apiPost('/check-slot', { date }).catch(() => null);
-    if (data && data.success) slotAvailability = data.slots || {};
+    if (data && data.success) {
+      // 臨時休業日が選ばれた場合は即エラー表示 + 日付クリア
+      // （水曜日選択時と同じ挙動。お客様がフォームを最後まで埋めるのを防ぐ）
+      if (data.closed === true) {
+        const t = tl();
+        showDateError(t.alertClosedDay(data.closedNote || ''));
+        return;
+      }
+      slotAvailability = data.slots || {};
+    }
   } catch(e) {
     slotAvailability = {};
   }
+  updateTimeOptions();
+}
+
+// 日付選択のエラー表示を1か所に集約（水曜日・臨時休業日 共通）
+function showDateError(msg) {
+  const errEl = document.getElementById('dateError');
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
+  // flatpickr経由でクリアして内部状態も同期させる
+  if (fpInstance) fpInstance.clear();
+  else document.getElementById('visitDate').value = '';
+  slotAvailability = {};
   updateTimeOptions();
 }
 
@@ -1435,8 +1500,71 @@ function updateTimeOptions() {
   }
 }
 
-// 来店日の最小値を今日に設定
-document.getElementById('visitDate').min = new Date().toISOString().split('T')[0];
+// ── flatpickr 日付ピッカー ─────────────────────────────
+// 定休日(水曜)と臨時休業日を「グレーアウト+クリック不可」表示する。
+// 起動時に12ヶ月先までの臨時休業日リストを1回取得し、flatpickrに渡す。
+// 言語切替時は再生成して localeとplaceholder を切り替える。
+let fpInstance = null;
+let closedDatesCache = [];  // [{date:'YYYY-MM-DD', note:'...'}, ...]
+let closedDateNotes = {};   // { 'YYYY-MM-DD': 'note' } — エラー表示用
+
+async function loadClosedDates() {
+  // 今日〜12ヶ月後の臨時休業日を取得
+  const today = new Date();
+  const oneYearLater = new Date(today.getFullYear() + 1, today.getMonth(), today.getDate());
+  const fmt = (d) => d.toISOString().split('T')[0];
+  try {
+    const data = await apiPost('/get-closed-dates', { from: fmt(today), to: fmt(oneYearLater) }).catch(() => null);
+    if (data && data.success) {
+      closedDatesCache = data.closedDates || [];
+      closedDateNotes = {};
+      closedDatesCache.forEach(d => { closedDateNotes[d.date] = d.note || ''; });
+    }
+  } catch(e) {
+    closedDatesCache = [];
+  }
+}
+
+function initDatePicker() {
+  const t = tl();
+  const localeMap = { ja: 'ja', en: 'default', zh: 'zh_tw' };
+  const fpLocale = localeMap[currentLang] || 'default';
+
+  // 既存インスタンスがあれば破棄
+  if (fpInstance) { fpInstance.destroy(); fpInstance = null; }
+
+  // 言語切替時のplaceholderはinput属性で制御（flatpickrにはplaceholderオプションがない）
+  document.getElementById('visitDate').placeholder = t.datePlaceholder;
+
+  fpInstance = flatpickr('#visitDate', {
+    locale: fpLocale,
+    dateFormat: 'Y-m-d',
+    minDate: 'today',
+    maxDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+    // 定休日(CLOSED_DAY) + 臨時休業日 を選択不可に
+    disable: [
+      function(date) { return date.getDay() === CLOSED_DAY; },
+      ...closedDatesCache.map(d => d.date)
+    ],
+    onChange: function(selectedDates, dateStr) {
+      // 既存ハンドラに委譲（時間枠の取得など）
+      onDateChange();
+    }
+  });
+
+  // 凡例を表示
+  const legend = document.getElementById('fpLegend');
+  if (legend) {
+    legend.style.display = 'block';
+    document.getElementById('fpLegendText').textContent = t.fpLegend;
+  }
+}
+
+// 起動時: 休業日を取得してからピッカーを初期化
+(async () => {
+  await loadClosedDates();
+  initDatePicker();
+})();
 
 // ── プラン選択 ────────────────────────────────────────
 function selectPlan(el, name, price, isEstimate) {
@@ -1505,10 +1633,8 @@ function onDateChange() {
   if (val) {
     const day = new Date(val + 'T00:00:00').getDay();
     if (day === CLOSED_DAY) {
-      errEl.style.display = 'block';
-      document.getElementById('visitDate').value = '';
-      slotAvailability = {};
-      updateTimeOptions();
+      const t = tl();
+      showDateError(t.alertWednesday);
       return;
     }
     fetchSlotAvailability(val);

@@ -96,7 +96,12 @@ serve(async (req) => {
       };
     }
 
-    return successResponse({ slots, capacity: SLOT_CAPACITY });
+    // 臨時休業日（管理画面で「closed=true」設定）
+    // フラグとメモを返してお客様画面で即座に弾けるようにする
+    const closed = dateSetting.closed === true;
+    const closedNote = closed ? (dateSetting.note || '') : '';
+
+    return successResponse({ slots, capacity: SLOT_CAPACITY, closed, closedNote });
   } catch (err) {
     console.error('check-slot error:', err);
     return errorResponse('スロット情報の取得に失敗しました', 500);
