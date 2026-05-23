@@ -3730,12 +3730,6 @@ function debugFindBooking(targetId) {
   Logger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }
 
-// 引数なしで実行できるラッパー（GASエディタの実行ボタン用）
-// 調査したい予約IDを下の文字列に書き換えて実行
-function debugIwase() {
-  debugFindBooking('309UL8R9S');
-}
-
 // じゃらんメールの生テキストを確認するデバッグ関数
 function debugJaran() {
   const threads = GmailApp.search('from:reservation@activityboard.jp subject:予約確定', 0, 5);
