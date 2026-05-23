@@ -3668,6 +3668,74 @@ function backupBookings() {
   }
 }
 
+// 特定の予約IDがGmail/シート/キャッシュに存在するかを総合診断
+// 使い方: GASエディタで debugFindBooking('309UL8R9S') のように実行
+function debugFindBooking(targetId) {
+  if (!targetId) { Logger.log('使い方: debugFindBooking("予約ID") を実行してください'); return; }
+  Logger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  Logger.log('予約ID「' + targetId + '」を全データソースで検索');
+  Logger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+  // 1. Gmail検索
+  Logger.log('\n■ 1. Gmail検索');
+  const threads = GmailApp.search('from:reservation@activityboard.jp ' + targetId, 0, 10);
+  Logger.log('  ヒット件数: ' + threads.length);
+  if (threads.length > 0) {
+    const msg = threads[0].getMessages()[0];
+    Logger.log('  受信日時: ' + msg.getDate());
+    Logger.log('  件名: ' + msg.getSubject());
+    const body = msg.getPlainBody();
+    const parsed = parseJaranEmail(body);
+    if (parsed) {
+      Logger.log('  パース結果: OK');
+      Logger.log('    日付: ' + parsed.date + ' / 時刻: ' + parsed.time + ' / 名前: ' + parsed.name);
+      Logger.log('    reservationId: ' + parsed.reservationId);
+    } else {
+      Logger.log('  ✗ パース失敗（メールはあるがparseJaranEmailがnullを返した）');
+      Logger.log('  本文先頭500: ' + body.substring(0, 500));
+    }
+  }
+
+  // 2. 外部予約シート確認
+  Logger.log('\n■ 2. 外部予約シート確認');
+  try {
+    const sheetBookings = getExternalSheetBookings();
+    const found = sheetBookings.find(function(b) { return b.reservationId === targetId; });
+    Logger.log('  シート全体: ' + sheetBookings.length + '件');
+    Logger.log('  該当: ' + (found ? 'あり ' + found.date + ' ' + found.time : '無し'));
+  } catch(e) { Logger.log('  シート読取エラー: ' + e.message); }
+
+  // 3. キャッシュ確認
+  Logger.log('\n■ 3. キャッシュ確認');
+  const cached = getCachedBookings();
+  if (!cached) Logger.log('  キャッシュ無し');
+  else {
+    const found = cached.find(function(b) { return b.reservationId === targetId; });
+    Logger.log('  キャッシュ件数: ' + cached.length);
+    Logger.log('  該当: ' + (found ? 'あり' : '無し'));
+  }
+
+  // 4. getRawBookings()で再取得した場合
+  Logger.log('\n■ 4. getRawBookings()強制再取得');
+  const fresh = getRawBookings();
+  const foundFresh = fresh.find(function(b) { return b.reservationId === targetId; });
+  Logger.log('  取得件数: ' + fresh.length);
+  Logger.log('  該当: ' + (foundFresh ? 'あり ' + foundFresh.date + ' ' + foundFresh.time + ' ' + foundFresh.name : '無し'));
+
+  Logger.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  Logger.log('診断結果まとめ:');
+  Logger.log('  Gmail: ' + (threads.length > 0 ? '✓' : '✗'));
+  Logger.log('  キャッシュ: ' + (cached && cached.find(function(b){return b.reservationId===targetId;}) ? '✓' : '✗'));
+  Logger.log('  getRawBookings: ' + (foundFresh ? '✓' : '✗'));
+  Logger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+}
+
+// 引数なしで実行できるラッパー（GASエディタの実行ボタン用）
+// 調査したい予約IDを下の文字列に書き換えて実行
+function debugIwase() {
+  debugFindBooking('309UL8R9S');
+}
+
 // じゃらんメールの生テキストを確認するデバッグ関数
 function debugJaran() {
   const threads = GmailApp.search('from:reservation@activityboard.jp subject:予約確定', 0, 5);
