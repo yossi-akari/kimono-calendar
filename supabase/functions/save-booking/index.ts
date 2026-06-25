@@ -28,6 +28,18 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// ── 夏期キャンペーン（翌日返却無料・2026-09-30来店まで） ──────────
+// 来店日(booking.date)が終了日以下なら翌日返却オプションを無料(¥0)とみなす。
+// 予約日ではなく「来店日」で判定する。
+// ※ フロント reserve.html の同名定数(SUMMER_CAMPAIGN_END/_OPT)と必ず揃えること。
+const SUMMER_CAMPAIGN_END = '2026-09-30';   // 無料対象の最終来店日（YYYY-MM-DD）
+const SUMMER_CAMPAIGN_OPT = '翌日返却';      // 対象オプション名
+
+// 来店日(YYYY-MM-DD)が夏期キャンペーン対象期間内かどうか
+function isSummerCampaign(dateStr: string): boolean {
+  return !!dateStr && dateStr <= SUMMER_CAMPAIGN_END;
+}
+
 // 日付文字列(YYYY-MM-DD)から曜日番号を取得（0=日, 1=月, ..., 6=土）
 // タイムゾーン非依存。Date.UTCで構築してUTC基準で曜日を取るため、
 // サーバーがUTCでもJSTでも同じ結果を返す。
@@ -157,7 +169,11 @@ async function validateBookingTotal(
     if (!optDef)
       return { valid: false, serverTotal: 0, reason: '不正なオプション: ' + baseName };
 
-    const expectedPrice = optDef.price * qty;
+    let expectedPrice = optDef.price * qty;
+    // 夏期キャンペーン: 翌日返却は来店日が対象期間内なら無料(¥0)
+    if (baseName === SUMMER_CAMPAIGN_OPT && isSummerCampaign(String(booking.date))) {
+      expectedPrice = 0;
+    }
     if (optPrice !== expectedPrice)
       return {
         valid: false,

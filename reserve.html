@@ -1646,6 +1646,65 @@ function onDateChange() {
   checkTuesdayRestriction();
 }
 
+// ── 夏期キャンペーン（翌日返却無料・2026-09-30来店まで） ────────
+// 来店日（visitDate）が終了日以下なら翌日返却オプションを無料にする。
+// 予約日ではなく「来店日」で判定する（9/20予約でも来店10/5は対象外）。
+// ※ バックエンド save-booking/index.ts の同名定数と必ず揃えること。
+const SUMMER_CAMPAIGN_END = '2026-09-30';   // 無料対象の最終来店日（YYYY-MM-DD）
+const SUMMER_CAMPAIGN_OPT = '翌日返却';      // 対象オプション名
+
+// visitDate（YYYY-MM-DD文字列）が終了日以下なら true。未選択は false。
+function isSummerCampaignActive(visitDate) {
+  if (!visitDate) return false;
+  return visitDate <= SUMMER_CAMPAIGN_END;
+}
+
+// 翌日返却カードにキャンペーン表示（取り消し線→無料・アイキャッチ）を反映する。
+// 来店日の選択・変更時（checkTuesdayRestriction経由）とオプション再構築時に呼ぶ。
+function applySummerCampaignToCard() {
+  const card = document.querySelector(`[data-opt-name="${SUMMER_CAMPAIGN_OPT}"]`);
+  if (!card) return;
+  const visitDate = document.getElementById('visitDate').value;
+  const active    = isSummerCampaignActive(visitDate);
+  const def       = OPT_DEFS.find(o => o.name === SUMMER_CAMPAIGN_OPT);
+  const basePrice = def ? def.price : 1100;
+
+  // 価格欄の書き換え（¥1,100に取り消し線 → 赤太字「無料」）
+  const priceEl = card.querySelector('.option-price');
+  if (priceEl) {
+    if (active) {
+      priceEl.innerHTML =
+        `<span style="text-decoration:line-through;color:var(--muted);font-weight:400;">¥${basePrice.toLocaleString()}</span> ` +
+        `<span style="color:#d33;font-weight:700;">無料</span>`;
+    } else {
+      priceEl.textContent = `¥${basePrice.toLocaleString()}`;
+    }
+  }
+
+  // アイキャッチ（太字「夏期キャンペーン開催中」）の出し入れ
+  const textCol = card.querySelector('.option-top > div[style*="flex:1"]');
+  let eye = card.querySelector('.summer-eyecatch');
+  if (active && textCol && !eye) {
+    eye = document.createElement('div');
+    eye.className = 'summer-eyecatch';
+    eye.style.cssText = 'margin-top:4px;font-weight:700;color:#d33;font-size:0.72rem;';
+    eye.textContent = '🎐 夏期キャンペーン開催中';
+    textCol.appendChild(eye);
+  } else if (!active && eye) {
+    eye.remove();
+  }
+
+  // すでに選択中なら内部金額・小計・サマリーを再計算（来店日を後から変えた場合に対応）
+  if (card.classList.contains('checked')) {
+    const qty   = optQty[SUMMER_CAMPAIGN_OPT] || 1;
+    const price = active ? 0 : basePrice;
+    options[SUMMER_CAMPAIGN_OPT] = price * qty;
+    const sub = document.getElementById('sub_' + SUMMER_CAMPAIGN_OPT);
+    if (sub) sub.textContent = '¥' + (price * qty).toLocaleString();
+    updateSummary();
+  }
+}
+
 // ── 火曜日制限（翌日返却・ホテル返却） ────────────────
 function checkTuesdayRestriction() {
   const dateVal = document.getElementById('visitDate').value;
@@ -1666,6 +1725,8 @@ function checkTuesdayRestriction() {
       opt.classList.remove('disabled');
     }
   });
+  // 来店日が決まった/変わったので夏期キャンペーン表示を再評価
+  applySummerCampaignToCard();
 }
 
 // ── 人数更新 ──────────────────────────────────────────
@@ -1769,6 +1830,7 @@ function buildOptions() {
   updateCeremonyVisibility();
   buildBenefitSection();
   buildKimonoGradeSection();
+  applySummerCampaignToCard();   // 翌日返却の夏期キャンペーン表示を反映
 }
 
 // ── 成人式・卒業式系プラン: セクション可視性管理 ──
@@ -2037,6 +2099,8 @@ function updateKagaVisibility() {
 
 // ── オプション切替・個数 ──────────────────────────────
 function toggleOpt(name, price) {
+  // 夏期キャンペーン: 翌日返却は来店日が対象期間内なら無料
+  if (name === SUMMER_CAMPAIGN_OPT && isSummerCampaignActive(document.getElementById('visitDate').value)) price = 0;
   const el = document.getElementById('opt_' + name);
   if (el.classList.contains('checked')) {
     el.classList.remove('checked');
@@ -2054,6 +2118,8 @@ function toggleOpt(name, price) {
 }
 
 function changeQty(name, price, dir) {
+  // 夏期キャンペーン: 翌日返却は来店日が対象期間内なら無料
+  if (name === SUMMER_CAMPAIGN_OPT && isSummerCampaignActive(document.getElementById('visitDate').value)) price = 0;
   const def    = OPT_DEFS.find(o => o.name === name);
   const maxQty = def && def.maxQty ? def.maxQty : 99;
   const next   = Math.max(1, Math.min(maxQty, (optQty[name] || 1) + dir));
@@ -2090,7 +2156,7 @@ function updateSummary() {
   const optTotal = Object.values(options).reduce((a, b) => a + b, 0);
   const total    = base !== null ? base + optTotal : null;
   let optNamesList = Object.entries(optQty)
-    .filter(([k, v]) => v > 0 && options[k])
+    .filter(([k, v]) => v > 0 && options[k] !== undefined)   // 無料(¥0)の翌日返却も明細に残す
     .map(([k, v]) => {
       const disp = getOptDisplayName(k);
       return v > 1 ? `${disp}×${v}` : disp;
@@ -2376,7 +2442,7 @@ async function submitForm() {
   const peopleDisp  = makePeopleStr(true);
 
   const selectedOpts = Object.entries(optQty)
-    .filter(([k, v]) => v > 0 && options[k])
+    .filter(([k, v]) => v > 0 && options[k] !== undefined)   // 無料(¥0)の翌日返却も送信に含める
     .map(([k, v]) => ({ name: v > 1 ? `${k}×${v}` : k, price: options[k] }));
   // 着物グレード（ベーシック以外）をオプションとして追加
   if (plan.name === '撮影付き') {
