@@ -1468,7 +1468,7 @@ function updateTimeOptions() {
       if (opt.dataset.extraDate !== dateVal || !extraTimes.includes(opt.value)) {
         opt.hidden = true; opt.disabled = true; return;
       }
-      opt.hidden = false; // 対象日では表示し、以降の通常ロジックに合流
+      opt.hidden = false; opt.disabled = false; // 対象日では選択可能に戻す（後続の空き確認で上書きされる）
     }
     if (sameDayCutoff) {
       opt.disabled = true;
