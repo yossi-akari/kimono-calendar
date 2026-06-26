@@ -1174,6 +1174,17 @@ async function loadShopConfig() {
           opt.value = t; opt.textContent = t;
           sel.appendChild(opt);
         });
+        // 特定日だけの延長枠（data-extra-date付き）を再付与する。
+        // config.timeSlotsには延長枠が含まれないため、ここで足さないと
+        // select再生成時に延長optionが消える。表示制御はupdateTimeOptionsのガードが行う。
+        Object.keys(EXTRA_SLOTS_BY_DATE).forEach(d => {
+          EXTRA_SLOTS_BY_DATE[d].forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t; opt.textContent = t;
+            opt.dataset.extraDate = d;
+            sel.appendChild(opt);
+          });
+        });
       }
     }
   } catch(e) {
