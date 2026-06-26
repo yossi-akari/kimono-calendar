@@ -429,6 +429,10 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
             <option>12:00</option><option>12:30</option>
             <option>13:00</option><option>13:30</option>
             <option>14:00</option>
+            <option data-extra-date="2026-07-25">14:30</option>
+            <option data-extra-date="2026-07-25">15:00</option>
+            <option data-extra-date="2026-07-25">15:30</option>
+            <option data-extra-date="2026-07-25">16:00</option>
           </select>
           <div id="slotSummary" style="display:none;font-size:0.75rem;margin-top:6px;color:var(--green);font-weight:400;"></div>
         </div>
@@ -715,6 +719,11 @@ const KIMONO_GRADE_DEFS = [
   { name: 'スタンダード着物', surcharge: 990 },
   { name: 'プレミアム着物', surcharge: 1980 }
 ];
+// 特定日だけの延長枠（花火大会など）。サーバ側(check-slot/save-booking/GAS)と同一に保つこと。
+// 値の時刻配列は昇順に並べること。
+const EXTRA_SLOTS_BY_DATE = {
+  '2026-07-25': ['14:30', '15:00', '15:30', '16:00']
+};
 let slotAvailability = {};
 let currentLang = 'ja';
 
@@ -1453,6 +1462,14 @@ function updateTimeOptions() {
 
   [...select.options].forEach(opt => {
     if (!opt.value) return;
+    // 延長option（data-extra-date付き）は対象日以外では非表示・選択不可にする
+    if (opt.dataset.extraDate) {
+      const extraTimes = EXTRA_SLOTS_BY_DATE[dateVal] || [];
+      if (opt.dataset.extraDate !== dateVal || !extraTimes.includes(opt.value)) {
+        opt.hidden = true; opt.disabled = true; return;
+      }
+      opt.hidden = false; // 対象日では表示し、以降の通常ロジックに合流
+    }
     if (sameDayCutoff) {
       opt.disabled = true;
       opt.textContent = `${opt.value}　受付終了`;
