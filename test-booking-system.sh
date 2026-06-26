@@ -284,7 +284,7 @@ fi
 
 # Time in ALL_TIMES check
 TOTAL=$((TOTAL + 1))
-if grep -q "ALL_TIMES.indexOf(booking.time)" /Users/yossi/my-app/gas-calendar-api.gs; then
+if grep -q "timesForDate(booking.date).indexOf(booking.time)" /Users/yossi/my-app/gas-calendar-api.gs; then
   PASS=$((PASS + 1))
   echo -e "${GREEN}✓ PASS${NC} [$TOTAL] Time validated against ALL_TIMES whitelist"
 else

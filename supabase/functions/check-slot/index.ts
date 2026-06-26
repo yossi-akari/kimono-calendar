@@ -12,6 +12,16 @@ const ALL_TIMES = [
   '12:00', '12:30', '13:00', '13:30', '14:00',
 ];
 
+// 特定日だけの延長枠（花火大会など）。7/25のみ16:00まで受付を延長する。
+// 値の時刻配列は昇順に並べること（スロット応答のキー順がそのまま画面の並びになる）。
+const EXTRA_SLOTS_BY_DATE: Record<string, string[]> = {
+  '2026-07-25': ['14:30', '15:00', '15:30', '16:00'],
+};
+// その日に有効な時刻一覧（通常枠＋その日の延長枠）。延長が無い日はALL_TIMESと同一。
+function timesForDate(date: string): string[] {
+  return ALL_TIMES.concat(EXTRA_SLOTS_BY_DATE[date] || []);
+}
+
 serve(async (req) => {
   // CORSプリフライト
   const corsRes = handleCors(req);
@@ -74,7 +84,7 @@ serve(async (req) => {
 
     // 各時間帯のスロット状況を計算
     const slots: Record<string, unknown> = {};
-    for (const t of ALL_TIMES) {
+    for (const t of timesForDate(date)) {
       const booked = bookings.filter(
         (b: { time: string }) => b.time.substring(0, 5) === t
       ).length;

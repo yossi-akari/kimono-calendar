@@ -377,6 +377,15 @@ function fixTel(val) {
 // =============================================================
 const SLOT_CAPACITY = 1;
 const ALL_TIMES = ['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00'];
+// 特定日だけの延長枠（花火大会など）。Supabase側(check-slot/save-booking)・reserve.htmlと同一に保つこと。
+// 値の時刻配列は昇順に並べること。
+const EXTRA_SLOTS_BY_DATE = {
+  '2026-07-25': ['14:30','15:00','15:30','16:00']
+};
+// その日に有効な時刻一覧（通常枠＋その日の延長枠）。延長が無い日はALL_TIMESと同一。
+function timesForDate(date) {
+  return ALL_TIMES.concat(EXTRA_SLOTS_BY_DATE[date] || []);
+}
 
 // =============================================================
 // ── 店舗設定マスター（料金・プラン・オプション等）───────────────
@@ -2130,7 +2139,7 @@ function doPost(e) {
         output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: '日付形式が不正です' }));
         return output;
       }
-      if (ALL_TIMES.indexOf(booking.time) === -1) {
+      if (timesForDate(booking.date).indexOf(booking.time) === -1) {
         output.setContent(JSON.stringify({ success: false, error: 'VALIDATION', message: '時間が不正です' }));
         return output;
       }
@@ -3248,7 +3257,7 @@ function getSlotAvailability(date) {
   const totalPhotoBooked = photoBookingsForDate.length;
 
   const result = {};
-  ALL_TIMES.forEach(t => {
+  timesForDate(date).forEach(t => {
     const booked  = allForDate.filter(b => b.time === t).length;
     const blocked = blockedTimes.has(t) || settingsBlockedSlots.has(t); // スロットブロック OR 設定ブロック
     const photoBlocked = photoBlockedSlots.has(t);
