@@ -10,6 +10,14 @@ const ALL_TIMES = [
   '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
   '12:00', '12:30', '13:00', '13:30', '14:00',
 ];
+// 特定日だけの延長枠（花火大会など）。check-slot と同一に保つこと。
+// 値の時刻配列は昇順に並べること。
+const EXTRA_SLOTS_BY_DATE: Record<string, string[]> = {
+  '2026-07-25': ['14:30', '15:00', '15:30', '16:00'],
+};
+function timesForDate(date: string): string[] {
+  return ALL_TIMES.concat(EXTRA_SLOTS_BY_DATE[date] || []);
+}
 const SLOT_CAPACITY = 1;
 const OTP_MAX_FAIL = 5;
 const BOOKING_RATE_LIMIT = 3;       // 5分間に3件まで
@@ -439,7 +447,7 @@ serve(async (req) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(booking.date)) {
       return errorResponse('日付形式が不正です', 400, 'VALIDATION');
     }
-    if (!ALL_TIMES.includes(booking.time)) {
+    if (!timesForDate(booking.date).includes(booking.time)) {
       return errorResponse('時間が不正です', 400, 'VALIDATION');
     }
 
