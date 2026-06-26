@@ -15,6 +15,7 @@ const ALL_TIMES = [
 const EXTRA_SLOTS_BY_DATE: Record<string, string[]> = {
   '2026-07-25': ['14:30', '15:00', '15:30', '16:00'],
 };
+// その日に有効な時刻一覧（通常枠＋その日の延長枠）。延長が無い日はALL_TIMESと同一。
 function timesForDate(date: string): string[] {
   return ALL_TIMES.concat(EXTRA_SLOTS_BY_DATE[date] || []);
 }
