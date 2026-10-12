@@ -403,7 +403,7 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
     <div class="form-block">
       <div class="section-label" id="dateSectionLabel">ご来店日時</div>
       <div id="consultDateWarning" style="display:none;background:#fff8e1;border:2px solid var(--accent);border-radius:4px;padding:14px 16px;margin-bottom:14px;">
-        <div style="font-size:1.05rem;font-weight:500;color:var(--accent);margin-bottom:6px;">📅 こちらは「打ち合わせ」の日時です</div>
+        <div style="font-size:1.05rem;font-weight:500;color:var(--accent);margin-bottom:6px;" id="consultDateWarningTitle">📅 こちらは「打ち合わせ」の日時です</div>
         <div style="font-size:0.85rem;color:var(--ink);line-height:1.6;" id="consultDateWarningText">
           ※ 成人式・卒業式当日の日時ではありません。<br>
           撮影日は打ち合わせ当日にご相談の上、後日改めてご予約いただきます。
@@ -740,6 +740,10 @@ const I18N = {
     step1Next: '次へ — 日時・人数を選ぶ',
     dateSectionLabel: 'ご来店日時',
     visitDate: 'ご来店日', visitTime: 'ご来店時間',
+    // 成人式・卒業式系プラン（打ち合わせ予約）選択時の日時表示
+    consultSectionLabel: '打ち合わせ日時', consultDate: '打ち合わせ日', s4ConsultDateLbl: '打ち合わせ日時',
+    consultWarnTitle: '📅 こちらは「打ち合わせ」の日時です',
+    consultWarnText: (isGraduation) => `※ ${isGraduation ? '卒業式' : '成人式'}当日の日時ではありません。<br>撮影日は打ち合わせ当日にご相談の上、後日改めてご予約いただきます。`,
     datePlaceholder: '日付を選択',
     fpLegend: '定休日（水曜）・臨時休業日は選択できません',
     timeSelect: '選択してください',
@@ -842,6 +846,9 @@ const I18N = {
     step1Next: 'Next — Select Date & Guests',
     dateSectionLabel: 'Visit Date & Time',
     visitDate: 'Visit Date', visitTime: 'Visit Time',
+    consultSectionLabel: 'Consultation Date & Time', consultDate: 'Consultation Date', s4ConsultDateLbl: 'Consultation Date & Time',
+    consultWarnTitle: '📅 This is the date & time of your consultation',
+    consultWarnText: (isGraduation) => `※ This is not the date of the ${isGraduation ? 'graduation ceremony' : 'Coming-of-Age Ceremony'} itself.<br>We will discuss your photoshoot date at the consultation, and you can book it separately afterwards.`,
     datePlaceholder: 'Select date',
     fpLegend: 'Wednesdays (closed) and special closure days cannot be selected',
     timeSelect: 'Please select',
@@ -947,6 +954,9 @@ const I18N = {
     step1Next: '下一步 — 選擇日期・人數',
     dateSectionLabel: '來店日期及時間',
     visitDate: '來店日期', visitTime: '來店時間',
+    consultSectionLabel: '事前商討日期及時間', consultDate: '事前商討日期', s4ConsultDateLbl: '事前商討日期/時間',
+    consultWarnTitle: '📅 此為「事前商討」的日期及時間',
+    consultWarnText: (isGraduation) => `※ 此非${isGraduation ? '畢業典禮' : '成人式'}當天的日期及時間。<br>拍攝日期將於商討當天與您討論後，再另行預約。`,
     datePlaceholder: '選擇日期',
     fpLegend: '每週三公休及臨時休息日無法選擇',
     timeSelect: '請選擇',
@@ -1234,6 +1244,9 @@ function setLang(lang) {
     document.getElementById('lbtn-' + l).classList.toggle('active', l === lang);
   });
   applyLang();
+  // applyLang() が日時見出しを通常プランの文言で上書きするので、選択中のプランに合わせて付け直す
+  // （付け直さないと、成人式系プラン選択中に言語を切り替えたとき「ご来店日時」と打ち合わせの赤枠が混在する）
+  updateDateLabelsForPlan();
   buildPlanCards();
   buildOptions();
   updateSummary();
@@ -1606,28 +1619,27 @@ function updateDateLabelsForPlan() {
   const dateLbl     = document.getElementById('visitDateLabel');
   const s4DateLbl   = document.getElementById('s4DateLbl');
   const warnEl      = document.getElementById('consultDateWarning');
+  const warnTitleEl = document.getElementById('consultDateWarningTitle');
   const warnTextEl  = document.getElementById('consultDateWarningText');
 
   if (isConsult) {
     // 打ち合わせ日時として大きく強調
     if (sectionLbl) {
-      sectionLbl.innerHTML = '打ち合わせ日時';
+      sectionLbl.textContent = t.consultSectionLabel;
       sectionLbl.style.fontSize = '1.1rem';
       sectionLbl.style.color = 'var(--accent)';
       sectionLbl.style.fontWeight = '500';
       sectionLbl.style.letterSpacing = '0.1em';
     }
-    if (dateLbl)    dateLbl.textContent    = '打ち合わせ日';
-    if (s4DateLbl)  s4DateLbl.textContent  = '打ち合わせ日時';
+    if (dateLbl)    dateLbl.textContent    = t.consultDate;
+    if (s4DateLbl)  s4DateLbl.textContent  = t.s4ConsultDateLbl;
     if (warnEl)     warnEl.style.display   = 'block';
+    if (warnTitleEl) warnTitleEl.textContent = t.consultWarnTitle;
 
-    // 卒業式プランなら警告文を「成人式」→「卒業式」に切替
+    // 卒業式プランなら警告文の式典名を「成人式」→「卒業式」に切替（文言は選択中の言語で表示）
     if (warnTextEl) {
-      const isSotsugyou = plan.name === '卒業式プラン';
-      const eventName = isSotsugyou ? '卒業式' : '成人式';
-      warnTextEl.innerHTML =
-        `※ ${eventName}当日の日時ではありません。<br>` +
-        `撮影日は打ち合わせ当日にご相談の上、後日改めてご予約いただきます。`;
+      const isGraduation = plan.name === '卒業式プラン';
+      warnTextEl.innerHTML = t.consultWarnText(isGraduation);
     }
   } else {
     // 通常プラン: 既定ラベル + スタイル復元

@@ -110,6 +110,10 @@
 ### 日時表示の強調
 ceremonyプラン選択時、日時セクションラベルを「打ち合わせ日時」に変更し、赤枠警告ボックスで「📅 こちらは「打ち合わせ」の日時です ※ ○○式当日の日時ではありません」を表示（成人式/卒業式で文言切替）。
 
+- **3言語対応**（2026-10-12）: 文言はすべて I18N の翻訳キー（`consultSectionLabel` / `consultDate` / `s4ConsultDateLbl` / `consultWarnTitle` / `consultWarnText(isGraduation)`）から取る。`updateDateLabelsForPlan()` に日本語を直書きしないこと（テスト [66] で検知）
+- **言語切替時の付け直し**: `applyLang()` は日時見出しを通常プランの文言で無条件に上書きするため、`setLang()` で `applyLang()` の直後に `updateDateLabelsForPlan()` を呼び直している。消すと「ご来店日時」の見出しの下に打ち合わせの赤枠が残る（テスト [68] で検知）
+- 用語はプランカードの説明文に合わせている: 英語 "consultation"、繁体字「事前商討」
+
 ## EMV 3-Dセキュア（カード決済）
 
 PAY.JPの「トークン3Dセキュア」ライブモード**有効化済み**（2026-05-03）。

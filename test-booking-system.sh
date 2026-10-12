@@ -715,6 +715,17 @@ echo "--- 16. Client-side JS Integrity (Code Analysis) ---"
 # このスクリプトと同じフォルダの reserve.html を検査する（worktree でも正しいファイルを見るため）
 RESERVE_HTML="$(cd "$(dirname "$0")" && pwd)/reserve.html"
 
+# reserve.html が見つからないと、下の検査は「何も見つからない＝問題なし」として素通りしてしまう。
+# 見つからない時点で FAIL にして、検査されていないことを見えるようにする
+TOTAL=$((TOTAL + 1))
+if [ -f "$RESERVE_HTML" ]; then
+  PASS=$((PASS + 1))
+  echo -e "${GREEN}✓ PASS${NC} [$TOTAL] reserve.html found for client-side checks ($RESERVE_HTML)"
+else
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] reserve.html not found next to this script - client-side checks below are NOT valid ($RESERVE_HTML)"
+fi
+
 # 翻訳テキスト t は各関数の中で `const t = tl();` と取得する決まり。グローバルな t は無い。
 # 取得を忘れると、その関数が呼ばれた瞬間に「t is not defined」で処理が止まる。
 # (2026-10-12 incident: updateDateLabelsForPlan で取得漏れ → 成人式→通常プランに切り替えても
@@ -763,6 +774,56 @@ if [ -z "$MISSING_KEYS" ]; then
 else
   FAIL=$((FAIL + 1))
   echo -e "${RED}✗ FAIL${NC} [$TOTAL] Date label translation keys missing:$MISSING_KEYS"
+fi
+
+# 成人式・卒業式系の「打ち合わせ日時」表示に、日本語の直書きが残っていないこと
+# (2026-10-12 incident: 見出し・日付ラベル・赤枠が日本語直書きで、英語・繁体字の画面でも日本語のまま表示されていた)
+TOTAL=$((TOTAL + 1))
+HARDCODED=$(python3 - "$RESERVE_HTML" <<'PYEOF'
+import re, sys
+src = open(sys.argv[1], encoding='utf-8').read()
+m = re.search(r'^function updateDateLabelsForPlan\(\)\s*\{(.*?)^\}', src, re.S | re.M)
+body = m.group(1) if m else ''
+body = re.sub(r'//[^\n]*', '', body)                    # コメントは対象外
+lits = re.findall(r"'([^']*)'|\x60([^\x60]*)\x60", body)   # '...' と テンプレート文字列（\x60 = バッククォート）
+hits = [a or b for a, b in lits if re.search(r'[\u3040-\u30ff\u4e00-\u9fff]', a or b) and (a or b) not in ('卒業式プラン',)]
+print(' / '.join(hits))
+PYEOF
+)
+if [ -z "$HARDCODED" ]; then
+  PASS=$((PASS + 1))
+  echo -e "${GREEN}✓ PASS${NC} [$TOTAL] updateDateLabelsForPlan has no hardcoded Japanese text (uses translation keys)"
+else
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] Hardcoded Japanese in updateDateLabelsForPlan: $HARDCODED"
+fi
+
+# 打ち合わせ表示用の翻訳キーが3言語すべてにあること
+TOTAL=$((TOTAL + 1))
+MISSING_KEYS=""
+for key in consultSectionLabel consultDate s4ConsultDateLbl consultWarnTitle consultWarnText; do
+  count=$(grep -cE "(^|[[:space:],])${key}:" "$RESERVE_HTML")
+  if [ "$count" -lt 3 ]; then
+    MISSING_KEYS="$MISSING_KEYS $key($count/3)"
+  fi
+done
+if [ -z "$MISSING_KEYS" ]; then
+  PASS=$((PASS + 1))
+  echo -e "${GREEN}✓ PASS${NC} [$TOTAL] Consultation date label keys exist in ja/en/zh"
+else
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] Consultation date label keys missing:$MISSING_KEYS"
+fi
+
+# 言語切替時に日時表示を付け直していること（applyLang が見出しを通常プランの文言で上書きするため）
+# (2026-10-12 incident: 成人式プラン選択中に言語を切り替えると「ご来店日時」の見出しと打ち合わせの赤枠が混在した)
+TOTAL=$((TOTAL + 1))
+if sed -n '/^function setLang/,/^}/p' "$RESERVE_HTML" | awk '/applyLang\(\)/{a=NR} /updateDateLabelsForPlan\(\)/{u=NR} END{exit !(a && u && u>a)}'; then
+  PASS=$((PASS + 1))
+  echo -e "${GREEN}✓ PASS${NC} [$TOTAL] setLang re-applies plan date labels after applyLang()"
+else
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] setLang does not call updateDateLabelsForPlan() after applyLang()"
 fi
 
 # ──────────────────────────────────────────────
