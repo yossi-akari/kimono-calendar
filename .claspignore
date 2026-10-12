@@ -1,3 +1,5 @@
 **/.claude/**
 .claude/**
 *.sh
+tests/**
+*.test.js
