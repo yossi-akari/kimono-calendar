@@ -550,14 +550,6 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
             <span class="pm-sub" id="pmCardSub">Visa / Mastercard / JCB / Amex</span>
           </span>
         </label>
-        <label class="payment-option" id="pm-paypay" onclick="onPaymentMethodChange('paypay')">
-          <input type="radio" name="paymentMethod" value="paypay">
-          <span class="pm-icon">📱</span>
-          <span class="pm-text">
-            <span class="pm-label" id="pmPaypayLabel">PayPay（事前決済）</span>
-            <span class="pm-sub" id="pmPaypaySub">ご予約時にPayPayで事前お支払い</span>
-          </span>
-        </label>
         <label class="payment-option" id="pm-onsite" onclick="onPaymentMethodChange('onsite')">
           <input type="radio" name="paymentMethod" value="onsite">
           <span class="pm-icon">🏪</span>
@@ -825,7 +817,6 @@ const I18N = {
     alertOtpRateLimit: 'コード送信回数の上限に達しました。10分後にお試しください。',
     paymentSectionLabel: 'お支払い方法',
     pmCard: 'クレジットカード', pmCardSub: 'Visa / Mastercard / JCB / Amex',
-    pmPaypay: 'PayPay（事前決済）', pmPaypaySub: 'ご予約時にPayPayで事前お支払い',
     pmOnsite: '現地決済', pmOnsiteSub: '来店時に現金でお支払い',
     cardNumberLabel: 'カード番号', cardExpiryLabel: '有効期限', cardCvcLabel: 'セキュリティコード',
     alertCardError: 'カード情報を正しく入力してください。',
@@ -928,7 +919,6 @@ const I18N = {
     alertOtpRateLimit: 'Too many code requests. Please try again in 10 minutes.',
     paymentSectionLabel: 'Payment Method',
     pmCard: 'Credit Card', pmCardSub: 'Visa / Mastercard / JCB / Amex',
-    pmPaypay: 'PayPay (Pre-pay)', pmPaypaySub: 'Pre-pay with PayPay at booking',
     pmOnsite: 'Pay on Site', pmOnsiteSub: 'Cash payment on arrival',
     cardNumberLabel: 'Card Number', cardExpiryLabel: 'Expiry Date', cardCvcLabel: 'Security Code',
     alertCardError: 'Please enter valid card details.',
@@ -1034,7 +1024,6 @@ const I18N = {
     alertOtpRateLimit: '驗證碼傳送次數已達上限，請10分鐘後再試。',
     paymentSectionLabel: '付款方式',
     pmCard: '信用卡', pmCardSub: 'Visa / Mastercard / JCB / Amex',
-    pmPaypay: 'PayPay（預付）', pmPaypaySub: '預約時以PayPay預付款',
     pmOnsite: '現場付款', pmOnsiteSub: '來店時以現金付款',
     cardNumberLabel: '卡號', cardExpiryLabel: '有效期限', cardCvcLabel: '安全碼',
     alertCardError: '請正確輸入信用卡資訊。',
@@ -1329,8 +1318,6 @@ function applyLang() {
   document.getElementById('paymentSectionLabel').textContent = t.paymentSectionLabel || '';
   document.getElementById('pmCardLabel').textContent   = t.pmCard || '';
   document.getElementById('pmCardSub').textContent     = t.pmCardSub || '';
-  document.getElementById('pmPaypayLabel').textContent = t.pmPaypay || '';
-  document.getElementById('pmPaypaySub').textContent   = t.pmPaypaySub || '';
   document.getElementById('pmOnsiteLabel').textContent = t.pmOnsite || '';
   document.getElementById('pmOnsiteSub').textContent   = t.pmOnsiteSub || '';
   document.getElementById('cardNumberLabel').textContent = t.cardNumberLabel || '';
@@ -2435,7 +2422,6 @@ function updatePaymentUI() {
   const isEst = isCurrentlyEstimate();
   document.getElementById('paymentBlock').style.display = isEst ? 'none' : '';
   if (isEst) { selectedPaymentMethod = 'onsite'; return; }
-  document.getElementById('pm-paypay').style.display = isJa ? '' : 'none';
   document.getElementById('pm-onsite').style.display = isJa ? '' : 'none';
   if (!isJa) {
     onPaymentMethodChange('card');
@@ -2501,8 +2487,7 @@ async function submitForm() {
       date, time, name: `${ln} ${fn}`, plan: plan.name, people: peopleSaved,
       options: selectedOpts, total,
       payment: isCurrentlyEstimate() ? '未定' :
-               selectedPaymentMethod === 'card'   ? '事前決済（クレジットカード）' :
-               selectedPaymentMethod === 'paypay' ? '事前決済（PayPay）' : '現地決済（現金）',
+               selectedPaymentMethod === 'card' ? '事前決済（クレジットカード）' : '現地決済（現金）',
       paymentMethod: selectedPaymentMethod,
       email: em, tel: ph,
       remarks: document.getElementById('remarks').value.trim(),

@@ -1541,7 +1541,7 @@ function deleteSupabaseBooking(reservationId) {
     const rows = JSON.parse(fetchResp.getContentText());
     if (!Array.isArray(rows) || rows.length === 0) return false;
     const row = rows[0];
-    if (row.charge_id && row.payment === 'card') {
+    if (row.charge_id && isCardPayment(row.payment)) {
       Logger.log('警告: 削除しようとしているSupabase予約はカード決済済み (charge=' + row.charge_id + ')。返金は実行されません。');
       notifyAdminError('DELETE_PAID_BOOKING',
         '削除されたSupabase予約にカード決済(charge=' + row.charge_id + ')あり。手動で返金確認してください。',
@@ -2590,6 +2590,24 @@ function createChargePayjp(cardToken, amount, desc) {
 }
 
 /**
+ * 支払方法の値が「カード事前決済」かどうかを判定する。
+ *
+ * 2026-04-23 のコミット 9d0dbdd で保存値を日本語ラベルに統一したため、
+ * 現在の bookings.payment には '事前決済（クレジットカード）' が入る。
+ * 一方それ以前の予約は英語コード 'card' のまま残っているので、両方を受け付ける。
+ *
+ * ※ この判定を英語コードのみで行っていたせいで、4/23以降の無料キャンセルで
+ *   自動返金が一度も動いていなかった。同じ事故を防ぐため判定をここに集約する。
+ *
+ * @param {string} payment - bookings.payment もしくは手動予約シートの支払方法列の値
+ * @returns {boolean} カード事前決済なら true
+ */
+function isCardPayment(payment) {
+  const p = String(payment || '');
+  return p === 'card' || p.indexOf('クレジットカード') >= 0;
+}
+
+/**
  * Pay.jp の課金を返金（保存失敗時のロールバック用）
  * @param {string} chargeId - Pay.jp charge ID (ch_xxx)
  */
@@ -2661,7 +2679,7 @@ function processBookingStatusUpdate(bookingId, newStatus) {
   // 有料キャンセル → カード払い客はすでに決済済みなので追加決済不要
   // 無料キャンセル → カード払い客は返金
 
-  if (newStatus === 'free-cancel' && payment === 'card' && existingChargeId) {
+  if (newStatus === 'free-cancel' && isCardPayment(payment) && existingChargeId) {
     // 無料キャンセル + カード決済済み → 返金
     try {
       refundChargePayjp(existingChargeId);
@@ -3455,7 +3473,7 @@ function processSupabaseBookingStatusUpdate(bookingId, newStatus) {
     let refunded = false;
 
     // 無料キャンセル + カード決済済み → 返金
-    if (newStatus === 'free-cancel' && payment === 'card' && existingChargeId) {
+    if (newStatus === 'free-cancel' && isCardPayment(payment) && existingChargeId) {
       try {
         refundChargePayjp(existingChargeId);
         refunded = true;
