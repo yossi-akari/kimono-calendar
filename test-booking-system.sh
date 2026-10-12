@@ -707,6 +707,65 @@ else
 fi
 
 # ──────────────────────────────────────────────
+# 16. Client-side JS Integrity (Code Analysis)
+# ──────────────────────────────────────────────
+echo ""
+echo "--- 16. Client-side JS Integrity (Code Analysis) ---"
+
+# このスクリプトと同じフォルダの reserve.html を検査する（worktree でも正しいファイルを見るため）
+RESERVE_HTML="$(cd "$(dirname "$0")" && pwd)/reserve.html"
+
+# 翻訳テキスト t は各関数の中で `const t = tl();` と取得する決まり。グローバルな t は無い。
+# 取得を忘れると、その関数が呼ばれた瞬間に「t is not defined」で処理が止まる。
+# (2026-10-12 incident: updateDateLabelsForPlan で取得漏れ → 成人式→通常プランに切り替えても
+#  「打ち合わせ日時」の見出しと赤枠警告が残り、プラン選択時の updateSummary() も実行されなかった)
+TOTAL=$((TOTAL + 1))
+MISSING_T=$(python3 - "$RESERVE_HTML" <<'PYEOF'
+import re, sys
+src = open(sys.argv[1], encoding='utf-8').read()
+# 外部ファイルを読む <script src=...> を除いた、ページ内の <script> だけを対象にする
+js = '\n'.join(re.findall(r'<script(?![^>]*src)[^>]*>(.*?)</script>', src, re.S))
+for m in re.finditer(r'^(?:async\s+)?function\s+(\w+)\s*\(([^)]*)\)\s*\{', js, re.M):
+    # 波かっこの対応を数えて関数の本体を切り出す
+    i, depth = m.end(), 1
+    while depth and i < len(js):
+        depth += {'{': 1, '}': -1}.get(js[i], 0)
+        i += 1
+    body = js[m.end():i]
+    uses_t = re.search(r'(?<![\w.$])t\.[A-Za-z_]', body)
+    has_t = (re.search(r'(?:const|let|var)\s+t\s*=', body)           # const t = tl();
+             or re.search(r'(?<![\w$])t(?![\w$])', m.group(2))        # 引数として受け取る
+             or re.search(r'(?<![\w$])t\s*\)?\s*=>', body))           # アロー関数の引数
+    if uses_t and not has_t:
+        print(m.group(1))
+PYEOF
+)
+if [ -z "$MISSING_T" ]; then
+  PASS=$((PASS + 1))
+  echo -e "${GREEN}✓ PASS${NC} [$TOTAL] Every reserve.html function that uses t.xxx defines const t = tl()"
+else
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] reserve.html functions use t without const t = tl(): $(echo $MISSING_T)"
+fi
+
+# 3言語すべてに、日時見出しを元に戻すための翻訳キーがあること（同期漏れ防止）
+TOTAL=$((TOTAL + 1))
+MISSING_KEYS=""
+for key in dateSectionLabel visitDate s4DateLbl; do
+  count=$(grep -cE "^[[:space:]]*(.*,[[:space:]]*)?${key}:" "$RESERVE_HTML")
+  if [ "$count" -lt 3 ]; then
+    MISSING_KEYS="$MISSING_KEYS $key($count/3)"
+  fi
+done
+if [ -z "$MISSING_KEYS" ]; then
+  PASS=$((PASS + 1))
+  echo -e "${GREEN}✓ PASS${NC} [$TOTAL] dateSectionLabel / visitDate / s4DateLbl exist in ja/en/zh"
+else
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] Date label translation keys missing:$MISSING_KEYS"
+fi
+
+# ──────────────────────────────────────────────
 # Summary
 # ──────────────────────────────────────────────
 echo ""
