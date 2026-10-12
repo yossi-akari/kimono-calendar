@@ -245,6 +245,42 @@ else
   echo -e "${RED}✗ FAIL${NC} [$TOTAL] Payment method check missing"
 fi
 
+# PayPay must stay removed: it was offered as "pre-paid" but never charged
+# (2026-09-22 incident: bookings saved as 事前決済（PayPay）with no payment collected)
+TOTAL=$((TOTAL + 1))
+if grep -qi "paypay" /Users/yossi/my-app/reserve.html; then
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] PayPay option is back in reserve.html without a real payment flow"
+else
+  PASS=$((PASS + 1))
+  echo -e "${GREEN}✓ PASS${NC} [$TOTAL] PayPay option absent from reserve.html (no uncollected bookings)"
+fi
+
+# Server-side guard: a cached old reserve.html must not be able to book PayPay
+TOTAL=$((TOTAL + 1))
+if grep -q "PAYPAY_DISABLED" /Users/yossi/my-app/supabase/functions/save-booking/index.ts; then
+  PASS=$((PASS + 1))
+  echo -e "${GREEN}✓ PASS${NC} [$TOTAL] save-booking rejects PayPay (PAYPAY_DISABLED)"
+else
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] save-booking missing PayPay rejection guard"
+fi
+
+# Refund check must accept the Japanese payment label, not just the legacy 'card' code
+# (regression from 9d0dbdd on 2026-04-23: free-cancel refunds silently stopped firing)
+TOTAL=$((TOTAL + 1))
+if grep -q "payment === 'card'" /Users/yossi/my-app/gas-calendar-api.gs; then
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] Refund check compares against English code only - Japanese labels will not refund"
+elif grep -q "function isCardPayment" /Users/yossi/my-app/gas-calendar-api.gs \
+  && grep -q "isCardPayment(payment)" /Users/yossi/my-app/gas-calendar-api.gs; then
+  PASS=$((PASS + 1))
+  echo -e "${GREEN}✓ PASS${NC} [$TOTAL] Free-cancel refund uses isCardPayment() (handles Japanese label + legacy code)"
+else
+  FAIL=$((FAIL + 1))
+  echo -e "${RED}✗ FAIL${NC} [$TOTAL] isCardPayment() helper missing from refund path"
+fi
+
 # Admin notified on charge failure
 TOTAL=$((TOTAL + 1))
 if grep -q "notifyAdminError.*CHARGE_FAILED" /Users/yossi/my-app/gas-calendar-api.gs; then

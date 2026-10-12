@@ -509,6 +509,19 @@ serve(async (req) => {
       );
     }
 
+    // ── PayPay事前決済の拒否 ────────────────────────
+    // PayPayは決済処理が未実装のまま「事前決済」として予約だけ成立していた
+    // （料金未回収の原因）。reserve.html からは選択肢を撤去済みだが、
+    // ブラウザキャッシュに残った旧ページからの送信をここで確実に止める。
+    if (booking.paymentMethod === 'paypay') {
+      console.error('PayPay決済の予約を拒否:', booking.reservationId);
+      return errorResponse(
+        'PayPayでのお支払いは現在ご利用いただけません。ページを再読み込みのうえ、クレジットカードまたは現地決済をお選びください。',
+        400,
+        'PAYPAY_DISABLED'
+      );
+    }
+
     // ── カード決済の整合性チェック ──────────────────
     if (booking.paymentMethod === 'card') {
       if (!booking.total || booking.total <= 0) {
@@ -621,7 +634,6 @@ serve(async (req) => {
       payment:
         booking.payment ||  // クライアントから「事前決済（クレジットカード）」等の日本語が来ていればそれを優先
         (booking.paymentMethod === 'card'   ? '事前決済（クレジットカード）' :
-         booking.paymentMethod === 'paypay' ? '事前決済（PayPay）' :
          booking.paymentMethod === 'onsite' ? '現地決済（現金）' :
          booking.paymentMethod || null),
       remarks: booking.remarks || null,
