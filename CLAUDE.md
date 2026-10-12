@@ -61,11 +61,19 @@
 
 | 関数 | 実行 | 目的 |
 |------|-----|------|
-| `dailyHealthCheck` | 毎日12時 | GAS自身の checkSlot API を叩いて success応答を確認。失敗なら ALERT メール。 |
+| `dailyHealthCheck` | 毎日12時 | 2系統を確認。① GAS checkSlot API（管理画面が使う経路）② Supabase `/config` と `/check-slot`（**お客様が実際に通る経路**）。3回連続失敗で初めて ALERT メール。 |
 | `weeklyXserverRedirectCheck` | 毎週月曜10時 | Xserver `/reserve/reserve.html` が 301/302 を返すか確認。200 なら ALERT。 |
 | `weeklyBookingSummary` | 毎週月曜10時 | WEB予約数の週次/月次サマリーをメール送付（情報のみ・アラートではない）。 |
 
 **新規セットアップ時:** GASエディタで `setupHealthCheckTriggers()` を1回実行。
+
+**Script Property 必須:** `SUPABASE_ANON_KEY` に **publishable key**（`sb_publishable_` で始まる。値は reserve.html の同名定数と同じ）を設定する。未設定だと「お客様向けAPIが無監視状態」ALERTが毎日飛ぶ。
+
+⚠️ **secret key（`sb_secret_`）・service_role key は入れない。** 特権キーはJWT検証を通過するため、4/18の `verify_jwt` 設定ミスのような障害を監視がすり抜けて見逃す。（このプロジェクトは Supabase の新キー形式を使用。ダッシュボード表記は Publishable key / Secret key）
+
+**誤報対策:** 監視は `fetchForHealthCheck()` 経由で3回（3秒間隔）リトライする。GASの `/exec` は `script.googleusercontent.com` へ302転送される二段構成で、2段目がまれに404を返すため。
+
+**テスト:** `node tests/health-check.test.js`（GASのサービスをスタブに差し替えて監視ロジックを検証。`.claspignore` で GAS への push 対象から除外済み）
 
 **ALERT通知先:** `getAdminEmail()`（デフォルト `rentalakari@gmail.com`）
 
@@ -185,6 +193,27 @@ PAY.JPの「トークン3Dセキュア」ライブモード**有効化済み**�
   - **決済手段をUIに出す前に、決済処理が実際にAPIを叩いているかを必ず確認する**。ラベルだけ先に置かない
   - **保存値のフォーマットを変えるときは、その値を `===` で比較している箇所を全部grepする**。表示側だけ直して比較側を忘れると、お金が動かなくなっても画面上は正常に見える
   - 支払方法と入金状況（`payment_status`）は管理画面と通知メールの両方に出す。「予約が取れた」と「お金を受け取った」は別の事実
+
+### [2026-08-06] checkSlot 404 ALERT は誤報。真の問題は「監視がSupabaseを見ていなかった」こと
+- **何が起きたか**: 12:37JSTに `dailyHealthCheck` から「checkSlot APIがHTTP 404」ALERTが1通。調査の結果、お客様の予約は一切止まっていなかった
+- **404の原因**: GASの `/exec` は `script.googleusercontent.com` のワンタイムURLへ302転送される二段構成で、2段目がまれに404のHTMLエラーページを返す（Google側の瞬断）。デプロイURLは現在も正常（連続10回200）、8/6前後のコミット・デプロイもゼロ
+- **見つかった本当の問題**:
+  1. 監視にリトライがなく、1回の瞬断で「至急確認してください」級のメールが飛ぶ。お客様側の `apiPost()` は2回リトライするのに監視は0回だった
+  2. **監視対象がGASだけだった**。顧客向けは4/14にSupabaseへ移行済みで、reserve.htmlはGASを一切叩かない。つまり4/18のJWT事故クラスの障害が起きても `dailyHealthCheck` は緑のまま黙る状態で、4/5の12日間停止と同じ構図が別の場所に残っていた
+- **正しい対処**: `fetchForHealthCheck()` で3回リトライ + `checkSupabaseCustomerApi()` で `/config` と `/check-slot` を publishable key で確認（特権キーだとJWT検証ミスをすり抜ける）。回帰テストは `tests/health-check.test.js`
+- **教訓**: 配信経路を移行したら監視対象も移す。監視は「壊れたら困る経路」に張る。監視の誤報は放置すると監視そのものが無意味になる
+- **適用範囲**: 監視・アラート全般。今後エンドポイントを移行する際は必ず監視側も追随させる
+
+### [2026-10-12] GASエディタ直接編集とリポジトリの乖離（push で消える寸前）
+- **何が起きたか**: PayPay撤去＋返金修正（merge `9a49efc`）を GAS へデプロイしようとしたら、GASエディタに**リポジトリに無いコードが2つ**入っていた。① 上記8/6の監視改修（9/10に作業したが worktree に未コミットのまま、エディタにだけ反映）② `diagnoseAdminSessions()`（セッション切れ調査用の診断関数。エディタに直接貼り付けられ、ローカルのどこにも無かった）。`./deploy.sh` は `clasp push --force` でエディタを丸ごと上書きするため、そのまま実行していたら両方とも黙って消えていた。さらにメインチェックアウトが origin/main より2コミット遅れていたので、そこから実行すると返金修正まで巻き戻るところだった
+- **原因**: 「エディタに直接貼る」「worktree で作業してコミットせずに push する」が混在し、**GASの中身＝リポジトリ** という前提が崩れていた。`clasp push --force` は差分を見せずに上書きするので、乖離に気付く機会がない
+- **正しい対処**: 一時ディレクトリに `clasp clone <scriptId> <version>` で本番版を取り出し、origin/main と diff。エディタ専用分をリポジトリに取り込んで（PR）、リポジトリ＝本番の状態に戻した
+- **教訓（push 前の必須手順）**:
+  1. **push する前に、エディタの現在の中身をリポジトリと突き合わせる。** 一時ディレクトリで `clasp clone <scriptId>` → `diff` を取り、リポジトリに無い変更があれば先に取り込む（リポジトリ内で `clasp pull` はしない。作業中のファイルが上書きされる）
+  2. **push は最新の main から行う。** メインチェックアウトで実行する前に `git pull` で最新化。worktree から実行する場合も origin/main を取り込み済みか確認
+  3. **エディタへの直接貼り付けは避ける。** 診断用など一時的なコードでも、貼ったらその日のうちにリポジトリにコミットするか、使い終わったらエディタから消す
+  4. worktree で作業したら、push した時点でコミットまで済ませる。「未コミットのままエディタにだけ反映」が一番見つけにくい
+- **適用範囲**: GAS（clasp push / deploy.sh）を使うすべてのデプロイ
 
 ### 既知の制約: 管理画面「この予約を編集」ボタンはWEB予約に対して事実上動かない
 - **現象**: WEB予約（Supabase only）の編集ボタンを押すと kimono-booking.html に遷移し saveManualToSheet で GAS sheet に新規行が appendRow される。Supabase 側は更新されないため、dedup で Supabase 版が表示され編集反映されないように見える

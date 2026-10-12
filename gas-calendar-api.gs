@@ -3981,29 +3981,95 @@ function debugAJChange() {
 const HEALTH_CHECK_DEPLOY_URL = 'https://script.google.com/macros/s/AKfycbyUjRWMu_ZgGroCakrRfIxuobAjJvl_So1HVzK2s5wEYY-ToZUjo89jwRgy5GQwb6Si/exec';
 const XSERVER_RESERVE_URL     = 'https://akari-kanazawa.jp/reserve/reserve.html';
 
+// 監視のリトライ設定。1回の瞬断でアラートを出さないための安全マージン。
+const HEALTH_CHECK_RETRIES       = 3;    // 最大試行回数
+const HEALTH_CHECK_RETRY_WAIT_MS = 3000; // リトライ間隔（ミリ秒）
+
 /**
- * 毎日実行: GASのcheckSlot APIをお客様視点で実際に叩いて、正常応答するか確認。
- * Unauthorized・接続エラー・JSONパース失敗のいずれもアラート対象。
- * ACCESS_KEYミスマッチ・デプロイ事故・GAS停止などを「予約が止まる前」に検知できる。
- * 予約数とは無関係なので閑散期でも誤報ゼロ。
+ * 監視専用のfetch。HTTP 200が返るまで最大 attempts 回リトライする。
+ *
+ * なぜリトライが必要か:
+ *   GASのウェブアプリは /exec が script.googleusercontent.com のワンタイムURLへ
+ *   302転送される二段構成で、この2段目がまれに404や403のHTMLエラーページを返す。
+ *   2026-08-06 12:37 に実際に発生し、こちら側に異常がないのにアラートが飛んだ。
+ *   お客様側の reserve.html も apiPost() で2回リトライしているので、監視も同じ前提に揃える。
+ *
+ * 戻り値: { ok, code, body, error, tries }
+ *   ok が false の時だけ呼び出し側がアラートを出す（＝全試行が失敗した場合のみ）。
+ */
+function fetchForHealthCheck(url, options, attempts) {
+  const max = attempts || HEALTH_CHECK_RETRIES;
+  const opts = options || {};
+  opts.muteHttpExceptions = true;
+
+  let last = { ok: false, code: 0, body: '', error: '', tries: 0 };
+
+  for (let i = 1; i <= max; i++) {
+    last.tries = i;
+    try {
+      const res  = UrlFetchApp.fetch(url, opts);
+      const code = res.getResponseCode();
+      const body = res.getContentText();
+      last.code  = code;
+      last.body  = body;
+      last.error = '';
+      if (code === 200) {
+        last.ok = true;
+        if (i > 1) Logger.log('Health check: ' + i + '回目で成功（' + (i - 1) + '回リトライ）');
+        return last;
+      }
+      Logger.log('Health check ' + i + '/' + max + '回目 失敗: HTTP ' + code);
+    } catch (err) {
+      last.code  = 0;
+      last.body  = '';
+      last.error = err.message;
+      Logger.log('Health check ' + i + '/' + max + '回目 例外: ' + err.message);
+    }
+    if (i < max) Utilities.sleep(HEALTH_CHECK_RETRY_WAIT_MS);
+  }
+  return last;
+}
+
+/**
+ * 毎日12時実行。2系統まとめて確認する。
+ *   1) GASのcheckSlot API（管理画面が使う経路）
+ *   2) Supabase Edge Functions（お客様が実際に通る経路）
+ * それぞれ独立にアラートを出すので、片方が落ちてももう片方の確認は走る。
  */
 function dailyHealthCheck() {
+  checkGasCheckSlot();
+  checkSupabaseCustomerApi();
+}
+
+/**
+ * GASのcheckSlot APIを実際に叩いて正常応答するか確認。
+ * ACCESS_KEYミスマッチ・デプロイ事故・GAS停止などを検知する。
+ * 注意: 2026-04-14以降、お客様の予約はSupabase経由なので、
+ * ここが落ちても予約は止まらない（影響するのは管理画面側）。
+ */
+function checkGasCheckSlot() {
   const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
   const key   = getAccessKey();
   const url   = HEALTH_CHECK_DEPLOY_URL + '?key=' + encodeURIComponent(key) + '&action=checkSlot&date=' + today;
 
-  try {
-    const res  = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    const code = res.getResponseCode();
-    const body = res.getContentText();
+  const r = fetchForHealthCheck(url);
 
-    if (code !== 200) {
-      sendHealthAlert('GAS API不調 (HTTP ' + code + ')',
-        'checkSlot APIがHTTP ' + code + 'を返しました。\n\nレスポンス先頭500字:\n' + body.substring(0, 500));
-      return;
+  if (!r.ok) {
+    if (r.error) {
+      sendHealthAlert('GAS Health Check例外',
+        'checkSlot APIへの接続が' + r.tries + '回連続で失敗しました。\n\n' +
+        '最後のエラー: ' + r.error + '\n\n' +
+        'GASがネットワーク的に到達不可、もしくはJSON解析に失敗しています。');
+    } else {
+      sendHealthAlert('GAS API不調 (HTTP ' + r.code + ')',
+        'checkSlot APIが' + r.tries + '回連続でHTTP ' + r.code + 'を返しました。\n\n' +
+        'レスポンス先頭500字:\n' + r.body.substring(0, 500));
     }
+    return;
+  }
 
-    const data = JSON.parse(body);
+  try {
+    const data = JSON.parse(r.body);
     if (!data.success) {
       sendHealthAlert('GAS API認証/動作エラー',
         'checkSlot APIが success=false を返しました。\n\n' +
@@ -4015,12 +4081,105 @@ function dailyHealthCheck() {
         '至急確認してください。');
       return;
     }
-
-    Logger.log('Health check OK: ' + JSON.stringify(data).substring(0, 200));
+    Logger.log('GAS health check OK: ' + JSON.stringify(data).substring(0, 200));
   } catch (err) {
-    sendHealthAlert('Health Check例外',
-      'dailyHealthCheck()で例外: ' + err.message + '\n\n' +
-      'GASがネットワーク的に到達不可、もしくはJSON解析に失敗しています。');
+    sendHealthAlert('GAS APIのJSON解析失敗',
+      'HTTP 200は返ったものの、JSONとして読めませんでした。\n\n' +
+      'エラー: ' + err.message + '\n\n' +
+      'レスポンス先頭500字:\n' + r.body.substring(0, 500));
+  }
+}
+
+/**
+ * お客様が実際に通る経路（Supabase Edge Functions）を確認。
+ *
+ * なぜ必要か:
+ *   2026-04-14にお客様向けAPIがSupabaseへ移ったのに、監視はGASだけを見ていた。
+ *   そのため4/18のJWT検証事故（Invalid JWTで全予約失敗）のような障害が起きても
+ *   dailyHealthCheckは正常のまま黙ってしまう状態だった。4/5の12日間停止と同じ構図。
+ *
+ * 確認するのは reserve.html が必ず叩く2本に限定する:
+ *   /config     … これが落ちるとフォーム自体が表示されない
+ *   /check-slot … これが落ちると日時を選べない
+ *   （save-booking は予約が作られ、send-otp はメールが飛ぶので監視では叩かない）
+ *
+ * 重要: お客様と同じ publishable key を使う。Script Property `SUPABASE_ANON_KEY` に入れるのは
+ * `sb_publishable_` で始まるキー（= reserve.html の SUPABASE_ANON_KEY と同じ値）。
+ * secret key（`sb_secret_`）や service_role key を入れてはいけない。特権キーはJWT検証を
+ * 通過してしまうため、4/18のような verify_jwt 設定ミスをすり抜けて障害を見逃す。
+ */
+function checkSupabaseCustomerApi() {
+  const props = PropertiesService.getScriptProperties();
+  const baseUrl  = props.getProperty('SUPABASE_URL');
+  const anonKey  = props.getProperty('SUPABASE_ANON_KEY');
+
+  // 未設定を黙って飛ばすと「監視しているつもりで無監視」になるので、必ず知らせる。
+  if (!baseUrl || !anonKey) {
+    sendHealthAlert('お客様向けAPIが無監視状態',
+      'Script Propertyの ' + (!baseUrl ? 'SUPABASE_URL ' : '') + (!anonKey ? 'SUPABASE_ANON_KEY ' : '') +
+      'が未設定のため、お客様が使うSupabase経路を確認できませんでした。\n\n' +
+      'SUPABASE_ANON_KEY に入れる値は reserve.html の SUPABASE_ANON_KEY と同じ、\n' +
+      '`sb_publishable_` で始まるキーです。\n' +
+      '※ secret key（sb_secret_）や service_role key は入れないこと。\n' +
+      '　 特権キーはJWT検証を通過するため、監視が障害を見逃します。\n\n' +
+      'GASエディタ → プロジェクトの設定 → スクリプト プロパティ に追加してください。');
+    return;
+  }
+
+  const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+  const fnBase = baseUrl.replace(/\/+$/, '') + '/functions/v1';
+  const headers = {
+    'Authorization': 'Bearer ' + anonKey,
+    'apikey':        anonKey
+  };
+
+  const targets = [
+    { name: '/config',     path: '/config',     payload: {} },
+    { name: '/check-slot', path: '/check-slot', payload: { date: today } }
+  ];
+
+  for (const t of targets) {
+    const r = fetchForHealthCheck(fnBase + t.path, {
+      method:      'post',
+      contentType: 'application/json',
+      headers:     headers,
+      payload:     JSON.stringify(t.payload)
+    });
+
+    if (!r.ok) {
+      sendHealthAlert('お客様向けAPI不調 (' + t.name + ')',
+        'Supabase ' + t.name + ' が' + r.tries + '回連続で失敗しました。\n\n' +
+        (r.error ? '例外: ' + r.error : 'HTTP ' + r.code) + '\n\n' +
+        'レスポンス先頭500字:\n' + (r.body || '(なし)').substring(0, 500) + '\n\n' +
+        'お客様が予約できない状態の可能性があります。\n' +
+        '考えられる原因:\n' +
+        '  - 再デプロイで verify_jwt が有効に戻った（--no-verify-jwt 忘れ）\n' +
+        '  - anon keyのローテーション漏れ\n' +
+        '  - Supabase側の障害\n\n' +
+        '至急確認してください。');
+      return;
+    }
+
+    let data;
+    try {
+      data = JSON.parse(r.body);
+    } catch (err) {
+      sendHealthAlert('お客様向けAPIのJSON解析失敗 (' + t.name + ')',
+        'HTTP 200は返ったものの、JSONとして読めませんでした。\n\n' +
+        'エラー: ' + err.message + '\n\n' +
+        'レスポンス先頭500字:\n' + r.body.substring(0, 500));
+      return;
+    }
+
+    if (data.success === false) {
+      sendHealthAlert('お客様向けAPIがエラー応答 (' + t.name + ')',
+        'Supabase ' + t.name + ' が success=false を返しました。\n\n' +
+        'エラー: ' + (data.error || '(不明)') + '\n\n' +
+        'お客様が予約できない状態の可能性があります。至急確認してください。');
+      return;
+    }
+
+    Logger.log('Supabase health check OK (' + t.name + '): ' + JSON.stringify(data).substring(0, 150));
   }
 }
 
@@ -4147,3 +4306,113 @@ function setupHealthCheckTriggers() {
 
   Logger.log('健全性チェックTriggerを登録しました（dailyHealthCheck / weeklyXserverRedirectCheck / weeklyBookingSummary）');
 }
+/**
+ * セッション切れの原因調査用（読み取り専用・データは一切変更しない）
+ *
+ * 使い方:
+ *   1. GASエディタを開く
+ *   2. gas-calendar-api.gs の一番下にこの関数を貼り付けて保存
+ *   3. 実行メニューから「diagnoseAdminSessions」を選んで実行
+ *   4. 下に出る「実行ログ」をそのままコピーして渡す
+ *
+ * 出力に個人情報は含まない（端末IDは先頭8文字だけ表示）。
+ */
+function diagnoseAdminSessions() {
+  var props = PropertiesService.getScriptProperties();
+  var now   = new Date().getTime();
+
+  // 日時を日本時間の読みやすい形にする
+  function fmt(ms) {
+    return new Date(ms).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+  }
+  // 端末IDは先頭8文字だけ出す（誰の端末かは分かるが漏れても害がない粒度）
+  function short(id) {
+    return id ? String(id).substring(0, 8) : '(なし)';
+  }
+  // 定数が読めない環境でも動くようフォールバックを持たせる
+  var maxAdmin = (typeof MAX_ADMIN_SESSIONS !== 'undefined') ? MAX_ADMIN_SESSIONS : 10;
+  var maxStaff = (typeof MAX_STAFF_SESSIONS !== 'undefined') ? MAX_STAFF_SESSIONS : 10;
+
+  var out = [];
+  out.push('===== セッション診断 =====');
+  out.push('調査時刻: ' + fmt(now));
+
+  // ── 管理者セッション ────────────────────────────────
+  var admin = [];
+  try { admin = JSON.parse(props.getProperty('admin_sessions') || '[]'); } catch (e) { admin = []; }
+  if (!Array.isArray(admin)) admin = [];
+
+  out.push('');
+  out.push('■ admin_sessions: ' + admin.length + ' 件 / 上限 ' + maxAdmin + ' 件');
+  admin.forEach(function (s, i) {
+    var alive = s.expires > now;
+    var rest  = Math.round((s.expires - now) / 3600000 * 10) / 10;
+    out.push('  [' + i + '] 端末=' + short(s.deviceId) +
+             ' / 信頼=' + (s.trusted ? 'YES(30日)' : 'no(8時間)') +
+             ' / 期限=' + fmt(s.expires) +
+             ' / 残り=' + rest + '時間' +
+             (alive ? '' : '  ★期限切れ'));
+  });
+
+  // ── スタッフセッション ──────────────────────────────
+  var staff = [];
+  try { staff = JSON.parse(props.getProperty('staff_sessions') || '[]'); } catch (e) { staff = []; }
+  if (!Array.isArray(staff)) staff = [];
+
+  out.push('');
+  out.push('■ staff_sessions: ' + staff.length + ' 件 / 上限 ' + maxStaff + ' 件');
+  staff.forEach(function (s, i) {
+    var alive = s.expires > now;
+    var rest  = Math.round((s.expires - now) / 3600000 * 10) / 10;
+    // スタッフ側は端末IDを保存していないので、発行時刻を逆算して出す
+    var issued = s.expires - 8 * 60 * 60 * 1000;
+    out.push('  [' + i + '] ログイン=' + fmt(issued) +
+             ' / 期限=' + fmt(s.expires) +
+             ' / 残り=' + rest + '時間' +
+             (alive ? '' : '  ★期限切れ'));
+  });
+
+  // ── 信頼済み端末リスト ──────────────────────────────
+  var trusted = [];
+  try { trusted = JSON.parse(props.getProperty('trusted_devices') || '[]'); } catch (e) { trusted = []; }
+  if (!Array.isArray(trusted)) trusted = [];
+
+  out.push('');
+  out.push('■ trusted_devices: ' + trusted.length + ' 件');
+  trusted.forEach(function (d, i) {
+    out.push('  [' + i + '] 端末=' + short(d.deviceId) + ' / 初回登録=' + (d.firstSeen || '不明'));
+  });
+
+  // ── 判定 ───────────────────────────────────────────
+  out.push('');
+  out.push('===== 判定 =====');
+
+  // 押し出しが起きる状態かどうか（生きているセッションが上限に達しているか）
+  var adminAlive = admin.filter(function (s) { return s.expires > now; }).length;
+  var staffAlive = staff.filter(function (s) { return s.expires > now; }).length;
+
+  if (adminAlive >= maxAdmin) {
+    out.push('× admin_sessions が上限に到達。次のログイン1回で [0] の端末が強制ログアウトされる。');
+  } else {
+    out.push('○ admin_sessions は上限に余裕あり（生存 ' + adminAlive + ' 件）。');
+  }
+  if (staffAlive >= maxStaff) {
+    out.push('× staff_sessions が上限に到達。次のログイン1回で [0] の端末が強制ログアウトされる。');
+  } else {
+    out.push('○ staff_sessions は上限に余裕あり（生存 ' + staffAlive + ' 件）。');
+  }
+
+  // 信頼済み端末が先頭にいる＝真っ先に押し出される位置にいる
+  if (admin.length > 0 && admin[0].trusted) {
+    out.push('× admin_sessions の先頭[0]が「信頼済み端末」。押し出しは古い順なので、30日トークンが真っ先に消される位置にいる。');
+  }
+
+  // スタッフの重複ログイン数（同じ端末が何枠も食っていないか）
+  if (staffAlive >= 5) {
+    out.push('△ スタッフセッションが ' + staffAlive + ' 件。スタッフ側は端末の重複排除が無いため、同じ端末の再ログインでも枠を消費している。');
+  }
+
+  Logger.log(out.join('\n'));
+  return out.join('\n');
+}
+
