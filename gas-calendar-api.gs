@@ -141,27 +141,82 @@ function generateAdminToken(rememberDevice, deviceId) {
   return token;
 }
 
-function isValidAdminToken(token) {
-  if (!token) return false;
-  try {
-    const props = PropertiesService.getScriptProperties();
-    const now = new Date().getTime();
-    let sessions = JSON.parse(props.getProperty('admin_sessions') || '[]');
+// =============================================================
+// ── トークン検証の共通部品 ─────────────────────────────────────
+// 保管庫（Script Properties）はまれに一時的な読み取りエラーを起こす。
+// 以前はそのエラーを握りつぶして「無効」と答えていたため、
+// 有効な通行証でも管理画面が突然ログアウトしていた（2026-10-17 調査）。
+// 今は数回やり直し、それでも読めなければ「無効」ではなく「確認できなかった」と区別して返す。
+// =============================================================
+const TOKEN_READ_RETRY_MAX     = 3;   // 読み取りの最大試行回数
+const TOKEN_READ_RETRY_WAIT_MS = 300; // やり直しの間隔（ミリ秒）
 
-    // 旧形式（単一セッション）からの移行対応
-    if (!Array.isArray(sessions)) {
-      const old = sessions;
-      if (old.token === token && now < old.expires) {
-        // 旧形式で有効 → 新形式に移行
-        props.setProperty('admin_sessions', JSON.stringify([old]));
-        return true;
-      }
-      props.setProperty('admin_sessions', '[]');
-      return false;
+// トークン確認の結果（文字列で返す）
+const TOKEN_VALID     = 'valid';     // 有効
+const TOKEN_MISSING   = 'missing';   // リクエストにトークンが無い
+const TOKEN_NOT_FOUND = 'notfound';  // 保管庫に無い、または期限切れ
+const TOKEN_READ_ERROR = 'error';    // 保管庫を読めなかった（一時的な障害）
+
+/**
+ * Script Properties からセッション一覧の文字列を読む（失敗したらやり直す）
+ * @param {string} key - 'admin_sessions' または 'staff_sessions'
+ * @return {{ok: boolean, raw: (string|null), error: (string|undefined)}}
+ */
+function readSessionPropertyWithRetry(key) {
+  let lastError = '';
+  for (let i = 1; i <= TOKEN_READ_RETRY_MAX; i++) {
+    try {
+      const raw = PropertiesService.getScriptProperties().getProperty(key);
+      return { ok: true, raw: raw };
+    } catch (e) {
+      lastError = e && e.message ? e.message : String(e);
+      if (i < TOKEN_READ_RETRY_MAX) Utilities.sleep(TOKEN_READ_RETRY_WAIT_MS);
     }
+  }
+  return { ok: false, raw: null, error: lastError };
+}
 
-    return sessions.some(function(s) { return s.token === token && now < s.expires; });
-  } catch(e) { return false; }
+/**
+ * 管理者トークンを確認し、結果を TOKEN_xxx のいずれかで返す
+ */
+function checkAdminToken(token) {
+  if (!token) return TOKEN_MISSING;
+  const read = readSessionPropertyWithRetry('admin_sessions');
+  if (!read.ok) {
+    console.warn('管理者トークン確認: 保管庫の読み取りに失敗 → ' + read.error);
+    return TOKEN_READ_ERROR;
+  }
+  let sessions;
+  try {
+    sessions = JSON.parse(read.raw || '[]');
+  } catch (e) {
+    console.warn('管理者トークン確認: admin_sessions が壊れている → ' + e.message);
+    return TOKEN_NOT_FOUND;
+  }
+  const now = new Date().getTime();
+
+  // 旧形式（単一セッション）からの移行対応
+  if (!Array.isArray(sessions)) {
+    const old = sessions;
+    const props = PropertiesService.getScriptProperties();
+    if (old && old.token === token && now < old.expires) {
+      // 旧形式で有効 → 新形式に移行
+      props.setProperty('admin_sessions', JSON.stringify([old]));
+      return TOKEN_VALID;
+    }
+    props.setProperty('admin_sessions', '[]');
+    return TOKEN_NOT_FOUND;
+  }
+
+  const ok = sessions.some(function(s) { return s.token === token && now < s.expires; });
+  return ok ? TOKEN_VALID : TOKEN_NOT_FOUND;
+}
+
+// 管理者トークンが有効なら true（従来の呼び出し方との互換用）
+function isValidAdminToken(token) {
+  try {
+    return checkAdminToken(token) === TOKEN_VALID;
+  } catch (e) { return false; }
 }
 
 // スタッフセッショントークン（8時間有効・admin_sessionsとは別管理）
@@ -189,19 +244,60 @@ function generateStaffToken() {
   return token;
 }
 
-// スタッフトークンの検証
-function isValidStaffToken(token) {
-  if (!token) return false;
+/**
+ * スタッフトークンを確認し、結果を TOKEN_xxx のいずれかで返す
+ */
+function checkStaffToken(token) {
+  if (!token) return TOKEN_MISSING;
+  const read = readSessionPropertyWithRetry('staff_sessions');
+  if (!read.ok) {
+    console.warn('スタッフトークン確認: 保管庫の読み取りに失敗 → ' + read.error);
+    return TOKEN_READ_ERROR;
+  }
+  let sessions;
   try {
-    const props = PropertiesService.getScriptProperties();
-    const now = new Date().getTime();
-    let sessions = JSON.parse(props.getProperty('staff_sessions') || '[]');
-    if (!Array.isArray(sessions)) {
-      props.setProperty('staff_sessions', '[]');
-      return false;
-    }
-    return sessions.some(function(s) { return s.token === token && now < s.expires; });
-  } catch(e) { return false; }
+    sessions = JSON.parse(read.raw || '[]');
+  } catch (e) {
+    console.warn('スタッフトークン確認: staff_sessions が壊れている → ' + e.message);
+    return TOKEN_NOT_FOUND;
+  }
+  if (!Array.isArray(sessions)) {
+    PropertiesService.getScriptProperties().setProperty('staff_sessions', '[]');
+    return TOKEN_NOT_FOUND;
+  }
+  const now = new Date().getTime();
+  const ok = sessions.some(function(s) { return s.token === token && now < s.expires; });
+  return ok ? TOKEN_VALID : TOKEN_NOT_FOUND;
+}
+
+// スタッフトークンが有効なら true（従来の呼び出し方との互換用）
+function isValidStaffToken(token) {
+  try {
+    return checkStaffToken(token) === TOKEN_VALID;
+  } catch (e) { return false; }
+}
+
+/**
+ * 管理画面からのリクエストを誰のものか判定する
+ * @return {{role: ('admin'|'staff'|null), reason: string}}
+ *   role が null のとき reason は TOKEN_MISSING / TOKEN_NOT_FOUND / TOKEN_READ_ERROR
+ */
+function resolveAdminRequestRole(token) {
+  let adminResult, staffResult;
+  try { adminResult = checkAdminToken(token); }
+  catch (e) { console.warn('管理者トークン確認で想定外のエラー → ' + e.message); adminResult = TOKEN_READ_ERROR; }
+  if (adminResult === TOKEN_VALID) return { role: 'admin', reason: TOKEN_VALID };
+  if (adminResult === TOKEN_MISSING) return { role: null, reason: TOKEN_MISSING };
+
+  try { staffResult = checkStaffToken(token); }
+  catch (e) { console.warn('スタッフトークン確認で想定外のエラー → ' + e.message); staffResult = TOKEN_READ_ERROR; }
+  if (staffResult === TOKEN_VALID) return { role: 'staff', reason: TOKEN_VALID };
+
+  // どちらかでも「読めなかった」なら、無効とは言い切れない
+  if (adminResult === TOKEN_READ_ERROR || staffResult === TOKEN_READ_ERROR) {
+    return { role: null, reason: TOKEN_READ_ERROR };
+  }
+  return { role: null, reason: TOKEN_NOT_FOUND };
 }
 
 // =============================================================
@@ -2316,10 +2412,18 @@ function doPost(e) {
     }
 
     // ── 以下はすべて管理者またはスタッフトークン認証が必要 ─────────
-    const isAdmin = isValidAdminToken(data.token);
-    const isStaff = !isAdmin && isValidStaffToken(data.token);
+    const auth = resolveAdminRequestRole(data.token);
+    const isAdmin = auth.role === 'admin';
+    const isStaff = auth.role === 'staff';
     if (!isAdmin && !isStaff) {
-      output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
+      // 「無効」と答えた理由を実行ログに残す（再発時の調査用。トークン本体は出さない）
+      console.warn('管理画面の認証NG: action=' + (data.action || '') + ' / 理由=' + auth.reason);
+      if (auth.reason === TOKEN_READ_ERROR) {
+        // 一時的に確認できなかっただけ。画面はログアウトさせずに次の更新で再確認する
+        output.setContent(JSON.stringify({ success: false, error: 'AUTH_CHECK_FAILED' }));
+      } else {
+        output.setContent(JSON.stringify({ success: false, error: 'Unauthorized' }));
+      }
       return output;
     }
 

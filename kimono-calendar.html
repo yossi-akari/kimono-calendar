@@ -1381,10 +1381,30 @@ async function verifyOtp(otp) {
 })();
 
 // ── 管理者POST ヘルパー（全admin APIコールに使用） ──────────
-function adminPost(params) {
-  const token = localStorage.getItem('akariAdminToken');
-  return gasPost({ token, ...params })
-    .catch(function(e) { return { success: false, error: e.message }; });
+// 「無効（Unauthorized）」と言われたら、すぐログアウトせず少し待って1回だけ聞き直す。
+// サーバー側の一時的な不調で有効な通行証が「無効」と判定され、
+// 数分おきにPIN画面へ戻されていたため（2026-10-17）。2回続いたときだけ本当に無効とみなす。
+const UNAUTHORIZED_RECHECK_WAIT_MS = 2000; // 聞き直すまでの待ち時間（ミリ秒）
+async function adminPost(params) {
+  // 1回分の送信（通信エラーは success:false の形にそろえる）
+  async function sendOnce() {
+    const token = localStorage.getItem('akariAdminToken');
+    try {
+      return await gasPost({ token, ...params });
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+  let data = await sendOnce();
+  if (data && data.error === 'Unauthorized') {
+    await new Promise(function(r) { setTimeout(r, UNAUTHORIZED_RECHECK_WAIT_MS); });
+    data = await sendOnce();
+  }
+  // サーバーが通行証を一時的に確認できなかった場合はログアウトさせず、分かる言葉で返す
+  if (data && data.error === 'AUTH_CHECK_FAILED') {
+    data = { success: false, error: '通信が不安定です。少し待ってからもう一度お試しください' };
+  }
+  return data;
 }
 // ── スタッフモードUI制御 ─────────────────────────────
 // roleに応じて管理者専用要素の表示/非表示を切り替える
