@@ -341,9 +341,9 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 
 <!-- 言語切替 -->
 <div class="lang-switcher">
-  <button class="lang-btn active" id="lbtn-ja" onclick="setLang('ja')">JP</button>
-  <button class="lang-btn" id="lbtn-en" onclick="setLang('en')">EN</button>
-  <button class="lang-btn" id="lbtn-zh" onclick="setLang('zh')">繁中</button>
+  <button class="lang-btn active" id="lbtn-ja" onclick="chooseLang('ja')">JP</button>
+  <button class="lang-btn" id="lbtn-en" onclick="chooseLang('en')">EN</button>
+  <button class="lang-btn" id="lbtn-zh" onclick="chooseLang('zh')">繁中</button>
 </div>
 
 <div class="hero">
@@ -559,6 +559,8 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
           </span>
         </label>
       </div>
+      <!-- 現地決済を選べないときの案内（海外からのご予約はカード事前決済のみ） -->
+      <div id="onsiteUnavailableNote" class="pm-sub" style="display:none;margin-top:8px;"></div>
       <div id="cardSection" style="margin-top:16px;">
         <div class="field">
           <label id="cardNumberLabel">カード番号</label>
@@ -717,7 +719,47 @@ const EXTRA_SLOTS_BY_DATE = {
   '2026-07-25': ['14:30', '15:00', '15:30', '16:00']
 };
 let slotAvailability = {};
-let currentLang = 'ja';
+
+// ── 表示言語の初期判定 ─────────────────────────────────
+// 海外のお客様が日本語ページのままブラウザの自動翻訳で予約すると、
+// 予約データ上は「日本語版」扱いになり現地決済も選べてしまう（2026-10-16 の事例）。
+// そこで、ページを開いた時点でブラウザの言語設定に合わせて表示言語を選ぶ。
+// 優先順位: ① URLの ?lang= ② お客様が言語ボタンで選んだ言語（前回分）③ ブラウザの言語
+const SUPPORTED_LANGS = ['ja', 'en', 'zh'];
+const LANG_PREF_KEY   = 'reserve_lang_v1';   // 言語ボタンで選んだ言語の保存先（localStorage）
+
+// ブラウザが希望している言語の一覧を小文字で返す（例: ['en-us', 'ja']）
+function getBrowserLangs() {
+  const list = (navigator.languages && navigator.languages.length)
+    ? navigator.languages
+    : [navigator.language || ''];
+  return Array.from(list).map(l => String(l || '').toLowerCase()).filter(Boolean);
+}
+
+// ブラウザの希望言語に日本語が1つも入っていなければ true（海外のお客様とみなす）
+function isForeignBrowser() {
+  const langs = getBrowserLangs();
+  if (!langs.length) return false;   // 取得できない場合は判定しない
+  return !langs.some(l => l.startsWith('ja'));
+}
+
+// ページを開いたときの表示言語を決める
+function detectInitialLang() {
+  try {
+    const q = new URLSearchParams(window.location.search).get('lang');
+    if (SUPPORTED_LANGS.includes(q)) return q;
+  } catch (e) {}
+  try {
+    const saved = localStorage.getItem(LANG_PREF_KEY);
+    if (SUPPORTED_LANGS.includes(saved)) return saved;
+  } catch (e) {}
+  const first = getBrowserLangs()[0] || 'ja';
+  if (first.startsWith('ja')) return 'ja';
+  if (first.startsWith('zh')) return 'zh';
+  return 'en';
+}
+
+let currentLang = detectInitialLang();
 
 // ── 店舗設定（GASから動的取得、フォールバック用デフォルト） ──
 let SHOP_CONFIG = null;
@@ -818,6 +860,8 @@ const I18N = {
     paymentSectionLabel: 'お支払い方法',
     pmCard: 'クレジットカード', pmCardSub: 'Visa / Mastercard / JCB / Amex',
     pmOnsite: '現地決済', pmOnsiteSub: '来店時に現金でお支払い',
+    onsiteUnavailableNote: '※ 海外からのご予約・海外の電話番号でのご予約は、クレジットカードでの事前決済のみ承っております。',
+    alertOnsiteUnavailable: '海外からのご予約・海外の電話番号でのご予約は、クレジットカードでの事前決済のみ承っております。\nお手数ですが、カード情報をご入力ください。',
     cardNumberLabel: 'カード番号', cardExpiryLabel: '有効期限', cardCvcLabel: 'セキュリティコード',
     alertCardError: 'カード情報を正しく入力してください。',
     alertChargeFail: 'カード決済に失敗しました。\n別のカードをお試しいただくか、お電話（076-201-8119）にてご連絡ください。',
@@ -920,6 +964,8 @@ const I18N = {
     paymentSectionLabel: 'Payment Method',
     pmCard: 'Credit Card', pmCardSub: 'Visa / Mastercard / JCB / Amex',
     pmOnsite: 'Pay on Site', pmOnsiteSub: 'Cash payment on arrival',
+    onsiteUnavailableNote: '* Online bookings from overseas require prepayment by credit card.',
+    alertOnsiteUnavailable: 'Online bookings from overseas require prepayment by credit card.\nPlease enter your card details.',
     cardNumberLabel: 'Card Number', cardExpiryLabel: 'Expiry Date', cardCvcLabel: 'Security Code',
     alertCardError: 'Please enter valid card details.',
     alertChargeFail: 'Card payment failed.\nPlease try another card or call us: 076-201-8119.',
@@ -1025,6 +1071,8 @@ const I18N = {
     paymentSectionLabel: '付款方式',
     pmCard: '信用卡', pmCardSub: 'Visa / Mastercard / JCB / Amex',
     pmOnsite: '現場付款', pmOnsiteSub: '來店時以現金付款',
+    onsiteUnavailableNote: '※ 海外旅客的線上預約，僅接受信用卡預先付款。',
+    alertOnsiteUnavailable: '海外旅客的線上預約，僅接受信用卡預先付款。\n請輸入信用卡資訊。',
     cardNumberLabel: '卡號', cardExpiryLabel: '有效期限', cardCvcLabel: '安全碼',
     alertCardError: '請正確輸入信用卡資訊。',
     alertChargeFail: '信用卡付款失敗。\n請嘗試其他卡片或撥打電話：076-201-8119。',
@@ -1240,6 +1288,12 @@ function setLang(lang) {
   // 日付ピッカーを言語に合わせて再生成
   if (typeof initDatePicker === 'function') initDatePicker();
   if (document.getElementById('sc4').style.display !== 'none') updatePaymentUI();
+}
+
+// 言語ボタンが押されたとき: 表示を切り替え、次回も同じ言語で開けるよう保存する
+function chooseLang(lang) {
+  try { localStorage.setItem(LANG_PREF_KEY, lang); } catch (e) {}
+  setLang(lang);
 }
 
 function applyLang() {
@@ -2420,18 +2474,66 @@ function updateCancelPolicy() {
   cp.style.display = '';
 }
 
+// 日本の電話番号かどうかを判定する（記号・空白は無視）
+//   国内表記: 0 から始まる10〜11桁（例: 090-1234-5678 / 076-201-8119）
+//             ※ 010 / 00 で始まるのは国際電話の発信番号なので国内扱いしない
+//   国際表記: +81 / 81 から始まる（例: +81 90-1234-5678 / +81 090-1234-5678）
+// ※ save-booking/index.ts の isJapanesePhone と判定を必ず揃えること
+function isJapanesePhone(tel) {
+  const s = String(tel || '').replace(/[^\d+]/g, '');
+  if (/^0(?!0|10)\d{9,10}$/.test(s)) return true;
+  if (/^\+?810?[1-9]\d{8,9}$/.test(s)) return true;
+  return false;
+}
+
+// ブラウザの自動翻訳（Chrome等）でページが翻訳表示されていれば true
+// Chrome は翻訳時に <html> へ translated-ltr / translated-rtl クラスを付け、lang 属性も書き換える
+function isPageMachineTranslated() {
+  const html = document.documentElement;
+  if (html.classList.contains('translated-ltr') || html.classList.contains('translated-rtl')) return true;
+  const expected = currentLang === 'zh' ? 'zh-tw' : currentLang;
+  const actual = String(html.lang || '').toLowerCase();
+  return !!actual && !actual.startsWith(expected);
+}
+
+// 現地決済を選べない理由を返す（選べる場合は null）
+// 目的: 海外からのお客様は、無断キャンセル対策のため事前カード決済に限定する
+function getOnsiteBlockReason() {
+  if (currentLang !== 'ja')        return 'lang';        // 英語版・中国語版で予約中
+  if (isForeignBrowser())          return 'browser';     // ブラウザの言語設定に日本語が無い
+  if (isPageMachineTranslated())   return 'translated';  // 日本語ページを自動翻訳して閲覧中
+  const tel = document.getElementById('tel').value.trim();
+  if (tel && !isJapanesePhone(tel)) return 'tel';        // 海外の電話番号
+  return null;
+}
+
 function updatePaymentUI() {
-  const isJa = currentLang === 'ja';
   const isEst = isCurrentlyEstimate();
+  const note = document.getElementById('onsiteUnavailableNote');
   document.getElementById('paymentBlock').style.display = isEst ? 'none' : '';
-  if (isEst) { selectedPaymentMethod = 'onsite'; return; }
-  document.getElementById('pm-onsite').style.display = isJa ? '' : 'none';
-  if (!isJa) {
+  if (isEst) { selectedPaymentMethod = 'onsite'; note.style.display = 'none'; return; }
+  const blocked = !!getOnsiteBlockReason();
+  document.getElementById('pm-onsite').style.display = blocked ? 'none' : '';
+  note.textContent = tl().onsiteUnavailableNote || '';
+  note.style.display = blocked ? '' : 'none';
+  if (blocked) {
     onPaymentMethodChange('card');
   } else {
     onPaymentMethodChange(selectedPaymentMethod);
   }
 }
+
+// 電話番号を入力し終えたら、現地決済を選べるか判定し直す
+document.getElementById('tel').addEventListener('change', function() {
+  if (document.getElementById('sc4').style.display !== 'none') updatePaymentUI();
+});
+
+// 支払い画面を開いた後にブラウザの自動翻訳が始まった場合も判定し直す
+try {
+  new MutationObserver(function() {
+    if (document.getElementById('sc4').style.display !== 'none') updatePaymentUI();
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'lang'] });
+} catch (e) {}
 
 // ── 送信（Step1: バリデーション → OTP送信）────────────────────
 let pendingBooking = null; // OTP確認待ちの予約データ
@@ -2445,6 +2547,12 @@ async function submitForm() {
   if (!ln || !fn) { alert(t.alertName);  return; }
   if (!em)        { alert(t.alertEmail); return; }
   if (!ph)        { alert(t.alertTel);   return; }
+  // 現地決済を選んだまま海外の電話番号等に変わっていた場合は、カード決済に切り替えて入力してもらう
+  if (selectedPaymentMethod === 'onsite' && !isCurrentlyEstimate() && getOnsiteBlockReason()) {
+    updatePaymentUI();
+    alert(t.alertOnsiteUnavailable);
+    return;
+  }
 
   const date = document.getElementById('visitDate').value;
   const time = document.getElementById('visitTime').value;
@@ -2495,6 +2603,8 @@ async function submitForm() {
       email: em, tel: ph,
       remarks: document.getElementById('remarks').value.trim(),
       createdAt: now.toISOString(), lang: currentLang,
+      // サーバー側でも現地決済の可否を判定するための材料（save-booking の ONSITE_NOT_ALLOWED）
+      foreignBrowser: isForeignBrowser(), machineTranslated: isPageMachineTranslated(),
     },
     display: { ln, fn, ds, time, total, planDisplay, optNamesDisp, peopleDisp, em },
     cardToken: null,
@@ -2628,6 +2738,13 @@ async function confirmWithOtp() {
         document.getElementById('otpConfirmModal').style.display = 'none';
         pendingBooking = null;
         alert(t.alertChargeFail + (json.message ? '\n\n(' + json.message + ')' : ''));
+      } else if (json && json.error === 'ONSITE_NOT_ALLOWED') {
+        // サーバー側で海外からの現地決済と判定された → カード決済に切り替えて入力し直してもらう
+        document.getElementById('otpConfirmModal').style.display = 'none';
+        pendingBooking = null;
+        selectedPaymentMethod = 'card';
+        updatePaymentUI();
+        alert(t.alertOnsiteUnavailable);
       } else {
         err.textContent = json?.message || t.alertNetErr;
         inp.disabled = false; btn.disabled = false;
@@ -2718,6 +2835,8 @@ function showToast(message, type) {
   buildPlanCards();
   buildOptions();
   updateSummary();
+  // 日本語以外で開く場合は、画面の固定文言・ボタン表示もその言語に切り替える
+  if (currentLang !== 'ja') setLang(currentLang);
 })();
 </script>
 </body>

@@ -37,6 +37,30 @@ function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// 日本の電話番号かどうかを判定する（記号・空白は無視）
+//   国内表記: 0 から始まる10〜11桁（010 / 00 は国際電話の発信番号なので除外）
+//   国際表記: +81 / 81 から始まる
+// ※ reserve.html の isJapanesePhone と判定を必ず揃えること
+function isJapanesePhone(tel: string): boolean {
+  const s = String(tel || '').replace(/[^\d+]/g, '');
+  if (/^0(?!0|10)\d{9,10}$/.test(s)) return true;
+  if (/^\+?810?[1-9]\d{8,9}$/.test(s)) return true;
+  return false;
+}
+
+// 現地決済を受け付けない理由を返す（受け付けてよい場合は null）
+// 海外からのお客様は無断キャンセル対策のため事前カード決済に限定する。
+// reserve.html の getOnsiteBlockReason と同じ考え方（ブラウザ側の判定をすり抜けた送信もここで止める）
+function getOnsiteBlockReason(booking: Record<string, unknown>): string | null {
+  // 旧ページ（lang を送らない）からの送信は日本語版として扱う
+  const lang = booking.lang ? String(booking.lang) : 'ja';
+  if (lang !== 'ja') return 'lang';
+  if (booking.foreignBrowser === true) return 'browser';
+  if (booking.machineTranslated === true) return 'translated';
+  if (!isJapanesePhone(String(booking.tel || ''))) return 'tel';
+  return null;
+}
+
 // ── 夏期キャンペーン（翌日返却無料・2026-09-30来店まで） ──────────
 // 来店日(booking.date)が終了日以下なら翌日返却オプションを無料(¥0)とみなす。
 // 予約日ではなく「来店日」で判定する。
@@ -129,7 +153,7 @@ async function verifyOtp(
 async function validateBookingTotal(
   sb: ReturnType<typeof getSupabaseClient>,
   booking: Record<string, unknown>
-): Promise<{ valid: boolean; serverTotal: number; reason: string }> {
+): Promise<{ valid: boolean; serverTotal: number; reason: string; isEstimate?: boolean }> {
   // configテーブルから設定を取得する代わりに、getShopConfig相当を直接定義
   // TODO: Phase 2で設定もSupabaseから取得するように変更
   const config = await getShopConfigFromEnv();
@@ -138,7 +162,7 @@ async function validateBookingTotal(
   if (!planDef) return { valid: false, serverTotal: 0, reason: '不明なプラン: ' + booking.plan };
 
   // 見積もりプランは金額検証スキップ
-  if (planDef.isEstimate) return { valid: true, serverTotal: 0, reason: '' };
+  if (planDef.isEstimate) return { valid: true, serverTotal: 0, reason: '', isEstimate: true };
 
   // 人数パース
   const peopleStr = String(booking.people || '');
@@ -520,6 +544,23 @@ serve(async (req) => {
         400,
         'PAYPAY_DISABLED'
       );
+    }
+
+    // ── 海外からの現地決済の拒否 ─────────────────────
+    // 外国人のお客様が日本語ページを自動翻訳して現地決済で予約し、
+    // 料金が事前に回収できないケースがあった（2026-10-16）。
+    // 見積もりプラン（成人式等・現地決済固定）と0円予約は対象外。
+    if (booking.paymentMethod !== 'card' && !amountCheck.isEstimate && Number(booking.total) > 0) {
+      const onsiteBlock = getOnsiteBlockReason(booking);
+      if (onsiteBlock) {
+        console.error('海外からの現地決済予約を拒否:', booking.reservationId, onsiteBlock);
+        return errorResponse(
+          '海外からのご予約・海外の電話番号でのご予約は、クレジットカードでの事前決済のみ承っております。ページを再読み込みのうえ、カード決済をお選びください。\n' +
+          'Online bookings from overseas require prepayment by credit card. Please reload the page and choose card payment.',
+          400,
+          'ONSITE_NOT_ALLOWED'
+        );
+      }
     }
 
     // ── カード決済の整合性チェック ──────────────────
