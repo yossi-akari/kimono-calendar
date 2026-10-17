@@ -724,16 +724,32 @@ function calcAutoTotal() {
 }
 
 // ── GAS送信ヘルパー（管理者トークン認証、POST）──
+// 「無効（Unauthorized）」と言われたら少し待って1回だけ聞き直し、2回続いたときだけログアウトする。
+// サーバー側の一時的な不調で有効な通行証が「無効」と判定されていたため（2026-10-17）。
+const UNAUTHORIZED_RECHECK_WAIT_MS = 2000; // 聞き直すまでの待ち時間（ミリ秒）
 async function postToGAS(action, payload) {
-  const token = localStorage.getItem('akariAdminToken');
-  const res = await fetch(GAS_URL, {
-    method: 'POST',
-    body: JSON.stringify({ token, action, ...payload })
-  });
-  const data = await res.json();
+  // 1回分の送信
+  async function sendOnce() {
+    const token = localStorage.getItem('akariAdminToken');
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ token, action, ...payload })
+    });
+    return await res.json();
+  }
+  let data = await sendOnce();
   if (!data.success && data.error === 'Unauthorized') {
-    localStorage.removeItem('akariAdminToken');
-    location.reload();
+    await new Promise(function(r) { setTimeout(r, UNAUTHORIZED_RECHECK_WAIT_MS); });
+    data = await sendOnce();
+    if (!data.success && data.error === 'Unauthorized') {
+      localStorage.removeItem('akariAdminToken');
+      location.reload();
+    }
+  }
+  // サーバーが通行証を一時的に確認できなかった場合はログアウトさせず、
+  // 通信エラーと同じ扱いにする（呼び出し側の catch で従来どおり処理される）
+  if (!data.success && data.error === 'AUTH_CHECK_FAILED') {
+    throw new Error('通信が不安定です。少し待ってからもう一度お試しください');
   }
   return data;
 }
