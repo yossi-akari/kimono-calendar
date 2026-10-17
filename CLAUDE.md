@@ -65,7 +65,7 @@
 |------|-----|------|
 | `dailyHealthCheck` | 毎日12時 | 2系統を確認。① GAS checkSlot API（管理画面が使う経路）② Supabase `/config` と `/check-slot`（**お客様が実際に通る経路**）。3回連続失敗で初めて ALERT メール。 |
 | `weeklyXserverRedirectCheck` | 毎週月曜10時 | Xserver `/reserve/reserve.html` が 301/302 を返すか確認。200 なら ALERT。 |
-| `weeklyBookingSummary` | 毎週月曜10時 | WEB予約数の週次/月次サマリーをメール送付（情報のみ・アラートではない）。 |
+| `weeklyBookingSummary` | 毎週月曜10時 | WEB予約数の週次/月次サマリーをメール送付（情報のみ・アラートではない）。今後の現地決済予約のうち名前がローマ字・電話番号が海外っぽいものを「確認推奨」欄に一覧表示（該当0件なら欄なし）。 |
 
 **新規セットアップ時:** GASエディタで `setupHealthCheckTriggers()` を1回実行。
 
@@ -75,7 +75,7 @@
 
 **誤報対策:** 監視は `fetchForHealthCheck()` 経由で3回（3秒間隔）リトライする。GASの `/exec` は `script.googleusercontent.com` へ302転送される二段構成で、2段目がまれに404を返すため。
 
-**テスト:** `node tests/health-check.test.js`（GASのサービスをスタブに差し替えて監視ロジックを検証。`.claspignore` で GAS への push 対象から除外済み）
+**テスト:** `node tests/health-check.test.js` / `node tests/weekly-onsite-review.test.js`（GASのサービスをスタブに差し替えて監視ロジックを検証。`.claspignore` で GAS への push 対象から除外済み）
 
 **ALERT通知先:** `getAdminEmail()`（デフォルト `rentalakari@gmail.com`）
 

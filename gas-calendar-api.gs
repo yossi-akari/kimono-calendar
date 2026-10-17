@@ -4214,6 +4214,85 @@ function weeklyXserverRedirectCheck() {
   }
 }
 
+// ── 要確認の現地決済予約（週次サマリー用） ──────────────────────
+// 海外からの予約は事前カード決済に限定している（reserve.html / save-booking、2026-10-17〜）。
+// ただ「スマホに日本語設定あり・自動翻訳なし・海外の番号を国番号なしで入力」が重なると
+// 日本の番号と見分けられずにすり抜ける。お客様の画面に確認項目は増やさず、
+// 店側が来店前に気付けるよう週次メールで一覧にする。
+
+/**
+ * 日本の電話番号の形かどうかを判定する（記号・空白は無視）。
+ * reserve.html / save-booking/index.ts の isJapanesePhone と判定を必ず揃えること。
+ *   国内表記: 0 から始まる10〜11桁（00 / 010 は国際電話の発信番号なので除外）
+ *   国際表記: +81 / 81 から始まる
+ */
+function isJapanesePhone(tel) {
+  const s = String(tel || '').replace(/[^\d+]/g, '');
+  if (/^0(?!0|10)\d{9,10}$/.test(s)) return true;
+  if (/^\+?810?[1-9]\d{8,9}$/.test(s)) return true;
+  return false;
+}
+
+/**
+ * 日本の番号の形はしているが、海外の番号を国番号なしで書いた可能性があるものを判定する。
+ *   - 11桁なのに 050/070/080/090/0800 以外で始まる（日本の11桁はこれだけ。例: イギリス 077…、フィリピン 0917…）
+ *   - 10桁なのに 050/070/080/090 で始まる（日本の携帯は11桁。例: 台湾 0905…）
+ *   - 10桁で 09 から始まる（台湾・ベトナム等の携帯と同じ形。九州・沖縄の固定電話の場合もある）
+ */
+function isPossiblyForeignLocalPhone(tel) {
+  const s = String(tel || '').replace(/[^\d+]/g, '');
+  if (!/^0\d+$/.test(s)) return false;   // 国内表記（0始まり・数字のみ）以外は対象外
+  if (s.length === 11) return !/^0([5789]0|800)/.test(s);
+  if (s.length === 10) return /^0[5789]0/.test(s) || /^09/.test(s);
+  return false;
+}
+
+/**
+ * 現地決済の予約1件について、確認した方がよい理由の一覧を返す（無ければ空配列）。
+ */
+function getOnsiteReviewReasons(b) {
+  const reasons = [];
+  if (/^[A-Za-z]/.test(String(b.name || '').trim())) reasons.push('名前がローマ字');
+  if (!isJapanesePhone(b.tel)) {
+    reasons.push('電話番号が日本の形ではない');
+  } else if (isPossiblyForeignLocalPhone(b.tel)) {
+    reasons.push('電話番号が海外の番号かもしれない（台湾・イギリス等と同じ形）');
+  }
+  return reasons;
+}
+
+/**
+ * 週次サマリーに載せる「確認推奨：現地決済の予約」欄の本文行を返す。
+ * 対象: 今日以降に来店予定の、キャンセルされていない現地決済のWEB予約。該当0件なら空配列。
+ * @param {Array} webBookings getWebBookingsFromSupabase() の結果（今日以降のWEB予約）
+ * @param {Set} cancelledIds キャンセル済み予約番号
+ */
+function buildOnsiteReviewSection(webBookings, cancelledIds) {
+  const targets = (webBookings || []).filter(b => {
+    if (cancelledIds && cancelledIds.has(b.reservationId)) return false;
+    if (String(b.visitStatus || '').indexOf('cancel') !== -1) return false;
+    return String(b.payment || '').indexOf('現地決済') === 0;
+  });
+
+  const lines = [];
+  targets.forEach(b => {
+    const reasons = getOnsiteReviewReasons(b);
+    if (reasons.length === 0) return;
+    lines.push('  ・' + b.date + ' ' + b.time + '  ' + b.name + '様  ' + b.plan +
+               '  ¥' + Number(b.total || 0).toLocaleString('ja-JP'));
+    lines.push('      理由: ' + reasons.join(' / '));
+    lines.push('      予約番号: ' + b.reservationId + '（受付: ' + (b.channel || 'WEB') + '）');
+  });
+  if (lines.length === 0) return [];
+
+  return [
+    '■ 確認推奨：現地決済の予約（海外からのお客様かもしれないもの）',
+    '  海外からの予約はカード事前決済のみにしていますが、条件によってはすり抜けます。',
+    '  来店前に連絡がつくか、必要ならカード決済をお願いするか検討してください。',
+    ''
+  ].concat(lines).concat(['']);
+}
+
 /**
  * 毎週月曜実行: ヒロシに週次サマリーをメール送付（情報提供のみ・アラートではない）。
  * 過去7日のWEB予約数・過去30日の平均を可視化。
@@ -4249,6 +4328,15 @@ function weeklyBookingSummary() {
     const web30 = all.filter(b => { if (!isWebBooking(b)) return false; const d = parseCreated(b); return d && d >= past30; }).length;
     const avgDaily30 = (web30 / 30).toFixed(1);
 
+    // 要確認の現地決済予約（取得に失敗してもサマリー本体は送る）
+    let onsiteReview = [];
+    try {
+      onsiteReview = buildOnsiteReviewSection(getWebBookingsFromSupabase(), cancelled);
+    } catch (e) {
+      Logger.log('要確認の現地決済予約の集計に失敗: ' + e.message);
+      onsiteReview = ['■ 確認推奨：現地決済の予約', '  集計に失敗しました（' + e.message + '）', ''];
+    }
+
     const subject = '[週次レポート] 予約システム状況 ' + Utilities.formatDate(now, tz, 'yyyy-MM-dd');
     const body = [
       '着物レンタル予約システム 週次サマリー',
@@ -4256,14 +4344,15 @@ function weeklyBookingSummary() {
       '■ WEB予約件数',
       '  過去7日:  ' + web7  + '件',
       '  過去30日: ' + web30 + '件 (1日平均 ' + avgDaily30 + '件)',
-      '',
+      ''
+    ].concat(onsiteReview).concat([
       '■ 状態確認',
       '  - 過去7日が著しく少ない場合、システム不具合の可能性あり',
       '  - 閑散期の自然な減少か判断に迷う場合は、GA4で reserve.html の流入を確認',
       '  - https://analytics.google.com/  →  着物レンタル予約 プロパティ',
       '',
       '※ このメールは情報提供です。アラートではありません。'
-    ].join('\n');
+    ]).join('\n');
 
     GmailApp.sendEmail(getAdminEmail(), subject, body);
   } catch (err) {
