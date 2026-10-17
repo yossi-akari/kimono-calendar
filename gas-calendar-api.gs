@@ -988,21 +988,24 @@ function getCancelledIds() {
   // ActivityJapan キャンセルメール
   // ※ activity-japan@activityjapan.com は変更通知なども送信する場合があるため、
   //   メール本文にキャンセル関連ワードがある場合のみ予約番号を取得する
-  try {
-    const threads = GmailApp.search('from:activity-japan@activityjapan.com', 0, 200);
-    for (const thread of threads) {
-      for (const msg of thread.getMessages()) {
-        const body = msg.getPlainBody();
-        // キャンセル・取消の文言がない場合はスキップ（変更通知メールを誤って除外しない）
-        if (!body.match(/キャンセル|取消|取り消し|解除|ご予約を.*キャンセル/)) continue;
-        const m = body.match(/予約番号[：:]\s*(\d+)/);
-        if (m) {
-          ids.add(m[1]);
-          Logger.log('AJキャンセル確認: #' + m[1]);
+  // ※ AJ取り込み停止中（AJ_IMPORT_ENABLED = false）はAJの予約自体が無いので確認しない
+  if (AJ_IMPORT_ENABLED) {
+    try {
+      const threads = GmailApp.search('from:activity-japan@activityjapan.com', 0, 200);
+      for (const thread of threads) {
+        for (const msg of thread.getMessages()) {
+          const body = msg.getPlainBody();
+          // キャンセル・取消の文言がない場合はスキップ（変更通知メールを誤って除外しない）
+          if (!body.match(/キャンセル|取消|取り消し|解除|ご予約を.*キャンセル/)) continue;
+          const m = body.match(/予約番号[：:]\s*(\d+)/);
+          if (m) {
+            ids.add(m[1]);
+            Logger.log('AJキャンセル確認: #' + m[1]);
+          }
         }
       }
-    }
-  } catch(e) { Logger.log('AJキャンセルエラー: ' + e.message); }
+    } catch(e) { Logger.log('AJキャンセルエラー: ' + e.message); }
+  }
 
   Logger.log('キャンセル済み件数: ' + ids.size + ' → ' + [...ids].join(', '));
   return ids;
@@ -1148,7 +1151,17 @@ function parsePlanType(planStr) {
 // =============================================================
 // ── ActivityJapan（Gmail メール解析） ────────────────────────
 // =============================================================
+// AJ（アクティビティジャパン）の掲載は終了済み（最後のAJ予約は2026-04-28受付・来店は5/26まで）。
+// 取り込みを続けると、過去の確定・キャンセル・宣伝メールを毎回200スレッド読みに行き、
+// 「AJ変更メール: 予約番号が見つかりません」等のログが約90行出て実行も約40秒遅くなるため停止する。
+// AJの掲載を再開する場合は true に戻すだけでよい（解析処理 parseAJEmail 等は残してある）。
+const AJ_IMPORT_ENABLED = false;
+
 function getActivityJapanBookings() {
+  if (!AJ_IMPORT_ENABLED) {
+    Logger.log('ActivityJapan(Gmail): 取り込み停止中（AJ_IMPORT_ENABLED = false）');
+    return [];
+  }
   try {
     const today = Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
 

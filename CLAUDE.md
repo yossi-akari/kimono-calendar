@@ -30,7 +30,7 @@
 | お客様向け予約API | check-slot / send-otp / save-booking / config | **Supabase Edge Functions**（4/14移行） |
 | 管理画面（kimono-booking / kimono-calendar） | スタッフ専用 | **GAS**（doGet/doPost） |
 | 顧客データの保存 | bookingsテーブル | **Supabase**（GAS側からも自動同期） |
-| 外部予約（AJ・じゃらん）受信 | スプレッドシート + 同期 | **GAS** → 毎時 Supabase |
+| 外部予約（AJ・じゃらん）受信 | スプレッドシート + 同期 | **GAS** → 毎時 Supabase。**AJは掲載終了につき取り込み停止中**（`AJ_IMPORT_ENABLED = false`、2026-10-17〜。再開時は true に戻すだけ） |
 | Xserver `akari-kanazawa.jp/reserve/` | 旧版（廃止予定） | リダイレクト対応中・GAS側でLEGACY_KEYS暫定許可中 |
 
 ## セッション起動時の必須チェック
@@ -75,7 +75,7 @@
 
 **誤報対策:** 監視は `fetchForHealthCheck()` 経由で3回（3秒間隔）リトライする。GASの `/exec` は `script.googleusercontent.com` へ302転送される二段構成で、2段目がまれに404を返すため。
 
-**テスト:** `node tests/health-check.test.js` / `node tests/weekly-onsite-review.test.js`（GASのサービスをスタブに差し替えて監視ロジックを検証。`.claspignore` で GAS への push 対象から除外済み）
+**テスト:** `node tests/health-check.test.js` / `node tests/weekly-onsite-review.test.js` / `node tests/aj-import-switch.test.js`（GASのサービスをスタブに差し替えて監視ロジックを検証。`.claspignore` で GAS への push 対象から除外済み）
 
 **ALERT通知先:** `getAdminEmail()`（デフォルト `rentalakari@gmail.com`）
 
